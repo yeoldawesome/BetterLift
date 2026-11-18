@@ -6,6 +6,7 @@ import { Reactions } from '../components/WorkoutCard'
 import { Avatar, Button, Card, ConfirmSheet, ErrorText, Input, Screen, Spinner, Stat } from '../components/ui'
 import { deleteWorkout } from '../lib/history'
 import { distLabel, fmtDate, fmtDist, fmtDur, fmtVol, fmtW, timeAgo } from '../lib/format'
+import { setLabels } from '../lib/setTypes'
 import { errMsg, me, pb, useUnit, type Comment, type Exercise, type Reaction, type WSet, type Workout } from '../lib/pb'
 import { intensityFromSets } from '../lib/muscles'
 import { useRealtime } from '../lib/useRealtime'
@@ -107,8 +108,12 @@ export default function WorkoutDetail() {
         </Card>
       )}
       {w.notes && <p className="text-sm text-muted">{w.notes}</p>}
-      {groups.map((g, i) => (
-        <Card key={i} className="space-y-1.5">
+      {groups.map((g, i) => {
+        const labels = setLabels(g.sets.map((s) => s.set_type))
+        const sup = g.sets[0].superset
+        return (
+        <Card key={i} className={`relative space-y-1.5 ${sup ? 'mt-5 border-red-600/50' : ''}`}>
+          {!!sup && <span className="absolute -top-3 right-4 rounded-lg bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Superset</span>}
           <div className="flex items-center justify-between gap-2">
             <p className="font-extrabold text-accent">{g.name}</p>
             {g.ex && (
@@ -117,14 +122,16 @@ export default function WorkoutDetail() {
               </button>
             )}
           </div>
-          {g.sets.map((s) => (
+          {g.sets[0].note && <p className="whitespace-pre-wrap rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">{g.sets[0].note}</p>}
+          {g.sets.map((s, j) => (
             <div key={s.id} className="flex items-center justify-between text-sm">
-              <span className="num"><span className="mr-3 text-faint">{s.set_index + 1}</span>{setText_(s)}</span>
+              <span className="num"><span className={`mr-3 inline-block w-3 font-bold ${labels[j].color || 'text-faint'}`}>{labels[j].text}</span>{setText_(s)}</span>
               {s.is_pr && <span className="flex items-center gap-1 text-xs font-bold text-accent"><TrophyIcon width={14} height={14} />PR</span>}
             </div>
           ))}
         </Card>
-      ))}
+        )
+      })}
       <Reactions workoutId={w.id} reactions={reactions} onChange={loadSocial} />
       <h2 className="pt-2 text-lg font-extrabold">Comments</h2>
       {!comments.length && <p className="text-sm text-muted">No comments yet.</p>}

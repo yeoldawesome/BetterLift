@@ -1,3 +1,4 @@
+import type { SetType } from './setTypes'
 import PocketBase, { type RecordModel } from 'pocketbase'
 import { useEffect, useState } from 'react'
 
@@ -43,6 +44,7 @@ export interface Workout extends RecordModel {
 export interface WSet extends RecordModel {
   workout: string; user: string; exercise: string; performed_at: string; position: number; set_index: number
   weight_kg: number; reps: number; seconds: number; distance_km: number; completed: boolean; e1rm_kg: number; is_pr: boolean
+  set_type?: '' | SetType; note?: string; superset?: number
   expand?: { exercise?: Exercise; workout?: Workout }
 }
 export interface Friendship extends RecordModel { requester: string; addressee: string; status: 'pending' | 'accepted'; expand?: { requester?: User; addressee?: User } }

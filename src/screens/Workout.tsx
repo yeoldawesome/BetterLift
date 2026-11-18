@@ -1,17 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { ExercisePicker } from '../components/ExerciseList'
+import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
-import { CheckIcon, GlobeIcon, InfoIcon, LockIcon, PlusIcon, TimerIcon, TrashIcon } from '../components/icons'
+import { CheckIcon, DotsIcon, DownIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
 import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
-import { Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
+import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
+import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
 import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
 import { prLine, useBest, clearBestCache } from '../lib/best'
 import { loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromUnit, num } from '../lib/format'
-import { errMsg, me, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
+import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
 
 export default function Workout() {
   const { active } = useActive()
@@ -98,6 +99,40 @@ function ActiveWorkout() {
   const setEx = (key: string, fn: (x: AEx) => AEx) => update((w) => ({ ...w, exercises: w.exercises.map((x) => (x.key === key ? fn(x) : x)) }))
   const setSet = (key: string, i: number, patch: Partial<ASet>) => setEx(key, (x) => ({ ...x, sets: x.sets.map((s, j) => (j === i ? { ...s, ...patch } : s)) }))
 
+  const [reordering, setReordering] = useState(false)
+  const [replacing, setReplacing] = useState<string | null>(null)
+  const [supersetFor, setSupersetFor] = useState<string | null>(null)
+  const setList = (fn: (xs: AEx[]) => AEx[]) => update((w) => ({ ...w, exercises: tidySupersets(fn(w.exercises)) }))
+
+  const remove = (key: string) => setList((xs) => xs.filter((e) => e.key !== key))
+  const move = (key: string, d: -1 | 1) => setList((xs) => {
+    const i = xs.findIndex((e) => e.key === key), j = i + d
+    if (i < 0 || j < 0 || j >= xs.length) return xs
+    const out = [...xs]; [out[i], out[j]] = [out[j], out[i]]
+    return out
+  })
+  const leaveSuperset = (key: string) => setList((xs) => xs.map((e) => (e.key === key ? { ...e, superset: undefined } : e)))
+  /** Put `src` in the same superset as `tgt` and pull every member together so they sit back-to-back. */
+  const joinSuperset = (src: string, tgt: string) => setList((xs) => {
+    const a1 = xs.find((e) => e.key === src)!, b1 = xs.find((e) => e.key === tgt)!
+    const id = b1.superset || a1.superset || newId()
+    const old = a1.superset
+    const tagged = xs.map((e) => (e.key === src || e.key === tgt || (old && e.superset === old) ? { ...e, superset: id } : e))
+    const first = tagged.findIndex((e) => e.superset === id)
+    const members = tagged.filter((e) => e.superset === id)
+    const others = tagged.filter((e) => e.superset !== id)
+    const before = tagged.slice(0, first).length
+    return [...others.slice(0, before), ...members, ...others.slice(before)]
+  })
+  const replace = async (key: string, ex: Exercise) => {
+    setReplacing(null)
+    const r = restFor(ex, user)
+    const made = await makeEx(ex, 1, r.rest, '', r.after)
+    setList((xs) => xs.map((e) => (e.key === key
+      ? { ...made, key, note: e.note, superset: e.superset, sets: e.sets.map((s) => ({ ...emptySet(), type: s.type })) }
+      : e)))
+  }
+
   const add = async (exs: Exercise[]) => {
     setPicking(false)
     const made = await Promise.all(exs.map((e) => { const r = restFor(e, user); return makeEx(e, 3, r.rest, '', r.after) }))
@@ -115,8 +150,11 @@ function ActiveWorkout() {
       if (!s.sec && p?.sec) patch.sec = `${p.sec}`
       if (!s.dist && p?.dist) patch.dist = fmtDist(p.dist, unit)
       setSet(x.key, i, patch)
-      // Last unchecked set of this exercise → transition rest before the next exercise.
-      const finishing = x.sets.every((t, j) => j === i || t.done)
+      // Supersets: no rest until the last exercise of the group, then that exercise's rest.
+      const group = x.superset ? a.exercises.filter((e) => e.superset === x.superset) : [x]
+      if (group[group.length - 1].key !== x.key) return
+      // Last unchecked set of this exercise (or whole superset) → transition rest before the next exercise.
+      const finishing = group.every((e) => e.sets.every((t, j) => (e.key === x.key && j === i) || t.done))
       startRest(finishing ? (x.restAfter ?? x.rest) : x.rest)
     } else setSet(x.key, i, { done: false })
   }
@@ -129,7 +167,11 @@ function ActiveWorkout() {
       </div>
       <input value={a.name} onChange={(e) => update((w) => ({ ...w, name: e.target.value }))} className="mb-4 w-full bg-transparent text-3xl font-extrabold tracking-tight outline-none" />
       <div className="space-y-3">
-        {a.exercises.map((x) => <ExerciseBlock key={x.key} x={x} unit={unit} setEx={setEx} setSet={setSet} toggle={toggle} />)}
+        {a.exercises.map((x) => (
+          <ExerciseBlock key={x.key} x={x} unit={unit} setEx={setEx} setSet={setSet} toggle={toggle}
+            onReorder={() => setReordering(true)} onReplace={() => setReplacing(x.key)} onRemove={() => remove(x.key)}
+            onSuperset={() => (x.superset ? leaveSuperset(x.key) : setSupersetFor(x.key))} />
+        ))}
       </div>
       <div className="mt-4 space-y-3">
         <Button variant="ghost" onClick={() => setPicking(true)}><PlusIcon width={18} height={18} className="mr-1 inline" />Add exercises</Button>
@@ -137,8 +179,45 @@ function ActiveWorkout() {
       </div>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
       {finishing && <FinishSheet user={user} onClose={() => setFinishing(false)} />}
+      {reordering && (
+        <BottomSheet title="Reorder exercises" onClose={() => setReordering(false)}>
+          <div className="space-y-2">
+            {a.exercises.map((e, i) => (
+              <div key={e.key} className="flex items-center gap-2 rounded-xl bg-surface-2 p-2 pl-3">
+                <span className="min-w-0 flex-1 truncate font-bold">{e.ex.name}</span>
+                {e.superset && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Superset</span>}
+                <button disabled={i === 0} onClick={() => move(e.key, -1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move up"><UpIcon width={18} height={18} /></button>
+                <button disabled={i === a.exercises.length - 1} onClick={() => move(e.key, 1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move down"><DownIcon width={18} height={18} /></button>
+              </div>
+            ))}
+            <Button onClick={() => setReordering(false)}>Done</Button>
+          </div>
+        </BottomSheet>
+      )}
+      {replacing && <Sheet title="Replace exercise" onClose={() => setReplacing(null)}><ExerciseList onPick={(exs) => exs[0] && replace(replacing, exs[0])} /></Sheet>}
+      {supersetFor && (
+        <BottomSheet title="Add to superset" onClose={() => setSupersetFor(null)}>
+          {a.exercises.length < 2 && <p className="py-4 text-center text-sm text-muted">Add another exercise first.</p>}
+          <div className="space-y-1">
+            {a.exercises.filter((e) => e.key !== supersetFor).map((e) => (
+              <button key={e.key} onClick={() => { joinSuperset(supersetFor, e.key); setSupersetFor(null) }}
+                className="flex w-full items-center justify-between gap-2 rounded-xl p-3 text-left active:bg-surface-2">
+                <span className="truncate font-bold">{e.ex.name}</span>
+                {e.superset && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Superset</span>}
+              </button>
+            ))}
+          </div>
+        </BottomSheet>
+      )}
     </section>
   )
+}
+
+/** A superset needs at least two exercises; drop the tag from any exercise left on its own. */
+function tidySupersets(xs: AEx[]): AEx[] {
+  const n = new Map<string, number>()
+  xs.forEach((e) => e.superset && n.set(e.superset, (n.get(e.superset) ?? 0) + 1))
+  return xs.map((e) => (e.superset && (n.get(e.superset) ?? 0) < 2 ? { ...e, superset: undefined } : e))
 }
 
 /** Confirm-and-post step: name, visibility, routine update. Choices are remembered on the user. */
@@ -237,15 +316,25 @@ function prevText(p: Prev | undefined, x: AEx, unit: 'kg' | 'lb') {
   return `${fmtW(p.w, unit)}×${p.r}`
 }
 
-function ExerciseBlock({ x, unit, setEx, setSet, toggle }: {
+function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, onRemove, onSuperset }: {
   x: AEx; unit: 'kg' | 'lb'
   setEx: (k: string, fn: (x: AEx) => AEx) => void
   setSet: (k: string, i: number, p: Partial<ASet>) => void
   toggle: (x: AEx, i: number) => void
+  onReorder: () => void; onReplace: () => void; onRemove: () => void; onSuperset: () => void
 }) {
-  const { update } = useActive()
   const [restOpen, setRestOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [typeFor, setTypeFor] = useState<number | null>(null)
+  const labels = setLabels(x.sets.map((s) => s.type))
+  const menu: [string, () => void, boolean?][] = [
+    ['Reorder Exercises', onReorder],
+    [x.note !== undefined ? 'Remove Exercise Note' : 'Add Exercise Note', () => setEx(x.key, (e) => ({ ...e, note: e.note !== undefined ? undefined : '' }))],
+    [x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset],
+    ['Replace Exercise', onReplace],
+    ['Remove Exercise', () => confirm(`Remove ${x.ex.name}?`) && onRemove(), true],
+  ]
   const k = x.ex.kind
   // "To PR" line: compare this session's checked-off sets against the all-time best.
   const best = useBest(x.ex.id)
@@ -270,15 +359,12 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle }: {
   const setVal = (i: number, c: string, v: string) => setSet(x.key, i, { [field(c)]: c === 'Min' ? (v ? `${Math.round(parseFloat(v) * 60)}` : '') : v })
 
   return (
-    <Card className="p-3">
+    <Card className={`relative p-3 ${x.superset ? 'mt-5 border-red-600/50' : ''}`}>
+      {x.superset && <span className="absolute -top-3 right-12 rounded-lg bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Superset</span>}
       <div className="mb-2 flex items-center justify-between gap-2 px-1">
         <div className="min-w-0">
-          <div className="flex items-center gap-1">
-            <p className="truncate font-extrabold text-accent">{x.ex.name}</p>
-            <button onClick={() => setInfoOpen(true)} className="grid size-7 shrink-0 place-items-center rounded-full text-muted active:bg-surface-2" aria-label={`About ${x.ex.name}`}>
-              <InfoIcon width={18} height={18} />
-            </button>
-          </div>
+          {/* Tap the name for instructions, history and stats. */}
+          <button onClick={() => setInfoOpen(true)} className="block max-w-full truncate text-left font-extrabold text-accent active:opacity-70">{x.ex.name}</button>
           {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
           {x.target && <p className="text-xs text-faint">Target {x.target} reps</p>}
         </div>
@@ -286,9 +372,26 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle }: {
           <button onClick={() => setRestOpen(true)} className="flex h-8 items-center gap-1 rounded-lg bg-surface-2 px-2.5 text-xs font-bold text-muted">
             <TimerIcon width={14} height={14} /><span className="num">{restLabel(x.rest)}{(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''}</span>
           </button>
-          <button onClick={() => confirm(`Remove ${x.ex.name}?`) && update((w) => ({ ...w, exercises: w.exercises.filter((e) => e.key !== x.key) }))} className="p-2 text-faint"><TrashIcon width={18} height={18} /></button>
+          <div className="relative">
+            <button onClick={() => setMenuOpen(true)} className="grid size-8 place-items-center rounded-lg text-muted active:bg-surface-2" aria-label={`${x.ex.name} options`}><DotsIcon width={20} height={20} /></button>
+            {menuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
+                <div className="absolute right-0 top-full z-50 mt-1 w-60 overflow-hidden rounded-2xl border border-line bg-surface-2 py-1 shadow-2xl">
+                  {menu.map(([label, fn, danger]) => (
+                    <button key={label} onClick={() => { setMenuOpen(false); fn() }}
+                      className={`block w-full px-4 py-3 text-left font-semibold active:bg-surface ${danger ? 'text-danger' : ''}`}>{label}</button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
+      {x.note !== undefined && (
+        <textarea value={x.note} onChange={(e) => setEx(x.key, (ex) => ({ ...ex, note: e.target.value }))} placeholder="Add a note for this exercise…" rows={Math.min(5, Math.max(1, x.note.split('\n').length))}
+          autoFocus={!x.note} maxLength={1000} className="mb-2 block w-full resize-none rounded-lg bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-accent" />
+      )}
       <div className="grid gap-x-2 gap-y-1.5 text-center text-sm" style={{ gridTemplateColumns: `1.5rem minmax(3.5rem,1fr) ${cols.map(() => 'minmax(0,1fr)').join(' ')} 2.75rem` }}>
         <span className="text-[11px] font-bold uppercase text-faint">Set</span>
         <span className="text-[11px] font-bold uppercase text-faint">Prev</span>
@@ -297,7 +400,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle }: {
         {x.sets.map((s, i) => {
           const p = x.prev[i]
           return [
-            <span key={`n${i}`} className="num self-center font-bold text-muted">{i + 1}</span>,
+            <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num h-10 rounded-lg font-bold active:bg-surface-2 ${labels[i].color || 'text-muted'}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
             // Tap the previous-session value to copy it into this set (doesn't check it off).
             p ? (
               <button key={`p${i}`} type="button" onClick={() => setSet(x.key, i, {
@@ -318,6 +421,22 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle }: {
         <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: [...e.sets, { ...emptySet(), w: e.sets[e.sets.length - 1]?.w ?? '' }] }))} className="h-9 flex-1 rounded-lg bg-surface-2 text-sm font-bold">+ Add set</button>
         {x.sets.length > 1 && <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.slice(0, -1) }))} className="h-9 rounded-lg bg-surface-2 px-4 text-sm font-bold text-muted">−</button>}
       </div>
+      {typeFor !== null && (
+        <BottomSheet title="Select Set Type" onClose={() => setTypeFor(null)}>
+          {SET_TYPES.map((t) => (
+            <button key={t.v} onClick={() => { setSet(x.key, typeFor, { type: t.v as SetType }); setTypeFor(null) }}
+              className={`flex w-full items-center gap-5 rounded-xl px-4 py-3.5 text-left text-lg font-semibold active:bg-surface-2 ${(x.sets[typeFor]?.type || 'normal') === t.v ? 'bg-surface-2' : ''}`}>
+              <span className={`num w-6 text-center text-xl font-black ${t.color}`}>{t.letter}</span>{t.label}
+            </button>
+          ))}
+          {x.sets.length > 1 && (
+            <button onClick={() => { setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== typeFor) })); setTypeFor(null) }}
+              className="mt-1 flex w-full items-center gap-5 rounded-xl px-4 py-3.5 text-left text-lg font-semibold text-danger active:bg-surface-2">
+              <span className="w-6 text-center text-xl font-black">×</span>Remove Set
+            </button>
+          )}
+        </BottomSheet>
+      )}
       {infoOpen && <ExerciseInfo ex={x.ex} initialTab="stats" onClose={() => setInfoOpen(false)} />}
       {restOpen && (
         <LiftRestSheet name={x.ex.name} rest={x.rest} after={x.restAfter ?? x.rest} onClose={() => setRestOpen(false)}

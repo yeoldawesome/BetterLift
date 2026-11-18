@@ -120,6 +120,27 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   )
 }
 
+/** Short sheet that slides up from the bottom over a dimmed backdrop (for pick-one menus). */
+export function BottomSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  useEffect(() => {
+    const prev = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = prev }
+  }, [])
+  return (
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60" onClick={onClose}>
+      <div className="mx-auto w-full max-w-lg rounded-t-3xl border-t border-line bg-canvas pb-safe" onClick={(e) => e.stopPropagation()}>
+        <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line" />
+        <div className="relative px-safe py-3 text-center">
+          <h2 className="text-lg font-extrabold">{title}</h2>
+          <button onClick={onClose} className="absolute right-3 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-full text-muted" aria-label="Close"><CloseIcon width={18} height={18} /></button>
+        </div>
+        <div className="max-h-[70vh] overflow-y-auto px-safe pb-4">{children}</div>
+      </div>
+    </div>
+  )
+}
+
 export function Toggle({ on, onChange, title, body }: { on: boolean; onChange: (v: boolean) => void; title: string; body?: string }) {
   return (
     <button onClick={() => onChange(!on)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">

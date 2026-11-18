@@ -7,9 +7,11 @@ import { clearBestCache } from '../lib/best'
 import { distLabel, epley, fmtDist, fmtW, fromDist, fromUnit, num } from '../lib/format'
 import { errMsg, me, newId, pb, useUnit, type Exercise, type Visibility, type WSet, type Workout } from '../lib/pb'
 import { invalidateStats } from '../lib/statsData'
+import type { SetType } from '../lib/setTypes'
 
-type ESet = { w: string; r: string; sec: string; dist: string }
-type Block = { key: string; ex: Exercise; sets: ESet[] }
+type ESet = { w: string; r: string; sec: string; dist: string; type?: SetType | '' }
+/** note/superset are carried through untouched so editing doesn't wipe them. */
+type Block = { key: string; ex: Exercise; sets: ESet[]; note?: string; superset?: number }
 
 const pad = (n: number) => `${n}`.padStart(2, '0')
 const toLocalInput = (iso: string) => { const d = new Date(iso); return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}` }
@@ -39,9 +41,9 @@ export default function WorkoutEdit() {
       const bs: Block[] = []
       for (const s of sets) {
         const last = bs[bs.length - 1]
-        const row: ESet = { w: s.weight_kg ? fmtW(s.weight_kg, unit) : '', r: s.reps ? `${s.reps}` : '', sec: s.seconds ? `${s.seconds}` : '', dist: s.distance_km ? fmtDist(s.distance_km, unit) : '' }
+        const row: ESet = { w: s.weight_kg ? fmtW(s.weight_kg, unit) : '', r: s.reps ? `${s.reps}` : '', sec: s.seconds ? `${s.seconds}` : '', dist: s.distance_km ? fmtDist(s.distance_km, unit) : '', type: s.set_type }
         if (last && last.key === `p${s.position}`) last.sets.push(row)
-        else if (s.expand?.exercise) bs.push({ key: `p${s.position}`, ex: s.expand.exercise, sets: [row] })
+        else if (s.expand?.exercise) bs.push({ key: `p${s.position}`, ex: s.expand.exercise, sets: [row], note: s.note, superset: s.superset })
       }
       setW(wk); setName(wk.name); setNotes(wk.notes); setWhen(toLocalInput(wk.started_at))
       setMinutes(wk.duration_s ? `${Math.round(wk.duration_s / 60)}` : ''); setVisibility(wk.visibility === 'private' ? 'private' : 'public'); setBlocks(bs)
@@ -58,8 +60,12 @@ export default function WorkoutEdit() {
       if (isNaN(startedAt.getTime())) throw new Error('Pick a valid date and time.')
       const rows = blocks.flatMap((b, pos) => b.sets.map((s, idx) => {
         const kg = fromUnit(num(s.w), unit), reps = Math.round(num(s.r))
-        return { ex: b.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), e1: b.ex.kind === 'weight' ? epley(kg, reps) : 0 }
+        const type = s.type || 'normal'
+        return { ex: b.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), type, superset: b.superset ?? 0, note: b.note ?? '',
+          e1: b.ex.kind === 'weight' && type !== 'warmup' && type !== 'cooldown' ? epley(kg, reps) : 0 }
       })).filter((r) => r.kg || r.reps || r.sec || r.dist)
+      // Note lives on the first saved row of each exercise.
+      rows.forEach((r, i) => { if (i > 0 && rows[i - 1].pos === r.pos) r.note = '' })
       if (!rows.length) throw new Error('A workout needs at least one set. Delete it from History instead.')
 
       // PRs: compare against everything logged before this workout (excluding this workout's old sets).
@@ -90,6 +96,7 @@ export default function WorkoutEdit() {
       rows.forEach((r, i) => b.collection('workout_sets').create({
         workout: id, user: me(), exercise: r.ex.id, performed_at: iso, position: r.pos, set_index: r.idx,
         weight_kg: r.kg, reps: r.reps, seconds: r.sec, distance_km: r.dist, completed: true, e1rm_kg: r.e1, is_pr: prs.has(i),
+        set_type: r.type, note: r.note, superset: r.superset,
       }))
       await b.send()
       invalidateStats(); clearBestCache()

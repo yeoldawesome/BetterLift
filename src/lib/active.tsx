@@ -1,12 +1,14 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
 import { epley, fromDist, fromUnit, num } from './format'
+import type { SetType } from './setTypes'
 import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
-export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean }
+export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType }
 export type Prev = { w: number; r: number; sec: number; dist: number }
 /** rest = between sets, restAfter = after the last set (transition to the next exercise). */
-export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[] }
+/** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
+export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
 type Rest = { end: number; total: number } | null
 
@@ -38,7 +40,7 @@ export function ActiveProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<Active | null>(() => {
     const a = load<Active>(KEY)
     // Drop fields from older saved sessions (e.g. RPE).
-    return a ? { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: x.sets.map(({ w, r, sec, dist, done }) => ({ w, r, sec, dist, done })) })) } : null
+    return a ? { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: x.sets.map(({ w, r, sec, dist, done, type }) => ({ w, r, sec, dist, done, type })) })) } : null
   })
   const [rest, setRest] = useState<Rest>(() => load(RKEY))
   useEffect(() => store(KEY, active), [active])
@@ -118,10 +120,17 @@ export async function repairActive(a: Active): Promise<Active> {
 export async function finishWorkout(a: Active, unit: Unit, visibility: Visibility, bodyweightKg = 0): Promise<string> {
   a = await repairActive(a)
   const uid = me()
+  // Superset ids → small per-workout group numbers.
+  const groups = new Map<string, number>()
+  a.exercises.forEach((x) => { if (x.superset && !groups.has(x.superset)) groups.set(x.superset, groups.size + 1) })
   const rows = a.exercises.flatMap((x, pos) =>
     x.sets.filter((s) => s.done).map((s, idx) => {
       const kg = fromUnit(num(s.w), unit), reps = Math.round(num(s.r))
-      return { ex: x.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), e1: x.ex.kind === 'weight' ? epley(kg, reps) : 0 }
+      const type = s.type || 'normal'
+      // Warm-ups and cool-downs never count toward PRs.
+      const e1 = x.ex.kind === 'weight' && type !== 'warmup' && type !== 'cooldown' ? epley(kg, reps) : 0
+      return { ex: x.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), e1, type,
+        note: idx === 0 ? (x.note ?? '').trim() : '', superset: x.superset ? groups.get(x.superset)! : 0 }
     }))
   if (!rows.length) throw new Error('Check off at least one set before finishing.')
 
@@ -149,6 +158,7 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
   rows.forEach((r, i) => batch.collection('workout_sets').create({
     workout: a.id, user: uid, exercise: r.ex.id, performed_at: a.startedAt, position: r.pos, set_index: r.idx,
     weight_kg: r.kg, reps: r.reps, seconds: r.sec, distance_km: r.dist, completed: true, e1rm_kg: r.e1, is_pr: prs.has(i),
+    set_type: r.type, note: r.note, superset: r.superset,
   }))
   await batch.send()
   return a.id
