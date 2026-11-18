@@ -32,8 +32,8 @@ export function Reactions({ workoutId, reactions, onChange }: { workoutId: strin
   )
 }
 
-export function WorkoutCard({ w, summary, intensity, reactions, comments, onChange }: {
-  w: Workout; summary: string[]; intensity: Intensity; reactions: Reaction[]; comments: number; onChange: () => void
+export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
+  w: Workout; intensity: Intensity; reactions: Reaction[]; comments: number; onChange: () => void
 }) {
   const unit = useUnit()
   const nav = useNavigate()
@@ -93,14 +93,6 @@ export function WorkoutCard({ w, summary, intensity, reactions, comments, onChan
           </>
         )}
       </div>
-      {summary.length > 0 && (
-        <Link to={`/w/${w.id}`} className="block px-1">
-          <ul className="space-y-0.5 text-sm text-muted">
-            {summary.slice(0, 4).map((s) => <li key={s} className="truncate">{s}</li>)}
-            {summary.length > 4 && <li className="text-faint">+{summary.length - 4} more</li>}
-          </ul>
-        </Link>
-      )}
     </Card>
   )
 }

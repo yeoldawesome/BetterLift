@@ -11,7 +11,7 @@ import { loadStreak, type Streak } from '../lib/streak'
 import { useRealtime } from '../lib/useRealtime'
 
 const WEEK_MS = 7 * 86400000
-type FeedData = { workouts: Workout[]; summaries: Map<string, string[]>; intensity: Map<string, Intensity>; reactions: Reaction[]; comments: Comment[] }
+type FeedData = { workouts: Workout[]; intensity: Map<string, Intensity>; reactions: Reaction[]; comments: Comment[] }
 
 function NotificationBell() {
   const { count } = useNotifications()
@@ -49,19 +49,15 @@ function WeekFeed() {
     ])
     const byWorkout = new Map<string, WSet[]>()
     for (const s of sets) byWorkout.set(s.workout, [...(byWorkout.get(s.workout) ?? []), s])
-    const summaries = new Map<string, string[]>()
     const intensity = new Map<string, Intensity>()
     for (const w of workouts) {
       const ws = byWorkout.get(w.id) ?? []
-      const counts = new Map<string, { n: number; pos: number }>()
-      ws.forEach((s) => { const name = s.expand?.exercise?.name ?? '?'; const c = counts.get(name) ?? { n: 0, pos: s.position }; counts.set(name, { n: c.n + 1, pos: c.pos }) })
-      summaries.set(w.id, [...counts.entries()].sort((a, b) => a[1].pos - b[1].pos).map(([name, c]) => `${c.n} × ${name}`))
       intensity.set(w.id, intensityFromSets(ws.map((s) => ({ ex: s.expand?.exercise }))))
     }
-    setFeed({ workouts, summaries, intensity, reactions, comments })
+    setFeed({ workouts, intensity, reactions, comments })
   }, [])
 
-  useEffect(() => { load().catch(() => setFeed({ workouts: [], summaries: new Map(), intensity: new Map(), reactions: [], comments: [] })) }, [load])
+  useEffect(() => { load().catch(() => setFeed({ workouts: [], intensity: new Map(), reactions: [], comments: [] })) }, [load])
   useRealtime(['workouts', 'reactions', 'comments'], () => { load().catch(() => {}) })
 
   if (!feed) return <Spinner />
@@ -74,7 +70,7 @@ function WeekFeed() {
     <>
       <p className="text-xs font-semibold uppercase tracking-wider text-muted">Last 7 days · {feed.workouts.length} workout{feed.workouts.length === 1 ? '' : 's'}</p>
       {feed.workouts.map((w) => (
-        <WorkoutCard key={w.id} w={w} summary={feed.summaries.get(w.id) ?? []} intensity={feed.intensity.get(w.id) ?? {}} onChange={() => load()}
+        <WorkoutCard key={w.id} w={w} intensity={feed.intensity.get(w.id) ?? {}} onChange={() => load()}
           reactions={feed.reactions.filter((r) => r.workout === w.id)} comments={feed.comments.filter((c) => c.workout === w.id).length} />
       ))}
     </>
