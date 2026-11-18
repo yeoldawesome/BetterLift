@@ -1,0 +1,89 @@
+import { useState } from 'react'
+import { Link } from 'react-router-dom'
+import { HeightInput } from '../components/HeightInput'
+import { GlobeIcon, LockIcon, TimerIcon, TrashIcon } from '../components/icons'
+import { RestPicker, restLabel } from '../components/RestPicker'
+import { Card, ConfirmSheet, ErrorText, Input, Screen, Segmented, Toggle } from '../components/ui'
+import { deleteAllHistory } from '../lib/history'
+import { bmi, fmtW, fromUnit, num } from '../lib/format'
+import { errMsg, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
+
+export default function Settings() {
+  const user = useUser()!
+  const [restOpen, setRestOpen] = useState(false)
+  const [afterOpen, setAfterOpen] = useState(false)
+  const [err, setErr] = useState('')
+  const [clearOpen, setClearOpen] = useState(false)
+  const [progress, setProgress] = useState('')
+  const [done, setDone] = useState('')
+  const save = (patch: Partial<User>) => pb.collection('users').update(user.id, patch).catch((e) => setErr(errMsg(e)))
+  const vis = user.post_visibility || 'public'
+  const unit = user.unit || 'lb'
+  const [bw, setBw] = useState(user.bodyweight_kg ? fmtW(user.bodyweight_kg, unit) : '')
+  const b = bmi(user.bodyweight_kg, user.height_cm)
+
+  return (
+    <Screen title="Settings" back>
+      <ErrorText>{err}</ErrorText>
+      <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Units</h2>
+      <Segmented value={unit} onChange={(u) => { save({ unit: u }); setBw(user.bodyweight_kg ? fmtW(user.bodyweight_kg, u) : '') }} options={[['lb', 'Pounds (lb)'], ['kg', 'Kilograms (kg)']]} />
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Body</h2>
+      <HeightInput key={unit} cm={user.height_cm} unit={unit} onChange={(cm) => cm >= 120 && cm !== user.height_cm && save({ height_cm: cm })} />
+      <Input label={`Bodyweight (${unit})`} inputMode="decimal" value={bw} onChange={(e) => setBw(e.target.value)}
+        onBlur={() => num(bw) > 0 && bw !== fmtW(user.bodyweight_kg, unit) && save({ bodyweight_kg: Math.round(fromUnit(num(bw), unit) * 100) / 100 })} />
+      {b > 0 && <p className="text-xs text-muted">BMI {b.toFixed(1)}</p>}
+      <div>
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Body graph</span>
+        <Segmented value={user.sex === 'female' ? 'female' : 'male'} onChange={(sex) => save({ sex })} options={[['male', 'Male'], ['female', 'Female']]} />
+      </div>
+      <Link to="/themes" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Themes & colors <span className="text-accent">›</span></Link>
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Workouts</h2>
+      <button onClick={() => setRestOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">
+        <TimerIcon width={22} height={22} className="text-accent" />
+        <span className="flex-1"><span className="block font-bold">Default rest between sets</span><span className="block text-sm text-muted">Used for exercises you add. Change any exercise's rest by tapping its timer.</span></span>
+        <span className="num text-lg font-black">{restLabel(userRest(user))}</span>
+      </button>
+      <button onClick={() => setAfterOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">
+        <TimerIcon width={22} height={22} className="text-accent" />
+        <span className="flex-1"><span className="block font-bold">Default rest after an exercise</span><span className="block text-sm text-muted">Starts when you finish an exercise's last set, before the next one. Set per lift in its info sheet.</span></span>
+        <span className="num text-lg font-black">{restLabel(userRestAfter(user))}</span>
+      </button>
+      <Toggle on={user.update_routine} onChange={(update_routine) => save({ update_routine })} title="Update routine when finishing" body="Pre-selects “Update routine” on the finish screen." />
+      <Toggle on={user.save_as_routine} onChange={(save_as_routine) => save({ save_as_routine })} title="Save empty workouts as routines" body="Pre-selects “Save as a routine” for workouts not started from one." />
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Privacy</h2>
+      <Toggle on={!user.hide_stats} onChange={(on) => save({ hide_stats: !on })} title="Friends can see my lifts & stats"
+        body={user.hide_stats ? 'Off — friends see your posts, but not your sets, stats or lift history.' : 'On — friends can open your profile to see your stats, strongest sets and lift history.'} />
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Default post privacy</h2>
+      <Card className="grid grid-cols-2 gap-2 p-2">
+        {([['public', 'Public', GlobeIcon], ['private', 'Private', LockIcon]] as const).map(([v, t, Icon]) => (
+          <button key={v} onClick={() => save({ post_visibility: v })} className={`flex items-center justify-center gap-2 rounded-xl p-3 font-bold ${vis === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>
+            <Icon width={18} height={18} />{t}
+          </button>
+        ))}
+      </Card>
+      <p className="text-xs text-muted">Your last choice on the finish screen is remembered here too.</p>
+      <h2 className="pt-6 text-sm font-bold uppercase tracking-wider text-danger">Danger zone</h2>
+      <button onClick={() => { setDone(''); setClearOpen(true) }} className="flex w-full items-center gap-3 rounded-xl border border-danger/40 bg-danger/10 p-3 text-left">
+        <TrashIcon width={22} height={22} className="text-danger" />
+        <span className="flex-1"><span className="block font-bold text-danger">Delete all workout history</span><span className="block text-sm text-muted">Removes every workout and lift you've logged, plus their comments and reactions. Your routines, exercises and friends stay.</span></span>
+      </button>
+      {done && <p className="text-sm font-semibold text-accent">{done}</p>}
+      {clearOpen && (
+        <ConfirmSheet title="Delete all workout history?" confirmLabel={progress ? `Deleting… ${progress}` : 'Delete everything'} typeToConfirm="DELETE"
+          body={<>Every workout and set you've ever logged (including Liftoff imports) will be <span className="font-bold text-ink">permanently deleted</span>. Your stats, PRs and history will reset to zero. This can't be undone.</>}
+          onConfirm={async () => {
+            const n = await deleteAllHistory((d, t) => setProgress(`${d}/${t}`))
+            setProgress(''); setDone(`Deleted ${n} workout${n === 1 ? '' : 's'}.`)
+          }}
+          onClose={() => { setClearOpen(false); setProgress('') }} />
+      )}
+      {afterOpen && <RestPicker value={userRestAfter(user)} title="Rest after an exercise" onSave={(default_rest_after_s) => save({ default_rest_after_s })} onClose={() => setAfterOpen(false)}
+        onUseDefault={() => save({ default_rest_after_s: 0 })} defaultValue={userRest(user)} />}
+      {restOpen && <RestPicker value={userRest(user)} title="Default rest timer" onSave={(default_rest_s) => save({ default_rest_s: default_rest_s || 0 })} onClose={() => setRestOpen(false)} />}
+    </Screen>
+  )
+}

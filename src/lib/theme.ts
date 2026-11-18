@@ -1,0 +1,55 @@
+// App theming: every color in the UI (and the body graph) reads these CSS variables, so swapping them re-themes everything.
+export type Theme = { base?: string; accent?: string }
+
+type Base = { name: string; canvas: string; surface: string; surface2: string; line: string; ink: string; muted: string; faint: string; light?: boolean }
+export const BASES: Record<string, Base> = {
+  midnight: { name: 'Midnight', canvas: '#09090b', surface: '#141417', surface2: '#1d1d21', line: '#27272a', ink: '#fafafa', muted: '#a1a1aa', faint: '#52525b' },
+  oled: { name: 'OLED Black', canvas: '#000000', surface: '#0c0c0e', surface2: '#16161a', line: '#232328', ink: '#fafafa', muted: '#a1a1aa', faint: '#52525b' },
+  navy: { name: 'Navy', canvas: '#0a0f1c', surface: '#111829', surface2: '#1a2338', line: '#27324c', ink: '#f1f5f9', muted: '#94a3b8', faint: '#4b5a74' },
+  slate: { name: 'Graphite', canvas: '#161618', surface: '#1f1f23', surface2: '#2a2a30', line: '#36363d', ink: '#f4f4f5', muted: '#a8a8b3', faint: '#5b5b66' },
+  light: { name: 'Light', canvas: '#f4f4f2', surface: '#ffffff', surface2: '#ebebe8', line: '#dadad6', ink: '#18181b', muted: '#56565f', faint: '#a1a1aa', light: true },
+}
+
+export const ACCENTS: [string, string][] = [
+  ['#a3e635', 'Lime'], ['#38bdf8', 'Sky'], ['#f43f5e', 'Crimson'], ['#a78bfa', 'Violet'],
+  ['#fb923c', 'Orange'], ['#34d399', 'Mint'], ['#facc15', 'Gold'], ['#f472b6', 'Pink'],
+]
+
+export const DEFAULT_THEME: Required<Theme> = { base: 'midnight', accent: '#a3e635' }
+
+const hex = (h: string) => /^#[0-9a-f]{6}$/i.test(h)
+function luminance(h: string) {
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(h.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4))
+  return 0.2126 * r + 0.7152 * g + 0.0722 * b
+}
+/** Dark text on bright accents, white text on deep ones. */
+export const inkFor = (accent: string) => (luminance(accent) > 0.35 ? '#0b0f02' : '#ffffff')
+
+export function resolve(t?: Theme | null): Required<Theme> {
+  return { base: t?.base && BASES[t.base] ? t.base : DEFAULT_THEME.base, accent: t?.accent && hex(t.accent) ? t.accent : DEFAULT_THEME.accent }
+}
+
+/** CSS variable map for a theme — also used to scope the Themes preview without touching the live app. */
+export function themeVars(t?: Theme | null): Record<string, string> {
+  const { base, accent } = resolve(t)
+  const b = BASES[base]
+  return {
+    '--color-canvas': b.canvas, '--color-surface': b.surface, '--color-surface-2': b.surface2, '--color-line': b.line,
+    '--color-ink': b.ink, '--color-muted': b.muted, '--color-faint': b.faint, '--color-accent': accent, '--color-accent-ink': inkFor(accent),
+  }
+}
+
+const KEY = 'bl.theme'
+export function applyTheme(t?: Theme | null) {
+  const root = document.documentElement
+  for (const [k, v] of Object.entries(themeVars(t))) root.style.setProperty(k, v)
+  const { base } = resolve(t)
+  root.style.colorScheme = BASES[base].light ? 'light' : 'dark'
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', BASES[base].canvas)
+  try { localStorage.setItem(KEY, JSON.stringify(resolve(t))) } catch { /* private mode */ }
+}
+
+/** Theme remembered on this device, applied before login so the app opens in your colors. */
+export function localTheme(): Theme | null {
+  try { return JSON.parse(localStorage.getItem(KEY) || 'null') } catch { return null }
+}

@@ -1,0 +1,16 @@
+[Unit]
+Description=Better Lift API (PocketBase)
+After=network.target
+
+[Service]
+Type=simple
+User=betterlift
+Group=betterlift
+WorkingDirectory=/opt/betterlift
+ExecStart=/opt/betterlift/pocketbase serve --http=127.0.0.1:8090 --origins=https://app.example.com
+Restart=always
+RestartSec=5
+LimitNOFILE=4096
+
+[Install]
+WantedBy=multi-user.target
