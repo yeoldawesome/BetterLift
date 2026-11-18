@@ -6,6 +6,7 @@ import { RestPicker, restLabel } from '../components/RestPicker'
 import { Button, Card, ErrorText, Input, Screen, Spinner } from '../components/ui'
 import { routineExercises, useActive } from '../lib/active'
 import { errMsg, me, pb, restFor as liftRest, useUser, type Exercise, type Routine, type RoutineExercise } from '../lib/pb'
+import { ask } from '../components/Dialog'
 
 export default function RoutineEditor() {
   const { id } = useParams()
@@ -49,7 +50,7 @@ export default function RoutineEditor() {
   const remove = async (it: RoutineExercise) => { await pb.collection('routine_exercises').delete(it.id); loadItems() }
 
   const launch = async () => {
-    if (active && !confirm('You have a workout in progress. Replace it?')) return
+    if (active && !await ask({ title: 'You have a workout in progress', body: 'Starting this routine replaces it.', confirmLabel: 'Replace', danger: true })) return
     start(r!.name, r!.id, await routineExercises(r!.id))
     nav('/workout')
   }

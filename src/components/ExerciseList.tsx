@@ -8,6 +8,7 @@ import { ExerciseInfo } from './ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { Button, Card, Chips, ErrorText, Input, Select, Sheet, Spinner, Toggle } from './ui'
 import { InfoIcon, SearchIcon, TrashIcon } from './icons'
+import { ask, tell } from './Dialog'
 
 type Show = 'all' | 'most' | 'recent'
 type Sort = 'name' | 'most' | 'recent'
@@ -87,13 +88,13 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
   // Your own custom exercise: edit it directly. Official ones: save a personal version only you see.
   const openEdit = (e: Exercise) => (e.owner === me() ? setForm({ ex: e }) : setPersonal(e))
 
-  const act = (p: Promise<unknown>) => p.then(() => reload(true)).catch((x) => alert(errMsg(x)))
-  const remove = (e: Exercise) => confirm(`Delete "${e.name}"?`) && act(pb.collection('exercises').delete(e.id))
-  const submit = (e: Exercise) => {
+  const act = (p: Promise<unknown>) => p.then(() => reload(true)).catch((x) => tell(errMsg(x)))
+  const remove = async (e: Exercise) => { if (await ask({ title: `Delete “${e.name}”?`, confirmLabel: 'Delete', danger: true })) act(pb.collection('exercises').delete(e.id)) }
+  const submit = async (e: Exercise) => {
     if (e.review_status === 'rejected') return setForm({ ex: e, review: true })
     // Submissions need how-to and logging notes; open the form if they're missing.
     if ((e.instructions || '').trim().length < 20 || (e.log_tip || '').trim().length < 10) return setForm({ ex: e, review: true })
-    if (confirm(`Submit "${e.name}" for review? If approved it becomes an official exercise everyone can use.`)) act(pb.collection('exercises').update(e.id, { review_status: 'pending' }))
+    if (await ask({ title: `Submit “${e.name}” for review?`, body: 'If approved it becomes an official exercise everyone can use.', confirmLabel: 'Submit' })) act(pb.collection('exercises').update(e.id, { review_status: 'pending' }))
   }
   const withdraw = (e: Exercise) => act(pb.collection('exercises').update(e.id, { review_status: '' }))
 
@@ -249,7 +250,7 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
             {mergeMsg && <p className="text-xs font-semibold text-muted">{mergeMsg}</p>}
             <Button variant="ghost" disabled={!mergeTo || busy} onClick={async () => {
               const to = lib.find((e) => e.id === mergeTo)
-              if (!to || !confirm(`Merge “${initial.name}” into “${to.name}”? All its sets move over and it gets deleted. This can’t be undone.`)) return
+              if (!to || !await ask({ title: `Merge “${initial.name}” into “${to.name}”?`, body: 'All its sets move over and it gets deleted. This can’t be undone.', confirmLabel: 'Merge', danger: true })) return
               setBusy(true); setErr('')
               try { const n = await mergeExercise(initial.id, to.id, setMergeMsg); invalidateStats(); clearBestCache(); setMergeMsg(`Moved ${n} sets.`); onSaved(to) }
               catch (e) { setErr(errMsg(e)); setBusy(false) }
@@ -289,7 +290,7 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
     } catch (e) { setErr(errMsg(e)); setBusy(false) }
   }
   const reset = async () => {
-    if (!ex.override || !confirm('Reset this exercise to the official version?')) return
+    if (!ex.override || !await ask({ title: 'Reset this exercise to the official version?', confirmLabel: 'Reset', danger: true })) return
     try { await pb.collection('exercise_overrides').delete(ex.override); onSaved() } catch (e) { setErr(errMsg(e)) }
   }
 

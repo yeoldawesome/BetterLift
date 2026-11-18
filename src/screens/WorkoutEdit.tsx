@@ -8,6 +8,7 @@ import { distLabel, epley, fmtDist, fmtW, fromDist, fromUnit, num } from '../lib
 import { errMsg, me, newId, pb, useUnit, type Exercise, type Visibility, type WSet, type Workout } from '../lib/pb'
 import { invalidateStats } from '../lib/statsData'
 import type { SetType } from '../lib/setTypes'
+import { ask } from '../components/Dialog'
 
 type ESet = { w: string; r: string; sec: string; dist: string; type?: SetType | '' }
 /** note/superset are carried through untouched so editing doesn't wipe them. */
@@ -129,7 +130,7 @@ export default function WorkoutEdit() {
           <Card key={b.key} className="p-3">
             <div className="mb-2 flex items-center justify-between px-1">
               <p className="truncate font-extrabold text-accent">{b.ex.name}</p>
-              <button onClick={() => confirm(`Remove ${b.ex.name} from this workout?`) && setBlocks((bs) => bs.filter((x) => x.key !== b.key))} className="p-1.5 text-faint" aria-label="Remove exercise"><TrashIcon width={18} height={18} /></button>
+              <button onClick={async () => { if (await ask({ title: `Remove ${b.ex.name} from this workout?`, confirmLabel: 'Remove', danger: true })) setBlocks((bs) => bs.filter((x) => x.key !== b.key)) }} className="p-1.5 text-faint" aria-label="Remove exercise"><TrashIcon width={18} height={18} /></button>
             </div>
             <div className="grid gap-x-2 gap-y-1.5 text-center text-sm" style={{ gridTemplateColumns: `1.5rem ${cols.map(() => 'minmax(0,1fr)').join(' ')} 2.25rem` }}>
               <span className="text-[11px] font-bold uppercase text-faint">Set</span>

@@ -4,13 +4,14 @@ import { DownIcon, TrashIcon, UpIcon } from '../components/icons'
 import { Button, Card, Empty, Screen, Spinner } from '../components/ui'
 import { routineExercises, useActive } from '../lib/active'
 import { errMsg, me, pb, type Routine } from '../lib/pb'
+import { ask, tell } from '../components/Dialog'
 
 export default function Routines() {
   const [list, setList] = useState<Routine[] | null>(null)
   const { active, start } = useActive()
   const nav = useNavigate()
 
-  const load = () => pb.collection('routines').getFullList<Routine>({ filter: pb.filter('user = {:u}', { u: me() }), sort: 'position,created' }).then(setList).catch((e) => alert(errMsg(e)))
+  const load = () => pb.collection('routines').getFullList<Routine>({ filter: pb.filter('user = {:u}', { u: me() }), sort: 'position,created' }).then(setList).catch((e) => tell(errMsg(e)))
   useEffect(() => { load() }, [])
 
   const create = async () => {
@@ -28,13 +29,13 @@ export default function Routines() {
   }
 
   const remove = async (r: Routine) => {
-    if (!confirm(`Delete "${r.name}"?`)) return
+    if (!await ask({ title: `Delete “${r.name}”?`, confirmLabel: 'Delete', danger: true })) return
     await pb.collection('routines').delete(r.id)
     load()
   }
 
   const launch = async (r: Routine) => {
-    if (active && !confirm('You have a workout in progress. Replace it?')) return
+    if (active && !await ask({ title: 'You have a workout in progress', body: 'Starting this routine replaces it.', confirmLabel: 'Replace', danger: true })) return
     start(r.name, r.id, await routineExercises(r.id))
     nav('/workout')
   }

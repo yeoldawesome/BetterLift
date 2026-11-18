@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import { HashRouter } from 'react-router-dom'
 import { registerSW } from 'virtual:pwa-register'
 import App from './App'
+import { DialogHost } from './components/Dialog'
 import { ActiveProvider } from './lib/active'
 import { NotificationsProvider } from './lib/notifications'
 import { applyTheme, localTheme } from './lib/theme'
@@ -17,6 +18,7 @@ createRoot(document.getElementById('root')!).render(
       <ActiveProvider>
         <NotificationsProvider>
           <App />
+          <DialogHost />
         </NotificationsProvider>
       </ActiveProvider>
     </HashRouter>

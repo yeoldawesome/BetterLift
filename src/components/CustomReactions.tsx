@@ -3,6 +3,7 @@ import { customUrl, EMOJI, emojiChar, loadCustomReactions, prepareReactionImage 
 import { errMsg, me, pb, type CustomReaction, type Reaction } from '../lib/pb'
 import { PlusIcon, TrashIcon } from './icons'
 import { BottomSheet, Button, ErrorText, Input } from './ui'
+import { ask } from './Dialog'
 
 /** Draws one reaction: a built-in emoji, or a custom image. */
 export function Glyph({ k, custom, size = 22 }: { k: string; custom?: CustomReaction; size?: number }) {
@@ -91,7 +92,7 @@ export function CustomReactionManager() {
     } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
   }
   const remove = async (c: CustomReaction) => {
-    if (!confirm(`Delete “${c.name}”? It will also disappear from every post it was used on.`)) return
+    if (!await ask({ title: `Delete “${c.name}”?`, body: 'It will also disappear from every post it was used on.', confirmLabel: 'Delete', danger: true })) return
     try { await pb.collection('custom_reactions').delete(c.id); await reload() } catch (e) { setErr(errMsg(e)) }
   }
 

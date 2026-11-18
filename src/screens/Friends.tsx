@@ -4,6 +4,7 @@ import { Link } from 'react-router-dom'
 import { Avatar, Button, Card, ErrorText, Input, Screen, Segmented } from '../components/ui'
 import { errMsg, me, pb, type Friendship, type User } from '../lib/pb'
 import { useRealtime } from '../lib/useRealtime'
+import { ask } from '../components/Dialog'
 
 export default function Friends() {
   useClearOnVisit('friends')
@@ -33,7 +34,7 @@ export default function Friends() {
   const run = (p: Promise<unknown>) => p.then(load).catch((e) => setErr(errMsg(e)))
   const send = (u: User) => run(pb.collection('friendships').create({ requester: uid, addressee: u.id, status: 'pending' }))
   const accept = (f: Friendship) => run(pb.collection('friendships').update(f.id, { status: 'accepted' }))
-  const remove = (f: Friendship, msg?: string) => (!msg || confirm(msg)) && run(pb.collection('friendships').delete(f.id))
+  const remove = async (f: Friendship, msg?: string) => { if (!msg || await ask({ title: msg, confirmLabel: 'Remove', danger: true })) run(pb.collection('friendships').delete(f.id)) }
 
   const incoming = links.filter((f) => f.status === 'pending' && f.addressee === uid)
   const outgoing = links.filter((f) => f.status === 'pending' && f.requester === uid)

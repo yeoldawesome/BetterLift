@@ -9,6 +9,7 @@ import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, label, resetExercises } from 
 import { timeAgo } from '../lib/format'
 import { intensityForExercise } from '../lib/muscles'
 import { errMsg, pb as appPb, type Exercise, type Feedback, type Kind } from '../lib/pb'
+import { ask } from '../components/Dialog'
 
 const admin = new PocketBase(appPb.baseURL, new LocalAuthStore('bl_admin_auth'))
 admin.autoCancellation(false)
@@ -80,7 +81,7 @@ function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>;
   }
   const save = () => run(() => (mode === 'create' ? admin.collection('exercises').create({ ...data, owner: '' }) : admin.collection('exercises').update(ex.id!, data)))
   const decide = (action: 'approve' | 'reject') => run(() => admin.send(`/api/betterlift/exercises/${ex.id}/review`, { method: 'POST', body: { action, note: note.trim(), ...data } }))
-  const remove = () => confirm(`Delete "${ex.name}" for everyone? This fails if anyone has logged it.`) && run(() => admin.collection('exercises').delete(ex.id!))
+  const remove = async () => { if (await ask({ title: `Delete “${ex.name}” for everyone?`, body: 'This fails if anyone has logged it.', confirmLabel: 'Delete', danger: true })) run(() => admin.collection('exercises').delete(ex.id!)) }
 
   return (
     <Sheet title={mode === 'create' ? 'New official exercise' : mode === 'review' ? 'Review submission' : 'Edit exercise'} onClose={onClose}>

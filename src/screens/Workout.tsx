@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
-import { CheckIcon, DotsIcon, DownIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
+import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
 import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
@@ -13,6 +13,7 @@ import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromUnit, num } from '../lib/format'
 import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
+import { ask, tell } from '../components/Dialog'
 
 export default function Workout() {
   const { active } = useActive()
@@ -36,7 +37,7 @@ function StartWorkout() {
 
   const fromRoutine = async (r: Routine) => {
     setBusy(r.id)
-    try { start(r.name, r.id, await routineExercises(r.id)) } catch (e) { alert(errMsg(e)) } finally { setBusy('') }
+    try { start(r.name, r.id, await routineExercises(r.id)) } catch (e) { tell(errMsg(e)) } finally { setBusy('') }
   }
 
   return (
@@ -207,7 +208,7 @@ function ActiveWorkout() {
       </div>
       <div className="mt-4 space-y-3">
         <Button variant="ghost" onClick={() => setPicking(true)}><PlusIcon width={18} height={18} className="mr-1 inline" />Add exercises</Button>
-        <Button variant="danger" onClick={() => confirm('Discard this workout?') && discard()}>Discard workout</Button>
+        <Button variant="danger" onClick={async () => { if (await ask({ title: 'Discard this workout?', body: 'Everything you logged in it will be lost.', confirmLabel: 'Discard', danger: true })) discard() }}>Discard workout</Button>
       </div>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
       {finishing && <FinishSheet user={user} onClose={() => setFinishing(false)} />}
@@ -253,6 +254,17 @@ function tidySupersets(xs: AEx[]): AEx[] {
 }
 
 /** Confirm-and-post step: name, visibility, routine update. Choices are remembered on the user. */
+/** Scroll to the first unchecked set and pulse every unchecked set row. */
+function showUnchecked() {
+  const cells = [...document.querySelectorAll<HTMLElement>('[data-undone]')]
+  cells[0]?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  for (const c of cells) {
+    c.classList.remove('pulse-set'); void c.offsetWidth // restart the animation if tapped again
+    c.classList.add('pulse-set')
+    setTimeout(() => c.classList.remove('pulse-set'), 2600)
+  }
+}
+
 function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
   const { active, discard } = useActive()
   const unit = useUnit()
@@ -301,13 +313,17 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
   }
 
   return (
-    <Sheet title="Finish workout" onClose={onClose}>
+    <Sheet title="Finish workout" onClose={onClose} back>
       <div className="space-y-4 pb-6">
         {skipped > 0 && (
-          <Card className="border-amber-400/40 bg-amber-400/10">
-            <p className="font-bold text-amber-300">{skipped} set{skipped > 1 ? 's' : ''} not checked off</p>
-            <p className="text-sm text-muted">{done ? "Unchecked sets won't be saved." : 'Check off at least one set to finish.'}</p>
-          </Card>
+          // Tap to jump back to the unchecked sets; they pulse so they're easy to spot.
+          <button onClick={() => { onClose(); setTimeout(showUnchecked, 60) }} className="flex w-full items-center gap-3 rounded-2xl border border-amber-400/40 bg-amber-400/10 p-4 text-left active:opacity-80">
+            <span className="min-w-0 flex-1">
+              <span className="block font-bold text-amber-300">{skipped} set{skipped > 1 ? 's' : ''} not checked off</span>
+              <span className="block text-sm text-muted">{done ? "Unchecked sets won't be saved." : 'Check off at least one set to finish.'} Tap to see them.</span>
+            </span>
+            <ChevronIcon width={18} height={18} className="shrink-0 text-amber-300" />
+          </button>
         )}
         <Input label="Post name" value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
         {a.routine && routineName && name.trim() !== routineName && <p className="-mt-2 text-xs text-muted">Only this post is renamed — your routine stays “{routineName}”.</p>}
@@ -365,7 +381,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
     [x.note !== undefined ? 'Remove Exercise Note' : 'Add Exercise Note', () => setEx(x.key, (e) => ({ ...e, note: e.note !== undefined ? undefined : '' }))],
     [x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset],
     ['Replace Exercise', onReplace],
-    ['Remove Exercise', () => confirm(`Remove ${x.ex.name}?`) && onRemove(), true],
+    ['Remove Exercise', async () => { if (await ask({ title: `Remove ${x.ex.name}?`, body: 'Its sets in this workout are removed too.', confirmLabel: 'Remove', danger: true })) onRemove() }, true],
   ]
   const k = x.ex.kind
   // "To PR" line: compare this session's checked-off sets against the all-time best.
@@ -441,11 +457,11 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
                 aria-label={`Use previous: ${prevText(p, x, unit)}`}>{prevText(p, x, unit)}</button>
             ) : <span key={`p${i}`} className="num self-center text-xs text-faint">—</span>,
             ...cols.map((c) => (
-              <input key={`${c}${i}`} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c)}
+              <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c)}
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
                 className={`num h-10 w-full min-w-0 rounded-lg text-center font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/15' : 'bg-surface-2'}`} />
             )),
-            <button key={`d${i}`} onClick={() => toggle(x, i)} className={`grid h-10 place-items-center rounded-lg ${s.done ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-faint'}`}><CheckIcon width={20} height={20} /></button>,
+            <button key={`d${i}`} data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)} className={`grid h-10 place-items-center rounded-lg ${s.done ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-faint'}`}><CheckIcon width={20} height={20} /></button>,
           ]
         })}
       </div>

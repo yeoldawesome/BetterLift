@@ -5,6 +5,7 @@ import { BodyMap } from '../components/BodyMap'
 import { intensityForExercise } from '../lib/muscles'
 import { timeAgo } from '../lib/format'
 import { errMsg, pb, type Exercise, type Kind } from '../lib/pb'
+import { ask } from '../components/Dialog'
 
 export default function Review() {
   const [items, setItems] = useState<Exercise[] | null>(null)
@@ -38,7 +39,7 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
   const [busy, setBusy] = useState(false)
 
   const decide = async (action: 'approve' | 'reject') => {
-    if (action === 'reject' && !note.trim() && !confirm('Reject without a note? A short reason helps the submitter.')) return
+    if (action === 'reject' && !note.trim() && !await ask({ title: 'Reject without a note?', body: 'A short reason helps the submitter.', confirmLabel: 'Reject', danger: true })) return
     setErr(''); setBusy(true)
     try {
       await pb.send(`/api/betterlift/exercises/${e.id}/review`, { method: 'POST', body: { action, note: note.trim(), name: name.trim(), muscle, equipment, kind, secondary: secondary.filter((m) => m !== muscle), instructions: instructions.trim(), log_tip: logTip.trim() } })
