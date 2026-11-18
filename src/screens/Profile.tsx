@@ -71,7 +71,7 @@ export default function Profile() {
     <section className="mx-auto max-w-lg space-y-3 px-safe pb-4">
       {/* Hero: photo + name top-left (tap the photo to change it), notifications + settings top-right. */}
       <div className="relative mt-2 overflow-hidden rounded-3xl border border-line px-5 pb-12 pt-4"
-        style={{ background: 'radial-gradient(120% 60% at 50% 100%, color-mix(in srgb, var(--color-accent) 35%, transparent), transparent 70%), linear-gradient(180deg, #0f1b33 0%, #13233f 55%, #0b0f17 100%)' }}>
+        style={{ background: 'radial-gradient(120% 70% at 50% 100%, color-mix(in srgb, var(--color-accent) 40%, transparent), transparent 70%), linear-gradient(180deg, color-mix(in srgb, var(--color-accent) 22%, var(--color-surface)) 0%, color-mix(in srgb, var(--color-accent) 10%, var(--color-surface)) 55%, var(--color-surface) 100%)' }}>
         <div className="flex items-start justify-between gap-3">
           <button onClick={() => setPhotoMenu(true)} className="relative shrink-0 rounded-full ring-2 ring-accent/60" aria-label="Change profile picture">
             <Avatar user={user} size={64} />

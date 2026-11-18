@@ -25,7 +25,10 @@
 
 html, body, #root { height: 100%; }
 body {
-  background: var(--color-canvas);
+  /* A soft glow of the theme color at the top of every screen. */
+  background:
+    radial-gradient(120% 45% at 50% 0%, color-mix(in srgb, var(--color-accent) 16%, transparent), transparent 70%) fixed,
+    var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;

@@ -52,7 +52,7 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
   return (
     <div className="flex rounded-xl bg-surface-2 p-1">
       {options.map(([v, l]) => (
-        <button key={v} onClick={() => onChange(v)} className={`h-9 flex-1 rounded-lg text-sm font-bold transition ${value === v ? 'bg-ink text-canvas' : 'text-muted'}`}>{l}</button>
+        <button key={v} onClick={() => onChange(v)} className={`h-9 flex-1 rounded-lg text-sm font-bold transition ${value === v ? 'bg-accent text-accent-ink shadow-md shadow-accent/30' : 'text-muted'}`}>{l}</button>
       ))}
     </div>
   )
@@ -149,7 +149,7 @@ export function Toggle({ on, onChange, title, body }: { on: boolean; onChange: (
     <button onClick={() => onChange(!on)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">
       <span className="min-w-0 flex-1"><span className="block font-bold">{title}</span>{body && <span className="block text-sm text-muted">{body}</span>}</span>
       <span className={`relative h-7 w-12 shrink-0 rounded-full transition ${on ? 'bg-accent' : 'bg-surface-2'}`}>
-        <span className={`absolute top-1 size-5 rounded-full bg-ink transition-all ${on ? 'left-6' : 'left-1'}`} />
+        <span className={`absolute top-1 size-5 rounded-full transition-all ${on ? 'left-6 bg-accent-ink' : 'left-1 bg-ink'}`} />
       </span>
     </button>
   )

@@ -196,7 +196,7 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
       </div>
       <div className="flex rounded-xl bg-surface-2 p-1">
         {([['7d', 'Last 7 days'], ['lastweek', 'Last week'], ['all', 'All time']] as [MuscleRange, string][]).map(([v, l]) => (
-          <button key={v} onClick={() => setRange(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${range === v ? 'bg-ink text-canvas' : 'text-muted'}`}>{l}</button>
+          <button key={v} onClick={() => setRange(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${range === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
         ))}
       </div>
       {!sets ? <p className="py-8 text-center text-sm text-muted">No sets logged in this period.</p> : (

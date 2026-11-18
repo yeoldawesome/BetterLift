@@ -30,13 +30,26 @@ export function resolve(t?: Theme | null): Required<Theme> {
   return { base: t?.base && BASES[t.base] ? t.base : DEFAULT_THEME.base, accent: t?.accent && hex(t.accent) ? t.accent : DEFAULT_THEME.accent }
 }
 
-/** CSS variable map for a theme — also used to scope the Themes preview without touching the live app. */
+/** Blend two #rrggbb colors; `t` is how much of `b` to mix into `a` (0..1). */
+export function mix(a: string, b: string, t: number) {
+  const ch = (h: string, i: number) => parseInt(h.slice(i, i + 2), 16)
+  return '#' + [1, 3, 5].map((i) => Math.round(ch(a, i) + (ch(b, i) - ch(a, i)) * t).toString(16).padStart(2, '0')).join('')
+}
+
+/**
+ * CSS variable map for a theme — also used to scope the Themes preview without touching the live app.
+ * The accent soaks into every surface (background, cards, inputs, borders, grey text) so the whole app takes on
+ * your color, not just buttons. Light bases take a gentler tint so text stays readable.
+ */
 export function themeVars(t?: Theme | null): Record<string, string> {
   const { base, accent } = resolve(t)
   const b = BASES[base]
+  const k = b.light ? 0.55 : 1
   return {
-    '--color-canvas': b.canvas, '--color-surface': b.surface, '--color-surface-2': b.surface2, '--color-line': b.line,
-    '--color-ink': b.ink, '--color-muted': b.muted, '--color-faint': b.faint, '--color-accent': accent, '--color-accent-ink': inkFor(accent),
+    '--color-canvas': mix(b.canvas, accent, 0.05 * k), '--color-surface': mix(b.surface, accent, 0.08 * k),
+    '--color-surface-2': mix(b.surface2, accent, 0.11 * k), '--color-line': mix(b.line, accent, 0.18 * k),
+    '--color-ink': b.ink, '--color-muted': mix(b.muted, accent, 0.12 * k), '--color-faint': mix(b.faint, accent, 0.15 * k),
+    '--color-accent': accent, '--color-accent-ink': inkFor(accent),
   }
 }
 
@@ -49,7 +62,8 @@ export function applyTheme(t?: Theme | null) {
   for (const [k, v] of Object.entries(themeVars(t))) root.style.setProperty(k, v)
   const { base } = resolve(t)
   root.style.colorScheme = BASES[base].light ? 'light' : 'dark'
-  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', BASES[base].canvas)
+  // iPhone status bar / Safari chrome matches the tinted background.
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content', themeVars(t)['--color-canvas'])
   try { localStorage.setItem(KEY, JSON.stringify(resolve(t))) } catch { /* private mode */ }
 }
 

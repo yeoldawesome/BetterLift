@@ -91,11 +91,11 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
           </button>
         )}
         <div className="absolute bottom-3 right-3 flex flex-col items-center gap-3">
-          <Link to={`/w/${w.id}`} className="relative grid size-12 place-items-center rounded-full bg-sky-200 text-sky-900 shadow-lg" aria-label={`${comments} comments`}>
+          <Link to={`/w/${w.id}`} className="relative grid size-12 place-items-center rounded-full bg-accent text-accent-ink shadow-lg" aria-label={`${comments} comments`}>
             <CommentIcon width={24} height={24} />
             {comments > 0 && <span className="num absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{comments > 99 ? '99+' : comments}</span>}
           </Link>
-          <button onClick={() => setPicking((v) => !v)} className="grid size-12 place-items-center rounded-full bg-sky-200 text-2xl shadow-lg" aria-label="React">🙂</button>
+          <button onClick={() => setPicking((v) => !v)} className="grid size-12 place-items-center rounded-full bg-accent text-2xl shadow-lg" aria-label="React">🙂</button>
         </div>
         {picking && (
           <ReactionPicker className="absolute bottom-[8.25rem] right-3" mine={new Set([...counts.values()].filter((t) => t.mine).map((t) => t.k))}

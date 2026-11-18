@@ -111,7 +111,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
       <div className="flex gap-2">
         <div className="flex flex-1 rounded-xl bg-surface-2 p-1">
           {([['all', 'All'], ['most', 'Most performed'], ['recent', 'Recent']] as [Show, string][]).map(([v, l]) => (
-            <button key={v} onClick={() => pickShow(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${show === v ? 'bg-ink text-canvas' : 'text-muted'}`}>{l}</button>
+            <button key={v} onClick={() => pickShow(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${show === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
           ))}
         </div>
         <label className="sr-only" htmlFor="ex-sort">Sort</label>
