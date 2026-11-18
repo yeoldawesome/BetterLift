@@ -103,7 +103,7 @@ export function ListLink({ to, children, badge }: { to: string; children: ReactN
   )
 }
 
-export function Sheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Sheet({ title, subtitle, onClose, children }: { title: string; subtitle?: string; onClose: () => void; children: ReactNode }) {
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
@@ -111,9 +111,12 @@ export function Sheet({ title, onClose, children }: { title: string; onClose: ()
   }, [])
   return (
     <div className="fixed inset-0 z-[60] flex flex-col bg-canvas pt-safe">
-      <div className="mx-auto flex w-full max-w-lg items-center justify-between px-safe py-3">
-        <h2 className="text-xl font-extrabold">{title}</h2>
-        <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
+      <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 px-safe py-3">
+        <div className="min-w-0">
+          <h2 className="text-xl font-extrabold">{title}</h2>
+          {subtitle && <p className="text-sm text-muted">{subtitle}</p>}
+        </div>
+        <button onClick={onClose} className="grid size-9 shrink-0 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
       </div>
       <div className="mx-auto w-full max-w-lg flex-1 overflow-y-auto px-safe pb-safe">{children}</div>
     </div>

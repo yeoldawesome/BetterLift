@@ -4,6 +4,7 @@ import type { ImpResult, ImpWorkout } from './liftoff'
 import { me, newId, pb, type Exercise, type Unit, type Workout } from './pb'
 import { invalidateStats } from './statsData'
 import { clearBestCache } from './best'
+import { myAccent } from './theme'
 
 const MAX_BATCH = 400
 
@@ -62,7 +63,7 @@ export async function runImport(parsed: ImpResult, unit: Unit, onProgress: (done
     if (queued && queued + sets.length + 1 > MAX_BATCH) await flush()
     batch.collection('workouts').create({
       id, user: uid, name: w.name.slice(0, 80), started_at: w.date.toISOString(), ended_at: new Date(w.date.getTime() + w.durationS * 1000).toISOString(),
-      duration_s: w.durationS, volume_kg: sets.reduce((t, s) => t + (s.ex.kind === 'weight' ? s.kg * s.reps : 0), 0), pr_count: prIdx.size, source_id: w.sourceId,
+      duration_s: w.durationS, volume_kg: sets.reduce((t, s) => t + (s.ex.kind === 'weight' ? s.kg * s.reps : 0), 0), pr_count: prIdx.size, source_id: w.sourceId, accent: myAccent(),
     })
     sets.forEach((s, i) => batch.collection('workout_sets').create({
       workout: id, user: uid, exercise: s.ex.id, performed_at: w.date.toISOString(), position: s.pos, set_index: s.idx,

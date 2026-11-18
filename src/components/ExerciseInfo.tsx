@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { defaultLogTip, label, type Usage } from '../lib/exercises'
+import { altNames, defaultLogTip, label, type Usage } from '../lib/exercises'
 import { distLabel, epley, fmtDate, fmtDist, fmtW, timeAgo } from '../lib/format'
 import { intensityForExercise } from '../lib/muscles'
 import { me, pb, restFor, useUnit, useUser, userRest, userRestAfter, type Exercise, type Unit, type WSet } from '../lib/pb'
@@ -9,6 +9,7 @@ import { RestPicker, restLabel } from './RestPicker'
 import { TimerIcon } from './icons'
 import { trendLine } from '../lib/stats'
 import { BodyMap } from './BodyMap'
+import { EquipmentUsed, equipmentFor } from './Equipment'
 import { TrophyIcon } from './icons'
 import { LineChart } from './LineChart'
 import { Segmented, Sheet, Spinner } from './ui'
@@ -61,7 +62,7 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
   const tag = 'rounded-full px-2.5 py-1 text-xs font-bold'
 
   return (
-    <Sheet title={ex.name} onClose={onClose}>
+    <Sheet title={ex.name} subtitle={altNames(ex.name).length ? `Also called ${altNames(ex.name).join(', ')}` : undefined} onClose={onClose}>
       <div className="space-y-4 pb-8">
         <Segmented value={tab} onChange={setTab} options={[['about', 'Lift info'], ['stats', 'Stats'], ['history', 'History']]} />
 
@@ -131,6 +132,12 @@ function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Us
         <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">How to log it</h3>
         <p className="rounded-2xl bg-surface-2 p-3 text-sm">{ex.log_tip || defaultLogTip(ex.kind, ex.equipment)}</p>
       </section>
+      {equipmentFor(ex).length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">Equipment used</h3>
+          <EquipmentUsed ex={ex} />
+        </section>
+      )}
       {u && <p className="text-center text-xs text-muted">You've done this in {u.count} workout{u.count === 1 ? '' : 's'} · last {timeAgo(new Date(u.last).toISOString())}</p>}
     </>
   )

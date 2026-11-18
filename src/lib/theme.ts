@@ -1,3 +1,4 @@
+import { pb } from './pb'
 // App theming: every color in the UI (and the body graph) reads these CSS variables, so swapping them re-themes everything.
 export type Theme = { base?: string; accent?: string }
 
@@ -38,6 +39,9 @@ export function themeVars(t?: Theme | null): Record<string, string> {
     '--color-ink': b.ink, '--color-muted': b.muted, '--color-faint': b.faint, '--color-accent': accent, '--color-accent-ink': inkFor(accent),
   }
 }
+
+/** The accent color to stamp on a workout you save now. */
+export const myAccent = (): string => resolve((pb.authStore.record as { theme?: Theme } | null)?.theme).accent
 
 const KEY = 'bl.theme'
 export function applyTheme(t?: Theme | null) {

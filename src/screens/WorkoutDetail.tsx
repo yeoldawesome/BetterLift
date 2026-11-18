@@ -34,7 +34,7 @@ export default function WorkoutDetail() {
 
   const loadSocial = useCallback(async () => {
     const [r, c] = await Promise.all([
-      pb.collection('reactions').getFullList<Reaction>({ filter }),
+      pb.collection('reactions').getFullList<Reaction>({ filter, expand: 'custom' }),
       pb.collection('comments').getFullList<Comment>({ filter, sort: 'created', expand: 'user' }),
     ])
     setReactions(r); setComments(c)
@@ -104,7 +104,7 @@ export default function WorkoutDetail() {
       ) : null}
       {sets.length > 0 && (
         <Card className="flex items-center justify-center py-3">
-          <BodyMap sex={w.expand?.user?.sex} intensity={intensityFromSets(sets.map((s) => ({ ex: s.expand?.exercise })))} className="h-44" labels />
+          <BodyMap sex={w.expand?.user?.sex} intensity={intensityFromSets(sets.map((s) => ({ ex: s.expand?.exercise })))} accent={w.accent} className="h-44" labels />
         </Card>
       )}
       {w.notes && <p className="text-sm text-muted">{w.notes}</p>}

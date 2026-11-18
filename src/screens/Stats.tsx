@@ -1,7 +1,9 @@
 // Stats page layout modeled on LiftoffVisualizer by JacobG122503 (github.com/JacobG122503/LiftoffVisualizer), used with permission.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CloseIcon, SearchIcon } from '../components/icons'
+import { CloseIcon, InfoIcon, SearchIcon } from '../components/icons'
+import { ExerciseInfo } from '../components/ExerciseInfo'
+import { searchExercises } from '../lib/search'
 import { LineChart } from '../components/LineChart'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
@@ -9,7 +11,7 @@ import { MAP_MUSCLES, muscleSetCounts } from '../lib/muscles'
 import { Empty, Input, Screen, Spinner } from '../components/ui'
 import { label } from '../lib/exercises'
 import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
-import { me, useUnit, useUser, type Kind, type Unit, type User } from '../lib/pb'
+import { me, useUnit, useUser, type Exercise, type Kind, type Unit, type User } from '../lib/pb'
 import { cachedStats, loadStatsRows, type StatRow } from '../lib/statsData'
 import { buildStats, effectiveMetric, metricLabel, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot } from '../lib/stats'
 
@@ -93,8 +95,17 @@ function LazyChart(props: Parameters<typeof LineChart>[0]) {
   return <div ref={ref}>{seen ? <LineChart {...props} /> : <div className={props.className} />}</div>
 }
 
-function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit, onOpen }: {
-  name: string; kind: Kind; muscle: string; data: DaySummary[]; globalMetric: Metric; globalDays: number; unit: Unit; onOpen: () => void
+/** ⓘ next to an exercise name: opens the same info sheet as in a workout (how-to, stats, history). */
+function InfoButton({ name, onInfo }: { name: string; onInfo?: () => void }) {
+  if (!onInfo) return null
+  return (
+    <button onClick={(e) => { e.stopPropagation(); onInfo() }} aria-label={`About ${name}`}
+      className="-m-1.5 grid size-8 shrink-0 place-items-center rounded-full text-muted active:bg-surface-2"><InfoIcon width={18} height={18} /></button>
+  )
+}
+
+function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit, onOpen, onInfo }: {
+  name: string; kind: Kind; muscle: string; data: DaySummary[]; globalMetric: Metric; globalDays: number; unit: Unit; onOpen: () => void; onInfo?: () => void
 }) {
   // Each card can override range/metric; changing the global controls resets every card to match.
   const [metric, setMetric] = useState(globalMetric)
@@ -107,7 +118,7 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
     <div onClick={onOpen} className={`cursor-pointer space-y-2 rounded-2xl border border-line bg-surface p-3 transition active:scale-[0.99] ${empty ? 'opacity-50' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <p className="truncate font-extrabold" title={name}>{name}</p>
+          <p className="flex items-center gap-1.5 font-extrabold" title={name}><span className="truncate">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
           <span className="mt-0.5 inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label(muscle)}</span>
         </div>
         <div className="pt-1.5"><Trend dir={s.dir} /></div>
@@ -124,8 +135,8 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
   )
 }
 
-function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose }: {
-  name: string; kind: Kind; muscle: string; data: DaySummary[]; metric0: Metric; days0: number; unit: Unit; onClose: () => void
+function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, onInfo }: {
+  name: string; kind: Kind; muscle: string; data: DaySummary[]; metric0: Metric; days0: number; unit: Unit; onClose: () => void; onInfo?: () => void
 }) {
   const [metric, setMetric] = useState(metric0)
   const [days, setDays] = useState(days0)
@@ -135,7 +146,7 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose }:
       <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl space-y-3 rounded-3xl border border-line bg-surface p-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xl font-extrabold">{name}</p>
+            <p className="flex items-center gap-1.5 text-xl font-extrabold"><span className="min-w-0">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
             <span className="inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label(muscle)}</span>
           </div>
           <div className="pt-2"><Trend dir={s.dir} size={14} /></div>
@@ -290,6 +301,10 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
     return buildStats(recs)
   }, [rows, unit])
 
+  // Exercise records by name, so the ⓘ button can open the full info sheet.
+  const exOf = useMemo(() => new Map((rows ?? []).map((r) => [r.ex.name, r.ex] as [string, Exercise])), [rows])
+  const [info, setInfo] = useState<Exercise | null>(null)
+
   const muscleOf = useMemo(() => {
     const m = new Map<string, string>()
     snap?.records.forEach((r) => m.set(r.exercise, r.muscle))
@@ -304,7 +319,6 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
 
   const list = useMemo(() => {
     if (!snap) return []
-    const s = q.trim().toLowerCase()
     const has = (n: string) => inRange(snap.summaries.get(n)!, days).length > 0
     const last = (n: string) => { const d = snap.summaries.get(n)!; return d[d.length - 1]?.date.getTime() ?? 0 }
     const rank = (n: string, order: Dir[]) => order.indexOf(dirOf.get(n) ?? 'neutral')
@@ -317,10 +331,11 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
       sessions: (a, b) => snap.summaries.get(b)!.length - snap.summaries.get(a)!.length,
       muscle: (a, b) => (muscleOf.get(a) ?? '').localeCompare(muscleOf.get(b) ?? '') || a.localeCompare(b),
     }
-    return snap.names
-      .filter((n) => (muscle === 'All' || muscleOf.get(n) === muscle) && (!s || n.toLowerCase().includes(s)))
-      .sort((a, b) => (has(a) ? 0 : 1) - (has(b) ? 0 : 1) || cmp[sort](a, b))
-  }, [snap, q, muscle, sort, days, dirOf, muscleOf])
+    const names = snap.names.filter((n) => muscle === 'All' || muscleOf.get(n) === muscle)
+    // While searching, best match first (alternative names, muscles and typos count); otherwise the chosen sort.
+    if (q.trim()) return searchExercises(names.map((n) => ({ name: n, muscle: muscleOf.get(n), equipment: exOf.get(n)?.equipment })), q).map((h) => h.item.name)
+    return names.sort((a, b) => (has(a) ? 0 : 1) - (has(b) ? 0 : 1) || cmp[sort](a, b))
+  }, [snap, q, muscle, sort, days, dirOf, muscleOf, exOf])
 
   if (!snap) return embedded ? <Spinner /> : <Screen title="Stats"><Spinner /></Screen>
   if (!snap.records.length) return embedded ? <p className="py-6 text-center text-sm text-muted">No lifts to show yet.</p> : (
@@ -404,7 +419,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
         <div className="grid gap-3 pb-4 sm:grid-cols-2">
           {list.map((n) => (
             <ExerciseCard key={n} name={n} kind={snap.kinds.get(n)!} muscle={muscleOf.get(n) ?? ''} data={snap.summaries.get(n)!}
-              globalMetric={metric} globalDays={days} unit={unit} onOpen={() => setOpen(n)} />
+              globalMetric={metric} globalDays={days} unit={unit} onOpen={() => setOpen(n)} onInfo={exOf.get(n) ? () => setInfo(exOf.get(n)!) : undefined} />
           ))}
         </div>
       ) : <p className="py-8 text-center text-sm text-muted">No exercises found matching your filters.</p>}
@@ -412,8 +427,9 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
       {!embedded && <p className="pb-6 text-center text-xs text-faint">Stats inspired by LiftoffVisualizer & LiftX by JacobG122503.</p>}
       {openName && (
         <Fullscreen name={openName} kind={snap.kinds.get(openName)!} muscle={muscleOf.get(openName) ?? ''} data={snap.summaries.get(openName)!}
-          metric0={metric} days0={days} unit={unit} onClose={() => setOpen(null)} />
+          metric0={metric} days0={days} unit={unit} onClose={() => setOpen(null)} onInfo={exOf.get(openName) ? () => { setInfo(exOf.get(openName)!); setOpen(null) } : undefined} />
       )}
+      {info && <ExerciseInfo ex={info} userId={user.id} ownerName={self ? undefined : user.username} initialTab="about" onClose={() => setInfo(null)} />}
     </section>
   )
 }

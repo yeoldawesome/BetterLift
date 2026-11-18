@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useState, type React
 import { epley, fromDist, fromUnit, num } from './format'
 import type { SetType } from './setTypes'
 import { loadExercises, matchOfficial, nameKey } from './exercises'
+import { myAccent } from './theme'
 import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
 export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType }
@@ -153,7 +154,7 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
   batch.collection('workouts').create({
     id: a.id, user: uid, routine: a.routine, name: a.name.trim() || 'Workout', notes: a.notes, started_at: a.startedAt, visibility, bodyweight_kg: bodyweightKg,
     ended_at: new Date().toISOString(), duration_s: Math.round((Date.now() - new Date(a.startedAt).getTime()) / 1000),
-    volume_kg: rows.reduce((t, r) => t + (r.ex.kind === 'weight' ? r.kg * r.reps : 0), 0), pr_count: prs.size,
+    volume_kg: rows.reduce((t, r) => t + (r.ex.kind === 'weight' ? r.kg * r.reps : 0), 0), pr_count: prs.size, accent: myAccent(),
   })
   rows.forEach((r, i) => batch.collection('workout_sets').create({
     workout: a.id, user: uid, exercise: r.ex.id, performed_at: a.startedAt, position: r.pos, set_index: r.idx,

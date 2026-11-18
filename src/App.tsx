@@ -1,5 +1,5 @@
-import { Suspense, lazy, useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react'
+import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { ActiveBanner } from './components/ActiveBanner'
 import { RestBar } from './components/RestBar'
 import { useActive } from './lib/active'
@@ -15,8 +15,9 @@ import Profile from './screens/Profile'
 import ProfileEdit from './screens/ProfileEdit'
 import RoutineEditor from './screens/RoutineEditor'
 import Routines from './screens/Routines'
-import Activity from './screens/Activity'
+import MyReactions from './screens/MyReactions'
 import History from './screens/History'
+import Calendar from './screens/Calendar'
 import Recap from './screens/Recap'
 import Settings from './screens/Settings'
 import Themes from './screens/Themes'
@@ -38,6 +39,15 @@ export default function App() {
   const loc = useLocation()
   const { active } = useActive()
 
+  // Every page shares one scrolling <main>, so reset it per page: new pages open at the top, Back returns where you were.
+  const mainRef = useRef<HTMLElement>(null)
+  const scrolls = useRef(new Map<string, number>())
+  const navType = useNavigationType()
+  useLayoutEffect(() => {
+    const m = mainRef.current
+    if (m) m.scrollTop = navType === 'POP' ? scrolls.current.get(loc.key) ?? 0 : 0
+  }, [loc.key])
+
   // Account theme wins over the device copy once logged in.
   const themeKey = JSON.stringify(user?.theme ?? null)
   useEffect(() => { if (user?.theme) applyTheme(user.theme) }, [themeKey])
@@ -57,7 +67,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       {showBanner && <ActiveBanner />}
-      <main className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
+      <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
         <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<Navigate to="/feed" replace />} />
@@ -81,7 +91,8 @@ export default function App() {
           <Route path="/notifications" element={<Notifications />} />
           <Route path="/w/:id/edit" element={<WorkoutEdit />} />
           <Route path="/history" element={<History />} />
-          <Route path="/activity" element={<Activity />} />
+          <Route path="/calendar" element={<Calendar />} />
+          <Route path="/reactions" element={<MyReactions />} />
           {user.is_moderator && <Route path="/review" element={<Review />} />}
           <Route path="*" element={<Navigate to="/feed" replace />} />
         </Routes>

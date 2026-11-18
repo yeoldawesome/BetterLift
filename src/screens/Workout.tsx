@@ -9,7 +9,7 @@ import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggl
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
 import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
 import { prLine, useBest, clearBestCache } from '../lib/best'
-import { loadStreak, streakText, type Streak } from '../lib/streak'
+import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromUnit, num } from '../lib/format'
 import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
@@ -64,20 +64,52 @@ function StartWorkout() {
 }
 
 export function StreakCard({ s }: { s: Streak }) {
+  const [open, setOpen] = useState(false)
   const tone = s.atRisk ? 'border-amber-400/50 bg-amber-400/10' : s.days ? 'border-accent/40 bg-accent/10' : 'border-line bg-surface'
   return (
-    <div className={`flex items-center gap-3 rounded-2xl border p-3 ${tone}`}>
-      <span className={`text-3xl ${s.days ? '' : 'grayscale opacity-50'}`}>🔥</span>
-      <div className="min-w-0 flex-1">
-        <p className="num text-xl font-black leading-tight">{s.days ? `${s.days} day streak` : 'No streak yet'}</p>
-        <p className={`text-xs font-semibold ${s.atRisk ? 'text-amber-300' : 'text-muted'}`}>{streakText(s)}</p>
-      </div>
-      {/* Three pips = today + the two rest days you're allowed. */}
-      {s.days > 0 && (
-        <div className="flex gap-1" aria-label={`${s.restLeft} rest days left`}>
-          {[0, 1, 2].map((i) => <span key={i} className={`h-6 w-2 rounded-full ${i < s.restLeft + 1 ? (s.atRisk ? 'bg-amber-400' : 'bg-accent') : 'bg-line'}`} />)}
+    <div className={`rounded-2xl border ${tone}`}>
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-3 text-left">
+        <span className={`text-3xl ${s.days ? '' : 'grayscale opacity-50'}`}>🔥</span>
+        <div className="min-w-0 flex-1">
+          <p className="num text-xl font-black leading-tight">{s.days ? `${s.days} day streak` : 'No streak yet'}</p>
+          <p className={`text-xs font-semibold ${s.atRisk ? 'text-amber-300' : 'text-muted'}`}>{streakText(s)}</p>
         </div>
-      )}
+        {/* Three pips = today + the two rest days you're allowed. */}
+        {s.days > 0 && (
+          <div className="flex gap-1" aria-label={`${s.restLeft} rest days left`}>
+            {[0, 1, 2].map((i) => <span key={i} className={`h-6 w-2 rounded-full ${i < s.restLeft + 1 ? (s.atRisk ? 'bg-amber-400' : 'bg-accent') : 'bg-line'}`} />)}
+          </div>
+        )}
+        <DownIcon width={16} height={16} className={`shrink-0 text-muted transition-transform ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <StreakDetail s={s} />}
+    </div>
+  )
+}
+
+/** Live countdown to the moment the streak breaks, plus the facts behind it. */
+function StreakDetail({ s }: { s: Streak }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t) }, [])
+  if (!s.days || !s.deadline) {
+    return <p className="border-t border-line/60 px-3 py-3 text-sm text-muted">Log a workout to start a streak. After each workout you can take up to 2 rest days before you need to lift again.{s.best ? ` Your best so far is ${s.best} days.` : ''}</p>
+  }
+  const left = s.deadline.getTime() - now
+  const lastDay = new Date(s.deadline.getTime() - 1)
+  const day = (d: Date) => d.toLocaleDateString(undefined, { weekday: 'long', month: 'short', day: 'numeric' })
+  return (
+    <div className="space-y-3 border-t border-line/60 px-3 py-3">
+      <div className="text-center">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Time left to keep it</p>
+        <p className={`num text-3xl font-black ${s.atRisk ? 'text-amber-300' : 'text-accent'}`}>{fmtCountdown(left)}</p>
+        <p className="text-xs text-muted">Lift by the end of {day(lastDay)}</p>
+      </div>
+      <div className="grid grid-cols-3 gap-2 text-center">
+        <div><p className="num text-lg font-black">{s.workouts}</p><p className="text-[10px] font-semibold uppercase text-muted">Workouts</p></div>
+        <div><p className="num text-lg font-black">{s.restLeft}</p><p className="text-[10px] font-semibold uppercase text-muted">Rest days left</p></div>
+        <div><p className="num text-lg font-black">{s.best}</p><p className="text-[10px] font-semibold uppercase text-muted">Best streak</p></div>
+      </div>
+      {s.lastLift && <p className="text-center text-xs text-muted">Last workout {day(s.lastLift)}</p>}
     </div>
   )
 }

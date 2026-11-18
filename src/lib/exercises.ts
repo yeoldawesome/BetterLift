@@ -1,7 +1,7 @@
 import type { RecordModel } from 'pocketbase'
 import { me, pb, type Exercise, type Kind, type Override, type WSet } from './pb'
 
-export const MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'calves', 'core', 'full_body', 'cardio']
+export const MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'core', 'full_body', 'cardio']
 export const EQUIPMENT = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other']
 export const KINDS: [Kind, string][] = [['weight', 'Weight × reps'], ['bodyweight', 'Bodyweight reps'], ['assisted', 'Assisted'], ['duration', 'Timed'], ['cardio', 'Cardio']]
 export function defaultLogTip(kind: Kind, equipment = '') {
@@ -60,7 +60,69 @@ export const resetExercises = () => { cache = null }
 
 /** Order-insensitive name key so "Bench Press (Barbell)" matches "Barbell Bench Press". */
 export const nameKey = (s: string) =>
-  s.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim().split(' ').map((w) => w.replace(/s$/, '')).sort().join(' ')
+  s.toLowerCase()
+    // Spelling variants that mean the same thing ("One Arm" = "Single-Arm", "Pullups" = "Pull-Ups", "Kettle bell" = "Kettlebell").
+    .replace(/\b(one|1|single)[\s-]*arm(ed)?\b/g, 'single arm')
+    .replace(/\b(pull|chin|push|sit)[\s-]?ups?\b/g, '$1 up')
+    .replace(/\bkettle\s+bells?\b/g, 'kettlebell').replace(/\bdb\b/g, 'dumbbell').replace(/\bbb\b/g, 'barbell')
+    .replace(/[^a-z0-9]+/g, ' ').trim().split(' ').map((w) => w.replace(/s$/, '')).filter(Boolean).sort().join(' ')
+
+/** Other names people use for an official exercise, shown in grey under its name and matched by search and imports. */
+export const AKA: Record<string, string[]> = {
+  'Machine Chest Fly': ['Pec Deck', 'Butterfly', 'Pec Fly'],
+  'Machine Chest Press': ['Chest Press', 'Seated Chest Press'],
+  'Barbell Bench Press': ['Bench Press', 'Flat Bench'],
+  'Incline Barbell Bench Press': ['Incline Bench Press'],
+  'Decline Barbell Bench Press': ['Decline Bench Press'],
+  'Iso-Lateral Chest Press': ['Hammer Strength Chest Press', 'Iso-Lateral Bench Press'],
+  'Incline Machine Chest Press': ['Incline Chest Press'],
+  'Cable Fly': ['Cable Crossover'],
+  'Dip': ['Parallel Bar Dip', 'Chest Dip'],
+  'Push-Up': ['Pushup', 'Press-Up'],
+  'Barbell Squat': ['Back Squat', 'Squat'],
+  'Barbell Deadlift': ['Deadlift', 'Conventional Deadlift'],
+  'Romanian Deadlift': ['RDL'],
+  'Barbell Overhead Press': ['Overhead Press', 'OHP', 'Military Press'],
+  'Barbell Row': ['Bent-Over Row'],
+  'Iso-Lateral Row': ['Hammer Strength Row'],
+  'Smith Machine Row': ['Smith Machine Bent-Over Row'],
+  'Lat Pulldown': ['Pulldown'],
+  'Straight-Arm Pulldown': ['Straight-Arm Lat Pulldown'],
+  'Pull-Up': ['Pullup'],
+  'Chin-Up': ['Chinup'],
+  'Back Extension': ['Hyperextension'],
+  'Reverse Pec Deck': ['Machine Reverse Fly', 'Rear Delt Machine'],
+  'Seated Smith Machine Shoulder Press': ['Smith Machine Shoulder Press'],
+  'Dumbbell Curl': ['Bicep Curl'],
+  'Cable Curl': ['Cable Bicep Curl'],
+  'Barbell Curl': ['Strict Curl'],
+  'Skull Crusher': ['Lying Tricep Extension'],
+  'Overhead Tricep Extension': ['Cable Overhead Tricep Extension'],
+  'Dumbbell Overhead Tricep Extension': ['Tricep Extension', 'French Press'],
+  'Tricep Rope Pushdown': ['Rope Pushdown'],
+  'Machine Seated Dip': ['Dip Machine', 'Seated Dip'],
+  "Farmer's Carry": ["Farmer's Walk"],
+  'Leg Press': ['Sled Leg Press', '45° Leg Press'],
+  'Seated Leg Press': ['Horizontal Leg Press'],
+  'Leg Press Calf Raise': ['Calf Press', 'Machine Calf Press'],
+  'Bulgarian Split Squat': ['Rear-Foot-Elevated Split Squat'],
+  'Hip Thrust': ['Barbell Hip Thrust'],
+  'Hip Adduction': ['Adductor Machine', 'Inner Thigh Machine'],
+  'Hip Abduction': ['Abductor Machine', 'Outer Thigh Machine'],
+  'Machine Glute Kickback': ['Glute Kickback'],
+  'Glute-Ham Raise': ['GHR'],
+  'Machine Crunch': ['Ab Crunch Machine'],
+  "Captain's Chair Leg Raise": ['Vertical Knee Raise'],
+  'Hanging Knee Raise': ['Knee Raise'],
+  'Kettlebell Swing': ['KB Swing'],
+  'Stair Climber': ['Stair Machine', 'StairMaster'],
+  'Rowing Machine': ['Rower', 'Erg'],
+  'Cycling': ['Stationary Bike'],
+  'Walking': ['Walk'],
+  'Running': ['Run', 'Jog'],
+}
+/** Alternative names for an exercise (empty for customs or ones without any). */
+export const altNames = (name: string) => AKA[name] ?? []
 
 // Common names for the same movement as an official exercise (keys are nameKey() form).
 const ALIASES: Record<string, string> = Object.fromEntries(([
@@ -76,7 +138,39 @@ const ALIASES: Record<string, string> = Object.fromEntries(([
   ['Lat Pulldown', ['lat pull down', 'cable lat pulldown', 'wide grip lat pulldown']],
   ['Tricep Pushdown', ['triceps pushdown', 'cable tricep pushdown']],
   ['Hip Thrust', ['barbell hip thrust', 'hip thrusts']],
-] as [string, string[]][]).flatMap(([official, names]) => names.map((n) => [nameKey(n), official])))
+  // Machines and cables under the names gyms and other apps (Liftoff, Hevy, Strong) use.
+  ['Machine Chest Fly', ['pec deck', 'machine fly', 'pec fly', 'butterfly', 'chest fly machine', 'pec deck fly']],
+  ['Machine Chest Press', ['chest press', 'seated chest press', 'chest press machine', 'machine bench press']],
+  ['Incline Machine Chest Press', ['incline machine bench press', 'incline chest press', 'incline chest press machine', 'machine incline chest press']],
+  ['Iso-Lateral Chest Press', ['iso lateral bench press', 'hammer strength chest press', 'iso lateral flat chest press']],
+  ['Cable Fly', ['cable crossover', 'cable chest fly', 'standing cable fly']],
+  ['Reverse Pec Deck', ['machine reverse fly', 'reverse fly machine', 'rear delt machine', 'rear delt fly machine', 'machine rear delt fly']],
+  ['Dumbbell Reverse Fly', ['rear delt fly', 'bent over reverse fly', 'dumbbell rear delt fly', 'bent over dumbbell reverse fly']],
+  ['Cable Reverse Fly', ['cable rear delt fly']],
+  ['Smith Machine Row', ['smith machine bent over row']],
+  ['Seated Smith Machine Shoulder Press', ['smith machine shoulder press', 'smith machine overhead press']],
+  ['Machine Seated Dip', ['machine dip', 'dip machine', 'assisted dip machine', 'tricep dip machine']],
+  ['Dumbbell Overhead Tricep Extension', ['tricep extension', 'overhead dumbbell extension', 'dumbbell tricep extension', 'seated dumbbell tricep extension']],
+  ['Overhead Tricep Extension', ['cable overhead extension', 'rope overhead tricep extension']],
+  ['Tricep Rope Pushdown', ['rope pushdown', 'rope tricep pushdown', 'triceps rope pushdown']],
+  ['Single-Arm Dumbbell Preacher Curl', ['dumbbell preacher curl']],
+  ['Barbell Curl', ['strict curl', 'barbell strict curl', 'standing barbell curl']],
+  ['Cable Hammer Curl', ['rope hammer curl']],
+  ['Leg Press', ['sled leg press', '45 degree leg press', 'incline leg press']],
+  ['Seated Leg Press', ['horizontal leg press']],
+  ['Leg Press Calf Raise', ['machine calf press', 'calf press', 'sled press calf raise', 'calf press on leg press', 'leg press calf press']],
+  ['Standing Calf Raise', ['calf raise', 'machine standing calf raise']],
+  ['Machine Crunch', ['machine seated crunch', 'ab crunch machine', 'seated crunch machine']],
+  ['Captain\'s Chair Leg Raise', ['vertical knee raise', 'captains chair knee raise']],
+  ['Hip Adduction', ['adductor machine', 'inner thigh machine']],
+  ['Hip Abduction', ['abductor machine', 'outer thigh machine']],
+  ['Back Extension', ['hyperextension', '45 degree back extension']],
+  ['Hanging Knee Raise', ['knee raise']],
+  ['Hand Gripper', ['grip trainer', 'hand grip']],
+  ['Walking', ['walk', 'outdoor walk', 'incline walk']],
+  ['Running', ['run', 'outdoor run', 'jog', 'jogging']],
+  ['Cycling', ['bike', 'stationary bike', 'spin bike']],
+] as [string, string[]][]).concat(Object.entries(AKA)).flatMap(([official, names]) => names.map((n) => [nameKey(n), official])))
 
 const EQUIP_WORDS = ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell']
 const PREFERENCE = ['barbell', 'dumbbell', 'machine', 'cable', 'kettlebell', 'bodyweight', 'band', 'other']
@@ -185,12 +279,21 @@ export function guessKind(name: string): Kind {
 }
 
 export function guessMuscle(name: string): string {
+  // Most specific first: "reverse fly" is shoulders not chest, "close grip bench" is triceps, "calf press" is calves, etc.
   const rules: [RegExp, string][] = [
-    [/bench|chest|fly|pec|push.?up|dip/, 'chest'], [/curl(?!.*leg)|bicep|hammer/, 'biceps'], [/tricep|pushdown|skull|kickback(?!.*cable glute)/, 'triceps'],
-    [/squat|leg press|lunge|extension.*leg|leg extension|quad/, 'quads'], [/leg curl|hamstring|romanian|rdl|good morning/, 'hamstrings'],
-    [/hip thrust|glute|abduct/, 'glutes'], [/calf/, 'calves'], [/press|raise|delt|shoulder|face pull/, 'shoulders'],
-    [/row|pull|lat|deadlift|shrug|back/, 'back'], [/crunch|plank|ab |abs|core|twist|leg raise/, 'core'], [/wrist|forearm|grip|carry/, 'forearms'],
-    [/run|bike|cycl|treadmill|elliptical|stair|walk|swim|rowing machine/, 'cardio'],
+    [/run|jog|bike|cycl|treadmill|elliptical|stair|walk|swim|rowing machine|erg|hike|sprint|basketball|soccer|tennis|jump(ing)? (rope|jack)/, 'cardio'],
+    [/calf|calves/, 'calves'], [/wrist|forearm|grip|carry|reverse (ez.?bar |barbell |cable )?curl|dead hang/, 'forearms'],
+    [/reverse fly|rear delt|face pull|lateral raise|front raise|upright row|y.?raise/, 'shoulders'],
+    [/close.?grip (incline )?bench|jm press|tricep|pushdown|skull|kickback(?!.*glute)|\bdip/, 'triceps'],
+    [/adduct|inner thigh|copenhagen/, 'adductors'], [/leg curl|hamstring|romanian|rdl|stiff.?leg|good morning|nordic/, 'hamstrings'],
+    [/hip thrust|glute|abduct|bridge|pull.?through|kettlebell swing|kb swing/, 'glutes'],
+    [/squat|leg press|lunge|split|step.?up|leg extension|quad|sissy/, 'quads'],
+    [/curl|bicep/, 'biceps'],
+    [/crunch|plank|sit.?up|\babs?\b|core|twist|rotation|woodchop|pallof|leg raise|knee raise|hollow|dead bug|v.?up/, 'core'],
+    [/bench|chest|fly|pec|push.?up|incline press|decline press/, 'chest'],
+    [/shrug|row|pull|lat\b|pulldown|deadlift|back extension|hyperextension/, 'back'],
+    [/shoulder|overhead press|military|arnold|delt|\bpress\b/, 'shoulders'],
+    [/clean|snatch|jerk|thruster|burpee|swing|get.?up|sled/, 'full_body'],
   ]
   return rules.find(([re]) => has(name, re))?.[1] ?? 'full_body'
 }

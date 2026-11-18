@@ -56,6 +56,19 @@ onRecordCreateRequest((e) => {
   e.next()
 }, "comments", "reactions")
 
+// Custom reactions: only your own or a friend's can be used.
+onRecordCreateRequest((e) => {
+  const cid = e.record.getString("custom")
+  if (cid && !e.hasSuperuserAuth()) {
+    const lib = require(`${__hooks}/lib.js`)
+    const uid = e.auth ? e.auth.id : ""
+    let owner = ""
+    try { owner = e.app.findRecordById("custom_reactions", cid).getString("owner") } catch (_) { throw new BadRequestError("That reaction no longer exists.") }
+    if (owner !== uid && !lib.areFriends(e.app, uid, owner)) throw new ForbiddenError("You can only use your own or your friends' custom reactions.")
+  }
+  e.next()
+}, "reactions")
+
 // Submitting a custom exercise for review requires how-to instructions and logging notes.
 onRecordCreateRequest((e) => {
   if (e.record.getString("review_status") === "pending") {
@@ -176,10 +189,15 @@ onRecordAfterCreateSuccess((e) => {
   const lib = require(`${__hooks}/lib.js`)
   const EMOJI = { fire: "🔥", muscle: "💪", clap: "👏", rocket: "🚀", trophy: "🏆" }
   const by = e.record.getString("user"), wid = e.record.getString("workout")
+  // Built-ins show their emoji; custom reactions show their name in quotes.
+  let label = EMOJI[e.record.getString("emoji")] || ""
+  if (e.record.getString("emoji") === "custom") {
+    try { label = `“${e.app.findRecordById("custom_reactions", e.record.getString("custom")).getString("name")}”` } catch (_) {}
+  }
   try {
     const w = e.app.findRecordById("workouts", wid)
     lib.notify(e.app, { user: w.getString("user"), actor: by, type: "reaction", target: wid,
-      text: `${lib.uname(e.app, by)} reacted ${EMOJI[e.record.getString("emoji")] || ""} to “${w.getString("name")}”` })
+      text: `${lib.uname(e.app, by)} reacted ${label} to “${w.getString("name")}”` })
   } catch (_) {}
 }, "reactions")
 

@@ -1,7 +1,7 @@
 import type { Exercise } from './pb'
 
 /** Muscle groups drawn on the body graph. */
-export const MAP_MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'calves', 'core'] as const
+export const MAP_MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'core'] as const
 export type MapMuscle = (typeof MAP_MUSCLES)[number]
 export type Intensity = Partial<Record<MapMuscle, number>>
 

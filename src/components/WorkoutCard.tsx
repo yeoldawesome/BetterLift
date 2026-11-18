@@ -1,33 +1,49 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { fmtDur, fmtVol, timeAgo } from '../lib/format'
-import { me, pb, useUnit, type Emoji, type Reaction, type User, type Workout } from '../lib/pb'
+import { me, useUnit, type Reaction, type User, type Workout } from '../lib/pb'
+import { EMOJI, keyOf, toggleReaction } from '../lib/reactions'
+import { customsOf, Glyph, ReactionPicker } from './CustomReactions'
 import type { Intensity } from '../lib/muscles'
 import { BodyMap } from './BodyMap'
-import { CommentIcon, LockIcon } from './icons'
+import { CommentIcon, LockIcon, PlusIcon } from './icons'
 import { Avatar, Card } from './ui'
 
-export const EMOJI: [Emoji, string][] = [['fire', '🔥'], ['muscle', '💪'], ['clap', '👏'], ['rocket', '🚀'], ['trophy', '🏆']]
+export { EMOJI, toggleReaction } from '../lib/reactions'
 
-export async function toggleReaction(workoutId: string, emoji: Emoji, mine?: Reaction) {
-  if (mine) await pb.collection('reactions').delete(mine.id)
-  else await pb.collection('reactions').create({ workout: workoutId, user: me(), emoji })
+/** Distinct reactions on a post (built-in first in their usual order, then custom), with counts and whether you used each. */
+function tally(reactions: Reaction[]) {
+  const uid = me(), out = new Map<string, { k: string; n: number; mine?: Reaction }>()
+  for (const r of reactions) {
+    const k = keyOf(r), t = out.get(k) ?? { k, n: 0 }
+    t.n++; if (r.user === uid) t.mine = r
+    out.set(k, t)
+  }
+  return out
 }
 
+/** Reaction chips under a workout: every reaction it has received (plus the built-ins), and a button for more. */
 export function Reactions({ workoutId, reactions, onChange }: { workoutId: string; reactions: Reaction[]; onChange: () => void }) {
-  const uid = me()
+  const [picking, setPicking] = useState(false)
+  const counts = tally(reactions), customs = customsOf(reactions)
+  const keys = [...EMOJI.map(([k]) => k as string), ...[...counts.keys()].filter((k) => k.startsWith('c:'))]
+  const toggle = (k: string) => toggleReaction(workoutId, k, counts.get(k)?.mine).then(onChange).catch(() => {})
   return (
-    <div className="flex flex-wrap gap-1.5">
-      {EMOJI.map(([k, e]) => {
-        const all = reactions.filter((r) => r.emoji === k)
-        const mine = all.find((r) => r.user === uid)
+    <div className="relative flex flex-wrap gap-1.5">
+      {keys.map((k) => {
+        const t = counts.get(k)
         return (
-          <button key={k} onClick={(ev) => { ev.preventDefault(); toggleReaction(workoutId, k, mine).then(onChange).catch(() => {}) }}
-            className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-sm ${mine ? 'border-accent bg-accent/15' : 'border-line bg-surface-2'}`}>
-            <span>{e}</span>{all.length > 0 && <span className="num font-bold">{all.length}</span>}
+          <button key={k} onClick={(ev) => { ev.preventDefault(); toggle(k) }} title={customs.get(k)?.name}
+            className={`flex h-8 items-center gap-1 rounded-full border px-2.5 text-sm ${t?.mine ? 'border-accent bg-accent/15' : 'border-line bg-surface-2'}`}>
+            <Glyph k={k} custom={customs.get(k)} size={18} />{t && <span className="num font-bold">{t.n}</span>}
           </button>
         )
       })}
+      <button onClick={() => setPicking(true)} className="grid h-8 place-items-center rounded-full border border-dashed border-line px-2.5 text-muted" aria-label="More reactions"><PlusIcon width={16} height={16} /></button>
+      {picking && (
+        <ReactionPicker className="absolute left-0 top-10" mine={new Set([...counts.values()].filter((t) => t.mine).map((t) => t.k))}
+          onPick={(k) => { setPicking(false); toggle(k) }} onClose={() => setPicking(false)} />
+      )}
     </div>
   )
 }
@@ -39,12 +55,12 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
   const nav = useNavigate()
   const [picking, setPicking] = useState(false)
   const u = w.expand?.user as User | undefined
-  const uid = me()
-  // Distinct emoji received, most-used first, for the stacked cluster in the corner.
-  const used = EMOJI.map(([k, e]) => ({ k, e, n: reactions.filter((r) => r.emoji === k).length })).filter((x) => x.n).sort((a, b) => b.n - a.n)
-  const react = (k: Emoji) => {
+  // Distinct reactions received, most-used first, for the stacked cluster in the corner.
+  const counts = tally(reactions), customs = customsOf(reactions)
+  const used = [...counts.values()].sort((a, b) => b.n - a.n).slice(0, 5)
+  const react = (k: string) => {
     setPicking(false)
-    toggleReaction(w.id, k, reactions.find((r) => r.emoji === k && r.user === uid)).then(onChange).catch(() => {})
+    toggleReaction(w.id, k, counts.get(k)?.mine).then(onChange).catch(() => {})
   }
   return (
     <Card className="space-y-3 p-3">
@@ -65,11 +81,11 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
       </Link>
       {/* Body map panel: reactions gather bottom-left, react + comment buttons float on the right. */}
       <div className="relative rounded-2xl border border-line bg-surface-2/60">
-        <Link to={`/w/${w.id}`} className="flex justify-center py-4"><BodyMap sex={u?.sex} intensity={intensity} className="h-56" /></Link>
+        <Link to={`/w/${w.id}`} className="flex justify-center py-4"><BodyMap sex={u?.sex} intensity={intensity} accent={w.accent} className="h-56" /></Link>
         {used.length > 0 && (
           <button onClick={() => setPicking((v) => !v)} className="absolute bottom-3 left-3 flex items-center" aria-label={`${reactions.length} reactions`}>
             {used.map((x, i) => (
-              <span key={x.k} className={`grid size-9 place-items-center rounded-full border-2 border-surface bg-surface-2 text-lg ${i ? '-ml-3' : ''}`} style={{ zIndex: used.length - i }}>{x.e}</span>
+              <span key={x.k} className={`grid size-9 place-items-center overflow-hidden rounded-full border-2 border-surface bg-surface-2 ${i ? '-ml-3' : ''}`} style={{ zIndex: used.length - i }}><Glyph k={x.k} custom={customs.get(x.k)} size={x.k.startsWith('c:') ? 26 : 18} /></span>
             ))}
             <span className="num ml-1.5 text-sm font-bold text-muted">{reactions.length}</span>
           </button>
@@ -82,15 +98,8 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
           <button onClick={() => setPicking((v) => !v)} className="grid size-12 place-items-center rounded-full bg-sky-200 text-2xl shadow-lg" aria-label="React">🙂</button>
         </div>
         {picking && (
-          <>
-            <div className="fixed inset-0 z-40" onClick={() => setPicking(false)} />
-            <div className="absolute bottom-3 right-[4.5rem] z-50 flex gap-1 rounded-full border border-line bg-surface p-1.5 shadow-2xl">
-              {EMOJI.map(([k, e]) => {
-                const mine = reactions.some((r) => r.emoji === k && r.user === uid)
-                return <button key={k} onClick={() => react(k)} className={`grid size-10 place-items-center rounded-full text-xl ${mine ? 'bg-accent/25 ring-2 ring-accent' : 'active:bg-surface-2'}`}>{e}</button>
-              })}
-            </div>
-          </>
+          <ReactionPicker className="absolute bottom-[8.25rem] right-3" mine={new Set([...counts.values()].filter((t) => t.mine).map((t) => t.k))}
+            onPick={(k) => react(k)} onClose={() => setPicking(false)} />
         )}
       </div>
     </Card>

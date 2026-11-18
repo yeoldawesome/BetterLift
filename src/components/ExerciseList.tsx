@@ -5,6 +5,7 @@ import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
 import { errMsg, me, pb, type Exercise, type Kind } from '../lib/pb'
 import { ExerciseInfo } from './ExerciseInfo'
+import { searchExercises } from '../lib/search'
 import { Button, Card, Chips, ErrorText, Input, Select, Sheet, Spinner, Toggle } from './ui'
 import { InfoIcon, SearchIcon, TrashIcon } from './icons'
 
@@ -28,15 +29,23 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
   const dupes = useMemo(() => (all ? findDuplicates(all) : []), [all])
   const [q, setQ] = useState('')
   const [muscle, setMuscle] = useState('')
-  const [show, setShow] = useState<Show>('all')
-  const [sort, setSort] = useState<Sort>('name')
+  // Adding to a workout or routine opens on your most-performed lifts; browsing the library opens on All.
+  const [show, setShow] = useState<Show>(onPick ? 'most' : 'all')
+  const [sort, setSort] = useState<Sort>(onPick ? 'most' : 'name')
   const [picked, setPicked] = useState<Exercise[]>([])
   const [form, setForm] = useState<{ ex?: Exercise; review?: boolean } | null>(null)
   const [info, setInfo] = useState<Exercise | null>(null)
   const [err, setErr] = useState('')
 
   const reload = (force = false) => loadExercises(force).then(setAll).catch((e) => setErr(errMsg(e)))
-  useEffect(() => { reload(); loadUsage().then(setUsage).catch(() => {}).finally(() => setUsageLoaded(true)) }, [])
+  useEffect(() => {
+    reload()
+    loadUsage().then((u) => {
+      setUsage(u)
+      // Nothing logged yet (new account): "Most performed" would be empty, so show everything instead.
+      if (!u.size && onPick) { setShow('all'); setSort('name') }
+    }).catch(() => {}).finally(() => setUsageLoaded(true))
+  }, [])
 
   // Deep link (e.g. from a "wasn't approved" notification): open that exercise's form once the library loads.
   const [opened, setOpened] = useState(false)
@@ -49,18 +58,24 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
   // Choosing a "show" filter also switches to its natural sort; the sort menu can still override it.
   const pickShow = (v: Show) => { setShow(v); setSort(v === 'all' ? 'name' : v) }
 
-  const list = useMemo(() => {
-    const s = q.trim().toLowerCase()
+  // Alternative name that matched a search, per exercise id (shown as "aka …" under the result).
+  const [via, list] = useMemo(() => {
     const monthAgo = Date.now() - 30 * 86400000
-    let l = (all ?? []).filter((e) => (!muscle || e.muscle === muscle) && (!s || e.name.toLowerCase().includes(s)))
-    if (show === 'most') l = l.filter((e) => (usage.get(e.id)?.count ?? 0) > 0)
-    if (show === 'recent') l = l.filter((e) => (usage.get(e.id)?.last ?? 0) >= monthAgo)
     const count = (e: Exercise) => usage.get(e.id)?.count ?? 0
     const last = (e: Exercise) => usage.get(e.id)?.last ?? 0
-    return [...l].sort((a, b) =>
+    const base = (all ?? []).filter((e) => !muscle || e.muscle === muscle)
+    if (q.trim()) {
+      // Searching looks through every exercise (not just Most performed / Recent), best match first.
+      const hits = searchExercises(base, q)
+      return [new Map(hits.filter((h) => h.via).map((h) => [h.item.id, h.via!])), hits.map((h) => h.item)] as const
+    }
+    let l = base
+    if (show === 'most') l = l.filter((e) => count(e) > 0)
+    if (show === 'recent') l = l.filter((e) => last(e) >= monthAgo)
+    return [new Map<string, string>(), [...l].sort((a, b) =>
       sort === 'most' ? count(b) - count(a) || last(b) - last(a) || a.name.localeCompare(b.name)
         : sort === 'recent' ? last(b) - last(a) || a.name.localeCompare(b.name)
-          : a.name.localeCompare(b.name))
+          : a.name.localeCompare(b.name))] as const
   }, [all, q, muscle, show, sort, usage])
 
   const tap = (e: Exercise) => {
@@ -117,7 +132,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
         </button>
       )}
       <ErrorText>{err}</ErrorText>
-      {!all || (show !== 'all' && !usageLoaded) ? <Spinner /> : (
+      {!all || (show !== 'all' && !q.trim() && !usageLoaded) ? <Spinner /> : (
         <Card className="p-0">
           {list.map((e) => {
             const sel = picked.some((x) => x.id === e.id)
@@ -126,6 +141,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
               <div key={e.id} onClick={() => tap(e)} className={`flex items-center justify-between gap-2 border-b border-line py-3 pl-4 pr-2 last:border-0 active:bg-surface-2 ${sel ? 'bg-accent/10' : ''}`}>
                 <div className="min-w-0">
                   <p className={`truncate font-semibold ${sel ? 'text-accent' : ''}`}>{e.name}</p>
+                  {via.get(e.id) && <p className="truncate text-xs text-muted">aka {via.get(e.id)}</p>}
                   <p className="text-xs text-muted">{label(e.muscle)} · {label(e.equipment)}{fmtUse(e)}{status(e)}</p>
                 </div>
                 <div className="flex shrink-0 items-center gap-1" onClick={(ev) => ev.stopPropagation()}>

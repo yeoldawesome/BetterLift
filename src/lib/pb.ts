@@ -9,7 +9,7 @@ pb.autoCancellation(false)
 export type Unit = 'kg' | 'lb'
 export type Kind = 'weight' | 'bodyweight' | 'assisted' | 'duration' | 'cardio'
 export type Lift = 'squat' | 'bench' | 'deadlift' | 'ohp' | 'row'
-export type Emoji = 'fire' | 'muscle' | 'clap' | 'rocket' | 'trophy'
+export type Emoji = 'fire' | 'muscle' | 'clap' | 'rocket' | 'trophy' | 'custom'
 
 export type Visibility = 'public' | 'private'
 export interface User extends RecordModel {
@@ -39,6 +39,8 @@ export interface RoutineExercise extends RecordModel {
 export interface Workout extends RecordModel {
   user: string; routine: string; name: string; notes: string; started_at: string; ended_at: string
   duration_s: number; volume_kg: number; pr_count: number; source_id: string; visibility: '' | Visibility; bodyweight_kg: number
+  /** Lifter's accent color when they logged it; the workout's body graph keeps this color. */
+  accent: string
   expand?: { user?: User }
 }
 export interface WSet extends RecordModel {
@@ -49,7 +51,8 @@ export interface WSet extends RecordModel {
 }
 export interface Friendship extends RecordModel { requester: string; addressee: string; status: 'pending' | 'accepted'; expand?: { requester?: User; addressee?: User } }
 export interface Comment extends RecordModel { workout: string; user: string; body: string; parent: string; expand?: { user?: User } }
-export interface Reaction extends RecordModel { workout: string; user: string; emoji: Emoji }
+export interface CustomReaction extends RecordModel { owner: string; name: string; image: string }
+export interface Reaction extends RecordModel { workout: string; user: string; emoji: Emoji; custom: string; expand?: { custom?: CustomReaction } }
 export interface Override extends RecordModel { user: string; exercise: string; name: string; muscle: string; secondary: string[]; equipment: string; instructions: string; log_tip: string; rest_s: number; rest_after_s: number }
 export type FeedbackType = 'general' | 'exercise_request' | 'edit_request'
 export interface Feedback extends RecordModel {

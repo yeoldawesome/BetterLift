@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react'
 import type { Intensity, MapMuscle } from '../lib/muscles'
 
 type Sex = 'male' | 'female'
@@ -50,7 +51,7 @@ const FRONT: Part[] = [
   { m: 'quads', pts: [[47.2, 112.6], [46.4, 122], [47.4, 138], [49, 152], [50.8, 159.6], [53.2, 154], [54.2, 140], [53.6, 126], [51.2, 116.6]], mirror: true },
   { m: 'quads', pts: [[55.6, 140], [53.6, 149], [52.8, 158], [54.6, 164.8], [57.2, 161], [57.6, 150]], mirror: true },
   // adductors high on the inner thigh
-  { m: 'hamstrings', pts: [[54.6, 121.4], [54.6, 130], [55.4, 139.4], [57.6, 135.6], [58.2, 129], [57.2, 122.6]], mirror: true },
+  { m: 'adductors', pts: [[54.6, 121.4], [54.6, 130], [55.4, 139.4], [57.6, 135.6], [58.2, 129], [57.2, 122.6]], mirror: true },
   // knee cap (detail)
   { m: null, pts: [[46.4, 163.6], [45.6, 168], [48.6, 171.4], [52, 169.6], [52.4, 165.2], [49.2, 162.6]], mirror: true },
   { m: 'calves', pts: [[42.8, 171], [41, 180], [41.8, 190], [44.6, 199], [46.6, 194], [47.6, 183], [46.6, 173]], mirror: true },
@@ -151,10 +152,12 @@ function Figure({ sex, view, intensity }: { sex: Sex; view: View; intensity: Int
 }
 
 /** Front + back muscle map. Worked muscles take the theme accent, stronger = more work. */
-export function BodyMap({ sex, intensity, className = 'h-28', labels }: { sex?: string; intensity: Intensity; className?: string; labels?: boolean }) {
+export function BodyMap({ sex, intensity, className = 'h-28', labels, accent }: { sex?: string; intensity: Intensity; className?: string; labels?: boolean; accent?: string }) {
   const s: Sex = sex === 'female' ? 'female' : 'male'
+  // A workout's own accent (the lifter's color when they logged it) overrides the viewer's theme for this graph only.
+  const style = accent && /^#[0-9a-f]{6}$/i.test(accent) ? ({ '--color-accent': accent } as CSSProperties) : undefined
   return (
-    <div className={`flex shrink-0 items-start gap-1 ${className}`}>
+    <div className={`flex shrink-0 items-start gap-1 ${className}`} style={style}>
       {(['front', 'back'] as const).map((v) => (
         <div key={v} className="flex h-full flex-col items-center">
           <Figure sex={s} view={v} intensity={intensity} />
