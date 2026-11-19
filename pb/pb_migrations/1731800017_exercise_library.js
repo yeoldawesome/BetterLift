@@ -105,7 +105,7 @@ migrate((app) => {
     ["Stiff-Leg Deadlift", "hamstrings", "barbell", "weight", ["glutes", "back"], "Stand with the bar at your thighs and knees nearly straight.|Hinge forward, lowering the bar along your legs.|Return to standing by squeezing your glutes."],
     ["Dumbbell Romanian Deadlift", "hamstrings", "dumbbell", "weight", ["glutes", "back"], "Hold dumbbells in front of your thighs with soft knees.|Push your hips back and lower them down your legs.|Stand back up."],
     ["Glute-Ham Raise", "hamstrings", "bodyweight", "bodyweight", ["glutes", "calves"], "Lock your feet in the GHD with knees on the pad.|Lower your body forward under control.|Curl back up using your hamstrings."],
-    ["Hip Adduction", "adductors", "machine", "weight", ["glutes"], "Sit with the pads on the inside of your knees.|Squeeze your legs together.|Open slowly."],
+    ["Hip Adduction", "hamstrings", "machine", "weight", ["glutes"], "Sit with the pads on the inside of your knees.|Squeeze your legs together.|Open slowly."],
     ["Machine Glute Kickback", "glutes", "machine", "weight", ["hamstrings"], "Set up in the machine with one foot on the plate.|Kick back and up, squeezing your glute.|Return slowly, then switch legs."],
     ["Cable Pull-Through", "glutes", "cable", "weight", ["hamstrings"], "Face away from a low pulley holding a rope between your legs.|Hinge back, then drive your hips forward to stand tall.|Repeat without rounding your back."],
     ["Leg Press Calf Raise", "calves", "machine", "weight", [], "Sit in the leg press with the balls of your feet on the platform edge.|Push through your toes as far as you can.|Lower to a deep stretch."],
