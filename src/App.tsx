@@ -8,6 +8,7 @@ import TabBar from './components/TabBar'
 import { pb, useUser } from './lib/pb'
 import { applyTheme } from './lib/theme'
 import Auth from './screens/Auth'
+import ResetPassword from './screens/ResetPassword'
 import Exercises from './screens/Exercises'
 import Feed from './screens/Feed'
 import Friends from './screens/Friends'
@@ -63,6 +64,8 @@ export default function App() {
 
   // Hidden admin console: reachable only by typing #/admin, with its own superuser sign-in.
   if (loc.pathname.startsWith('/admin')) return <main className="h-full overflow-y-auto"><Suspense fallback={<Spinner />}><Admin /></Suspense></main>
+  // Reset links from email work whether or not you're signed in.
+  if (loc.pathname.startsWith('/reset-password/')) return <Routes><Route path="/reset-password/:token" element={<ResetPassword />} /></Routes>
   if (!user) return <Auth />
   // Running-workout banner everywhere except the Workout tab (which already shows the timer).
   const showBanner = !!active && loc.pathname !== '/workout'

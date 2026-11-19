@@ -3,7 +3,9 @@ import { Link } from 'react-router-dom'
 import { HeightInput } from '../components/HeightInput'
 import { GlobeIcon, LockIcon, TimerIcon, TrashIcon } from '../components/icons'
 import { RestPicker, restLabel } from '../components/RestPicker'
-import { Card, ConfirmSheet, ErrorText, Input, Screen, Segmented, Toggle } from '../components/ui'
+import { PasswordField } from '../components/PasswordField'
+import { checkPassword } from '../lib/password'
+import { BottomSheet, Button, Card, ConfirmSheet, ErrorText, Input, Screen, Segmented, Toggle } from '../components/ui'
 import { deleteAllHistory } from '../lib/history'
 import { bmi, fmtW, fromUnit, num } from '../lib/format'
 import { errMsg, nutritionNew, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
@@ -23,6 +25,8 @@ export default function Settings() {
   const [clearOpen, setClearOpen] = useState(false)
   const [progress, setProgress] = useState('')
   const [done, setDone] = useState('')
+  const [pwOpen, setPwOpen] = useState(false)
+  const [pwDone, setPwDone] = useState('')
   const save = (patch: Partial<User>) => pb.collection('users').update(user.id, patch).catch((e) => setErr(errMsg(e)))
   const vis = user.post_visibility || 'public'
   const unit = user.unit || 'lb'
@@ -89,6 +93,13 @@ export default function Settings() {
         ))}
       </Card>
       <p className="text-xs text-muted">Your last choice on the finish screen is remembered here too.</p>
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Account security</h2>
+      <button onClick={() => setPwOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">
+        <LockIcon width={22} height={22} className="text-accent" />
+        <span className="flex-1"><span className="block font-bold">Change password</span><span className="block text-sm text-muted">Signs you out on your other devices. You can log in with your email or @{user.username}.</span></span>
+      </button>
+      {pwDone && <p className="text-sm font-semibold text-accent">{pwDone}</p>}
+
       <h2 className="pt-6 text-sm font-bold uppercase tracking-wider text-danger">Danger zone</h2>
       <button onClick={() => { setDone(''); setClearOpen(true) }} className="flex w-full items-center gap-3 rounded-xl border border-danger/40 bg-danger/10 p-3 text-left">
         <TrashIcon width={22} height={22} className="text-danger" />
@@ -104,9 +115,47 @@ export default function Settings() {
           }}
           onClose={() => { setClearOpen(false); setProgress('') }} />
       )}
+      {pwOpen && <ChangePassword user={user} onClose={() => setPwOpen(false)} onDone={() => { setPwOpen(false); setPwDone('Password changed. Your other devices have been signed out.') }} />}
       {afterOpen && <RestPicker value={userRestAfter(user)} title="Rest after an exercise" onSave={(default_rest_after_s) => save({ default_rest_after_s })} onClose={() => setAfterOpen(false)}
         onUseDefault={() => save({ default_rest_after_s: 0 })} defaultValue={userRest(user)} />}
       {restOpen && <RestPicker value={userRest(user)} title="Default rest timer" onSave={(default_rest_s) => save({ default_rest_s: default_rest_s || 0 })} onClose={() => setRestOpen(false)} />}
     </Screen>
+  )
+}
+
+/** Change password: needs the current one. Changing it invalidates every session, so sign this device back in right after. */
+function ChangePassword({ user, onClose, onDone }: { user: User; onClose: () => void; onDone: () => void }) {
+  const [current, setCurrent] = useState('')
+  const [pw, setPw] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const s = checkPassword(pw, { username: user.username, email: user.email })
+  const save = async () => {
+    setErr('')
+    if (!s.ok) return setErr(s.problem)
+    if (pw !== confirm) return setErr("New passwords don't match.")
+    if (pw === current) return setErr('Pick a password different from your current one.')
+    setBusy(true)
+    try {
+      await pb.collection('users').update(user.id, { oldPassword: current, password: pw, passwordConfirm: confirm })
+      await pb.collection('users').authWithPassword(user.username, pw)
+      onDone()
+    } catch (e) {
+      const m = errMsg(e)
+      setErr(/old ?password/i.test(m) ? 'Your current password is wrong.' : m)
+      setBusy(false)
+    }
+  }
+  return (
+    <BottomSheet title="Change password" onClose={onClose}>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); save() }}>
+        <PasswordField value={current} onChange={setCurrent} placeholder="Current password" label="Current password" />
+        <PasswordField value={pw} onChange={setPw} placeholder="New password (10+ characters)" label="New password" autoComplete="new-password" meter ctx={{ username: user.username, email: user.email }} />
+        <PasswordField value={confirm} onChange={setConfirm} placeholder="Confirm new password" label="Confirm new password" autoComplete="new-password" />
+        <ErrorText>{err}</ErrorText>
+        <Button disabled={busy || !current || !s.ok || !confirm}>{busy ? 'Saving…' : 'Change password'}</Button>
+      </form>
+    </BottomSheet>
   )
 }

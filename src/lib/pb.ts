@@ -124,6 +124,7 @@ export function errMsg(e: unknown): string {
     if (field) return `${field[0].replace(/_/g, ' ')}: ${(field[1] as { message: string }).message}`
     return b.message || null
   }
+  if ((e as { status?: number }).status === 429) return 'Too many attempts. Wait a minute and try again.'
   const msg = fromBody(r.response) || r.message || 'Something went wrong'
   // PocketBase's reply when a collection doesn't exist yet: the server hasn't applied a newer migration.
   if (/missing (or invalid )?collection context/i.test(msg)) return 'The server needs an update for this feature. Restart PocketBase so it applies the new database changes, then try again.'

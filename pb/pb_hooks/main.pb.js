@@ -276,3 +276,25 @@ routerAdd("GET", "/api/betterlift/food-search", (e) => {
   }
   return e.json(502, { message: "Food search is unavailable right now. Try again in a minute." })
 }, $apis.requireAuth())
+
+// ---- Forgot password (email or username) ----
+// POST /api/betterlift/request-password-reset  { identity }  → 204 whether or not the account exists, so this can't
+// be used to find out who has an account. Rate-limited in settings (see migration 1731800028).
+routerAdd("POST", "/api/betterlift/request-password-reset", (e) => {
+  const body = e.requestInfo().body || {}
+  const identity = String(body.identity || "").trim().toLowerCase().slice(0, 200)
+  if (!identity) throw new BadRequestError("Enter your email or username.")
+  if (!e.app.settings().smtp.enabled) {
+    throw new ApiError(503, "Password reset emails aren't set up on this server yet. Ask the admin to turn on email (SMTP).")
+  }
+  let user = null
+  try {
+    user = identity.indexOf("@") >= 0
+      ? e.app.findAuthRecordByEmail("users", identity)
+      : e.app.findFirstRecordByFilter("users", "username = {:u}", { u: identity })
+  } catch (_) { /* no such account: answer the same way */ }
+  if (user) {
+    try { $mails.sendRecordPasswordReset(e.app, user) } catch (err) { console.log("password reset email failed:", err) }
+  }
+  return e.noContent(204)
+})
