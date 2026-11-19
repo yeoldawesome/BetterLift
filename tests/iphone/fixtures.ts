@@ -27,7 +27,8 @@ export const main = (p: Page) => p.locator('main')
 
 /** Tap a bottom tab like a thumb would. */
 export async function tab(p: Page, name: 'Feed' | 'Routines' | 'Workout' | 'Nutrition' | 'Stats' | 'Profile') {
-  await p.locator('nav').getByRole('link', { name, exact: true }).tap()
+  // The tab's name can start with an unread count ("1 Profile").
+  await p.locator('nav').getByRole('link', { name: new RegExp(`(^|\\s)${name}$`) }).tap()
 }
 
 /** Horizontal overflow anywhere = sideways wobble on iPhone. Returns offending elements (if any). */

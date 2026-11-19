@@ -95,7 +95,9 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
             <CommentIcon width={24} height={24} />
             {comments > 0 && <span className="num absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{comments > 99 ? '99+' : comments}</span>}
           </Link>
-          <button onClick={() => setPicking((v) => !v)} className="grid size-12 place-items-center rounded-full bg-accent text-2xl shadow-lg" aria-label="React">🙂</button>
+          <button onClick={() => setPicking((v) => !v)} className="relative size-12 rounded-full border-2 border-line bg-surface-2 shadow-lg active:scale-95" aria-label="React">
+            <span className="absolute -bottom-0.5 -right-0.5 grid size-6 place-items-center rounded-full border-2 border-canvas bg-accent text-accent-ink"><PlusIcon width={12} height={12} /></span>
+          </button>
         </div>
         {picking && (
           <ReactionPicker className="absolute bottom-[8.25rem] right-3" mine={new Set([...counts.values()].filter((t) => t.mine).map((t) => t.k))}

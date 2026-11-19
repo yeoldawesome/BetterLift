@@ -69,7 +69,12 @@ export default function RoutineEditor() {
   return (
     <Screen title="Edit routine" back>
       <Input label="Name" defaultValue={r.name} onBlur={(e) => e.target.value.trim() && saveRoutine({ name: e.target.value.trim() })} />
-      <Input label="Notes" defaultValue={r.notes} onBlur={(e) => saveRoutine({ notes: e.target.value })} />
+      <label className="block">
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Description</span>
+        <textarea defaultValue={r.notes} maxLength={1000} rows={3} onBlur={(e) => e.target.value !== r.notes && saveRoutine({ notes: e.target.value.trim() })}
+          placeholder="What's this routine for? e.g. Upper body, heavy day. Run it Mondays and Thursdays."
+          className="block w-full resize-y rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none placeholder:text-faint focus:border-accent" />
+      </label>
       <ErrorText>{err}</ErrorText>
       {items.map((it, i) => (
         <Card key={it.id} className="space-y-2 p-3">

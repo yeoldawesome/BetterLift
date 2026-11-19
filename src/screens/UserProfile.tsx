@@ -11,7 +11,7 @@ const PhysiqueView = lazy(() => import('./Physique').then((m) => ({ default: m.P
 const InsightsView = lazy(() => import('./Insights').then((m) => ({ default: m.InsightsView })))
 
 type Section = 'lifting' | 'physique' | 'insights'
-const SECTIONS: [Section, string][] = [['lifting', '🏋️ Lifting'], ['physique', '⚖️ Physique'], ['insights', '🔮 Insights']]
+const SECTIONS: [Section, string][] = [['lifting', 'Lifting'], ['physique', 'Physique'], ['insights', 'Insights']]
 /** What a friend chose to share: Lifting unless hidden; Physique and Insights only when opted in (Insights needs lifting data). */
 const sharedBy = (u: User): Record<Section, boolean> => ({ lifting: !u.hide_stats, physique: !!u.share_physique, insights: !!u.share_insights && !u.hide_stats })
 
@@ -97,7 +97,7 @@ export default function UserProfile() {
 function FriendStats({ user, section, setSection }: { user: User; section: Section | null; setSection: (s: Section) => void }) {
   const shared = sharedBy(user)
   const open = SECTIONS.filter(([s]) => shared[s])
-  const hidden = SECTIONS.filter(([s]) => !shared[s]).map(([, l]) => l.replace(/^\S+\s/, ''))
+  const hidden = SECTIONS.filter(([s]) => !shared[s]).map(([, l]) => l)
   const tab = open.find(([s]) => s === section)?.[0] ?? open[0]?.[0]
   return (
     <>

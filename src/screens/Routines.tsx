@@ -48,7 +48,7 @@ export default function Routines() {
         <Card key={r.id} className="space-y-3">
           <Link to={`/routines/${r.id}`} className="block">
             <p className="text-lg font-extrabold">{r.name}</p>
-            {r.notes && <p className="text-sm text-muted">{r.notes}</p>}
+            {r.notes && <p className="mt-0.5 line-clamp-3 whitespace-pre-line text-sm text-muted">{r.notes}</p>}
           </Link>
           <div className="flex items-center gap-2">
             <Button size="sm" onClick={() => launch(r)}>Start</Button>

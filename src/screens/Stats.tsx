@@ -22,7 +22,7 @@ const METRICS: [Metric, string][] = [['bestset', 'Best Set'], ['est1rm', 'Est. 1
 const SORTS: [string, string][] = [['recent', 'Most Recent'], ['trend_up', 'Trending Up'], ['trend_down', 'Trending Down'], ['alpha_asc', 'A → Z'], ['alpha_desc', 'Z → A'], ['sessions', 'Most Sessions'], ['muscle', 'Muscle Group']]
 type Dir = 'up' | 'down' | 'neutral'
 type StatsTab = 'lifting' | 'physique' | 'insights'
-const TABS: [StatsTab, string][] = [['lifting', '🏋️ Lifting'], ['physique', '⚖️ Physique'], ['insights', '🔮 Insights']]
+const TABS: [StatsTab, string][] = [['lifting', 'Lifting'], ['physique', 'Physique'], ['insights', 'Insights']]
 
 const n0 = (n: number) => Math.round(n).toLocaleString()
 const day = (d: Date | null) => (d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '')
