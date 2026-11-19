@@ -9,7 +9,7 @@ import { StreakCard } from './Workout'
 import { calendarLink } from './Calendar'
 import { resetExercises } from '../lib/exercises'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
-import { errMsg, friendIds, me, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
+import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
 
 type Tile = { to: string; label: string; icon: string; badge?: number; dot?: boolean }
 type WRow = Pick<Workout, 'id' | 'started_at' | 'duration_s' | 'volume_kg'>
@@ -61,7 +61,7 @@ export default function Profile() {
     { to: '/import', label: 'Import', icon: '📥' },
     { to: '/themes', label: 'Themes', icon: '🎨' },
     { to: '/feedback', label: 'Feedback', icon: '💬', dot: notes.has('feedback') },
-    { to: '/settings', label: 'Settings', icon: '⚙️' },
+    { to: '/settings', label: 'Settings', icon: '⚙️', dot: nutritionNew(user) },
     ...(user.is_moderator ? [{ to: '/review', label: 'Review', icon: '🏆', badge: toReview }] : []),
   ]
 
@@ -89,7 +89,7 @@ export default function Profile() {
               <BellIcon width={22} height={22} />
               {notes.count > 0 && <span className="num absolute -right-0.5 -top-0.5 grid h-5 min-w-5 place-items-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{notes.count > 9 ? '9+' : notes.count}</span>}
             </Link>
-            <Link to="/settings" className="grid size-10 place-items-center rounded-full bg-black/30" aria-label="Settings"><SettingsIcon width={22} height={22} /></Link>
+            <Link to="/settings" className="relative grid size-10 place-items-center rounded-full bg-black/30" aria-label="Settings"><SettingsIcon width={22} height={22} />{nutritionNew(user) && <span className="absolute right-0.5 top-0.5 size-2.5 rounded-full bg-danger ring-2 ring-canvas" />}</Link>
           </div>
         </div>
         <Link to="/profile/edit" className="absolute bottom-3 right-4 rounded-full bg-black/30 px-3 py-1 text-xs font-bold">Edit</Link>

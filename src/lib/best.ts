@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isCardio } from './energy'
 import { epley, fromUnit, toUnit } from './format'
 import { me, pb, type Exercise, type Unit, type WSet } from './pb'
 
@@ -57,6 +58,7 @@ export function prLine(ex: Exercise, best: Best | null, reps: number, unit: Unit
     return { text: `Do ${reps} reps at ${w} ${unit} to PR${alt ? `  ·  or ${alt} reps at ${altW}` : ''}`, hit: false }
   }
   if (ex.kind === 'bodyweight' || ex.kind === 'assisted') return liveReps > best.maxReps ? { text: 'New rep PR! 🏆', hit: true } : { text: `Do ${best.maxReps + 1} reps in one set to PR`, hit: false }
+  if (ex.kind === 'duration' && isCardio(ex)) return null // sports/conditioning: no "hold longer" PR
   if (ex.kind === 'duration') return liveSec > best.maxSec ? { text: 'New PR! 🏆', hit: true } : { text: `Hold for ${best.maxSec + 1}s to PR`, hit: false }
   return null
 }

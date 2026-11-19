@@ -5,18 +5,22 @@ import { CloseIcon, GlobeIcon, InfoIcon, LockIcon, TrashIcon, TrophyIcon } from 
 import { Reactions } from '../components/WorkoutCard'
 import { Avatar, Button, Card, ConfirmSheet, ErrorText, Input, Screen, Spinner, Stat } from '../components/ui'
 import { deleteWorkout } from '../lib/history'
-import { distLabel, fmtDate, fmtDist, fmtDur, fmtVol, fmtW, timeAgo } from '../lib/format'
+import { distLabel, fmtDate, fmtMin, fmtDist, fmtDur, fmtVol, fmtW, timeAgo } from '../lib/format'
 import { setLabels } from '../lib/setTypes'
-import { errMsg, me, pb, useUnit, type Comment, type Exercise, type Reaction, type WSet, type Workout } from '../lib/pb'
+import { errMsg, me, nutritionOn, pb, useUnit, useUser, type Comment, type Exercise, type Reaction, type WSet, type Workout } from '../lib/pb'
 import { intensityFromSets } from '../lib/muscles'
 import { useRealtime } from '../lib/useRealtime'
 import { useNotifications } from '../lib/notifications'
 import { BodyMap } from '../components/BodyMap'
+import { usePerson } from '../components/nutrition/CardioEffort'
+import { estimateCardio, isCardio } from '../lib/energy'
 
 export default function WorkoutDetail() {
   const { id } = useParams()
   const nav = useNavigate()
   const unit = useUnit()
+  const person = usePerson()
+  const viewer = useUser()
   const [w, setW] = useState<Workout | null>(null)
   const [sets, setSets] = useState<WSet[]>([])
   const [reactions, setReactions] = useState<Reaction[]>([])
@@ -70,10 +74,21 @@ export default function WorkoutDetail() {
     if (last && last.sets[0].position === s.position) last.sets.push(s)
     else groups.push({ name: s.expand?.exercise?.name ?? '?', ex: s.expand?.exercise, sets: [s] })
   }
+  // Cardio effort, plus estimated burn on your own workouts (it depends on your body stats).
+  const effortText = (s: WSet) => {
+    const ex = s.expand?.exercise
+    if (!isCardio(ex)) return ''
+    const bits = [s.rpe ? `RPE ${s.rpe}` : '', s.avg_hr ? `${s.avg_hr} bpm` : '']
+    if (mine && person && nutritionOn(viewer)) {
+      const e = estimateCardio({ name: ex!.name, kind: ex!.kind, seconds: s.seconds, distanceKm: s.distance_km, avgHr: s.avg_hr, rpe: s.rpe, kcal: s.kcal }, w.bodyweight_kg > 0 ? { ...person, kg: w.bodyweight_kg } : person)
+      if (e.kcal > 0) bits.push(`≈ ${e.kcal} kcal`)
+    }
+    return bits.filter(Boolean).map((b) => ` · ${b}`).join('')
+  }
   const setText_ = (s: WSet) => {
     const k = s.expand?.exercise?.kind
-    if (k === 'duration') return `${s.seconds}s`
-    if (k === 'cardio') return `${fmtDist(s.distance_km, unit)} ${distLabel(unit)} · ${Math.round(s.seconds / 60)} min`
+    if (k === 'duration') return `${isCardio(s.expand?.exercise) ? fmtMin(s.seconds) : `${s.seconds}s`}${effortText(s)}`
+    if (k === 'cardio') return `${fmtDist(s.distance_km, unit)} ${distLabel(unit)} · ${Math.round(s.seconds / 60)} min${effortText(s)}`
     if (k === 'bodyweight' && !s.weight_kg) return `${s.reps} reps`
     return `${fmtW(s.weight_kg, unit)} ${unit} × ${s.reps}`
   }

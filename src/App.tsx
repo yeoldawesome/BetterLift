@@ -21,6 +21,8 @@ import Calendar from './screens/Calendar'
 import Recap from './screens/Recap'
 import Settings from './screens/Settings'
 import Themes from './screens/Themes'
+import TabBarSettings from './screens/TabBarSettings'
+import { TAB_DEFS, userTabs } from './lib/tabs'
 import UserProfile from './screens/UserProfile'
 import Compare from './screens/Compare'
 import Workout from './screens/Workout'
@@ -33,6 +35,9 @@ const Admin = lazy(() => import('./screens/Admin'))
 const Feedback = lazy(() => import('./screens/Feedback'))
 const WorkoutEdit = lazy(() => import('./screens/WorkoutEdit'))
 const Notifications = lazy(() => import('./screens/Notifications'))
+const Nutrition = lazy(() => import('./screens/Nutrition'))
+const NutritionCalendar = lazy(() => import('./screens/NutritionCalendar'))
+const NutritionGoals = lazy(() => import('./screens/NutritionGoals'))
 
 export default function App() {
   const user = useUser()
@@ -62,6 +67,8 @@ export default function App() {
   // Running-workout banner everywhere except the Workout tab (which already shows the timer).
   const showBanner = !!active && loc.pathname !== '/workout'
 
+  // The app opens on the first tab of the user's bottom bar.
+  const home = TAB_DEFS[userTabs(user)[0]].to
   if (!user.bodyweight_kg || !user.height_cm) return <main className="h-full overflow-y-auto pb-10 pt-safe"><ProfileEdit onboarding /></main>
 
   return (
@@ -70,7 +77,7 @@ export default function App() {
       <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
         <Suspense fallback={<Spinner />}>
         <Routes>
-          <Route path="/" element={<Navigate to="/feed" replace />} />
+          <Route path="/" element={<Navigate to={home} replace />} />
           <Route path="/feed" element={<Feed />} />
           <Route path="/w/:id" element={<WorkoutDetail />} />
           <Route path="/workout" element={<Workout />} />
@@ -84,6 +91,7 @@ export default function App() {
           <Route path="/import" element={<Import />} />
           <Route path="/recap/:id" element={<Recap />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/settings/tab-bar" element={<TabBarSettings />} />
           <Route path="/themes" element={<Themes />} />
           <Route path="/u/:id" element={<UserProfile />} />
           <Route path="/compare/:id" element={<Compare />} />
@@ -93,8 +101,13 @@ export default function App() {
           <Route path="/history" element={<History />} />
           <Route path="/calendar" element={<Calendar />} />
           <Route path="/reactions" element={<MyReactions />} />
+          {user.nutrition_on && <>
+            <Route path="/nutrition" element={<Nutrition />} />
+            <Route path="/nutrition/calendar" element={<NutritionCalendar />} />
+            <Route path="/nutrition/goals" element={<NutritionGoals />} />
+          </>}
           {user.is_moderator && <Route path="/review" element={<Review />} />}
-          <Route path="*" element={<Navigate to="/feed" replace />} />
+          <Route path="*" element={<Navigate to={home} replace />} />
         </Routes>
         </Suspense>
       </main>

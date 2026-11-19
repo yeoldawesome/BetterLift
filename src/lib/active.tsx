@@ -5,7 +5,8 @@ import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
 import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
-export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType }
+/** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
+export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType; hr?: string; rpe?: number; kcal?: string }
 export type Prev = { w: number; r: number; sec: number; dist: number }
 /** rest = between sets, restAfter = after the last set (transition to the next exercise). */
 /** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
@@ -41,7 +42,7 @@ export function ActiveProvider({ children }: { children: ReactNode }) {
   const [active, setActive] = useState<Active | null>(() => {
     const a = load<Active>(KEY)
     // Drop fields from older saved sessions (e.g. RPE).
-    return a ? { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: x.sets.map(({ w, r, sec, dist, done, type }) => ({ w, r, sec, dist, done, type })) })) } : null
+    return a ? { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: x.sets.map(({ w, r, sec, dist, done, type, hr, rpe, kcal }) => ({ w, r, sec, dist, done, type, hr, rpe, kcal })) })) } : null
   })
   const [rest, setRest] = useState<Rest>(() => load(RKEY))
   useEffect(() => store(KEY, active), [active])
@@ -131,7 +132,8 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
       // Warm-ups and cool-downs never count toward PRs.
       const e1 = x.ex.kind === 'weight' && type !== 'warmup' && type !== 'cooldown' ? epley(kg, reps) : 0
       return { ex: x.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), e1, type,
-        note: idx === 0 ? (x.note ?? '').trim() : '', superset: x.superset ? groups.get(x.superset)! : 0 }
+        note: idx === 0 ? (x.note ?? '').trim() : '', superset: x.superset ? groups.get(x.superset)! : 0,
+        hr: Math.min(250, Math.round(num(s.hr ?? ''))), rpe: s.rpe ?? 0, kcal: Math.min(10000, Math.round(num(s.kcal ?? ''))) }
     }))
   if (!rows.length) throw new Error('Check off at least one set before finishing.')
 
@@ -159,7 +161,7 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
   rows.forEach((r, i) => batch.collection('workout_sets').create({
     workout: a.id, user: uid, exercise: r.ex.id, performed_at: a.startedAt, position: r.pos, set_index: r.idx,
     weight_kg: r.kg, reps: r.reps, seconds: r.sec, distance_km: r.dist, completed: true, e1rm_kg: r.e1, is_pr: prs.has(i),
-    set_type: r.type, note: r.note, superset: r.superset,
+    set_type: r.type, note: r.note, superset: r.superset, avg_hr: r.hr, rpe: r.rpe, kcal: r.kcal,
   }))
   await batch.send()
   return a.id

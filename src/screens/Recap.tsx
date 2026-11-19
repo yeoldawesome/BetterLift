@@ -3,7 +3,8 @@ import { Link, useParams } from 'react-router-dom'
 import { LockIcon, TrophyIcon } from '../components/icons'
 import { Button, Card, ErrorText, Spinner, Stat } from '../components/ui'
 import { prevFor } from '../lib/active'
-import { distLabel, epley, fmtDist, fmtDur, fmtVol, fmtW } from '../lib/format'
+import { distLabel, epley, fmtDist, fmtDur, fmtMin, fmtVol, fmtW } from '../lib/format'
+import { isCardio } from '../lib/energy'
 import { me, pb, useUnit, type Exercise, type Unit, type WSet, type Workout } from '../lib/pb'
 
 type Item = { ex: Exercise; sets: WSet[]; prev: WSet[]; priorBest: number }
@@ -17,7 +18,7 @@ function Delta({ v, fmt }: { v: number; fmt: (n: number) => string }) {
 }
 
 function setLine(s: WSet, ex: Exercise, unit: Unit) {
-  if (ex.kind === 'duration') return `${s.seconds}s`
+  if (ex.kind === 'duration') return isCardio(ex) ? fmtMin(s.seconds) : `${s.seconds}s`
   if (ex.kind === 'cardio') return `${fmtDist(s.distance_km, unit)}${distLabel(unit)}/${Math.round(s.seconds / 60)}m`
   if (ex.kind === 'bodyweight' && !s.weight_kg) return `${s.reps}`
   return `${fmtW(s.weight_kg, unit)}×${s.reps}`
@@ -86,7 +87,9 @@ export default function Recap() {
               {first ? <p className="text-accent">First time logging this — baseline set!</p> : k === 'weight' ? <>
                 <p><span className="text-muted">Best est. 1RM </span><span className="num">{fmtW(best1rm(it.sets), unit)} {unit}</span> · <Delta v={best1rm(it.sets) - best1rm(it.prev)} fmt={(n) => `${fmtW(n, unit)} ${unit}`} /></p>
                 <p><span className="text-muted">Volume </span><span className="num">{fmtVol(vol(it.sets), unit)} {unit}</span> · <Delta v={vol(it.sets) - vol(it.prev)} fmt={(n) => `${fmtVol(n, unit)} ${unit}`} /></p>
-              </> : k === 'duration' ? (
+              </> : k === 'duration' && isCardio(it.ex) ? (
+                <p><span className="text-muted">Time </span>{fmtMin(it.sets.reduce((t, s) => t + s.seconds, 0))} · <Delta v={(it.sets.reduce((t, s) => t + s.seconds, 0) - it.prev.reduce((t, s) => t + s.seconds, 0)) / 60} fmt={(n) => `${Math.round(n)} min`} /></p>
+              ) : k === 'duration' ? (
                 <p><span className="text-muted">Best hold </span>{Math.max(...it.sets.map((s) => s.seconds))}s · <Delta v={Math.max(...it.sets.map((s) => s.seconds)) - Math.max(0, ...it.prev.map((s) => s.seconds))} fmt={(n) => `${n}s`} /></p>
               ) : k === 'cardio' ? (
                 <p><span className="text-muted">Distance </span>{fmtDist(it.sets.reduce((t, s) => t + s.distance_km, 0), unit)} {distLabel(unit)} · <Delta v={it.sets.reduce((t, s) => t + s.distance_km, 0) - it.prev.reduce((t, s) => t + s.distance_km, 0)} fmt={(n) => `${fmtDist(n, unit)} ${distLabel(unit)}`} /></p>

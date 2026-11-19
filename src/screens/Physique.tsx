@@ -3,11 +3,22 @@ import { LineChart } from '../components/LineChart'
 import { Spinner } from '../components/ui'
 import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, type BodyKey, type BodyMetric } from '../lib/body'
 import { toUnit } from '../lib/format'
-import { errMsg, pb, useUnit, type User } from '../lib/pb'
+import { errMsg, me, pb, useUnit, type User } from '../lib/pb'
 import { trendLine } from '../lib/stats'
 
 const RANGES: [string, number][] = [['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
 const r1 = (n: number) => Math.round(n * 10) / 10
+
+/** Time-of-day filter: morning = before 10 AM, night = 10 AM and later (local time). Together they cover every reading. */
+type Tod = 'all' | 'morning' | 'night'
+const TODS: [Tod, string][] = [['all', 'All'], ['morning', 'Morning'], ['night', 'Night']]
+const TOD_KEY = 'bl.physique.tod'
+const inTod = (iso: string, tod: Tod) => {
+  if (tod === 'all') return true
+  const h = new Date(iso).getHours()
+  return tod === 'morning' ? h < 10 : h >= 10
+}
+const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
 
 /** Body composition from smart-scale imports: latest readings, change, and a chart per metric. */
 export function PhysiqueView({ user }: { user: User }) {
@@ -15,11 +26,14 @@ export function PhysiqueView({ user }: { user: User }) {
   const [rows, setRows] = useState<BodyMetric[] | null>(null)
   const [key, setKey] = useState<BodyKey>('weight_kg')
   const [days, setDays] = useState(90)
+  const [tod, setTodState] = useState<Tod>(() => { try { const v = localStorage.getItem(TOD_KEY); return v === 'morning' || v === 'night' ? v : 'all' } catch { return 'all' } })
+  const setTod = (t: Tod) => { setTodState(t); try { localStorage.setItem(TOD_KEY, t) } catch { /* private mode */ } }
   const [msg, setMsg] = useState('')
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
 
-  useEffect(() => { loadBody().then(setRows).catch(() => setRows([])) }, [])
+  const self = user.id === me() // a friend's physique is view-only
+  useEffect(() => { loadBody(user.id).then(setRows).catch(() => setRows([])) }, [user.id])
 
   const show = (k: BodyKey, v: number) => {
     const f = BODY_FIELDS.find((x) => x.k === k)!
@@ -54,20 +68,20 @@ export function PhysiqueView({ user }: { user: User }) {
 
   const chart = useMemo(() => {
     if (!rows) return null
-    const pts = rows.filter((r) => r[key] > 0 && (!days || new Date(r.measured_at).getTime() >= Date.now() - days * 86400000))
+    const pts = rows.filter((r) => r[key] > 0 && inTod(r.measured_at, tod) && (!days || new Date(r.measured_at).getTime() >= Date.now() - days * 86400000))
     const v = pts.map((r) => show(key, r[key]))
     return {
-      v, trend: v.length >= 2 ? trendLine(v) : undefined,
+      v, trend: v.length >= 2 ? trendLine(v) : undefined, times: pts.map((r) => timeOf(r.measured_at)),
       labels: pts.map((r) => new Date(r.measured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [rows, key, days, unit])
+  }, [rows, key, days, unit, tod])
 
   if (!rows) return <Spinner />
 
   /** Latest non-zero value and change vs. the newest reading at least 30 days older (labelled with its date). */
   const stat = (k: BodyKey) => {
-    const has = rows.filter((r) => r[k] > 0)
+    const has = rows.filter((r) => r[k] > 0 && inTod(r.measured_at, tod))
     const last = has[has.length - 1]
     if (!last) return null
     const cut = new Date(last.measured_at).getTime() - 30 * 86400000
@@ -81,14 +95,14 @@ export function PhysiqueView({ user }: { user: User }) {
     <div className="space-y-3 pb-6">
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[28px] font-extrabold leading-tight tracking-tight">Your Physique</h1>
+          <h1 className="text-[28px] font-extrabold leading-tight tracking-tight">{self ? 'Your' : `${user.name || user.username}'s`} Physique</h1>
           <p className="text-sm text-muted">
-            {latest ? `${rows.length} readings · last ${new Date(latest.measured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}` : 'Import your smart scale history'}
+            {latest ? `${rows.length} readings · last ${new Date(latest.measured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}, ${timeOf(latest.measured_at)}` : self ? 'Import your smart scale history' : 'No readings shared yet'}
           </p>
         </div>
-        <button onClick={() => file.current?.click()} disabled={busy} className="mt-1 shrink-0 rounded-xl bg-accent px-3 py-2 text-sm font-bold text-accent-ink disabled:opacity-50">
+        {self && <button onClick={() => file.current?.click()} disabled={busy} className="mt-1 shrink-0 rounded-xl bg-accent px-3 py-2 text-sm font-bold text-accent-ink disabled:opacity-50">
           {busy ? 'Importing…' : 'Import CSV'}
-        </button>
+        </button>}
         <input ref={file} type="file" accept=".csv,text/csv" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
       </header>
       {msg && <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm">{msg}</p>}
@@ -97,10 +111,19 @@ export function PhysiqueView({ user }: { user: User }) {
         <div className="rounded-2xl border border-line bg-surface p-6 text-center">
           <p className="text-4xl">⚖️</p>
           <p className="mt-2 font-bold">No body data yet</p>
-          <p className="mt-1 text-sm text-muted">In the RENPHO app go to Me → Export Data, then import the CSV here. Re-importing skips readings you already have.</p>
+          {self && <p className="mt-1 text-sm text-muted">In the RENPHO app go to Me → Export Data, then import the CSV here. Re-importing skips readings you already have.</p>}
         </div>
       ) : (
         <>
+          {/* Weigh-ins at different times of day differ by a few lb (food, water), so compare like with like. */}
+          <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface-2 p-1" role="group" aria-label="Time of day">
+            {TODS.map(([t, l]) => (
+              <button key={t} onClick={() => setTod(t)} aria-pressed={tod === t}
+                className={`h-8 rounded-lg text-xs font-bold transition ${tod === t ? 'bg-accent text-accent-ink' : 'text-muted'}`}>
+                {l} <span className="num font-semibold opacity-70">{rows.filter((r) => inTod(r.measured_at, t)).length}</span>
+              </button>
+            ))}
+          </div>
           <div className="rounded-2xl border border-line bg-surface p-3">
             <div className="mb-2 flex items-center justify-between gap-2">
               <p className="font-bold">{BODY_FIELDS.find((f) => f.k === key)!.label}</p>
@@ -112,8 +135,9 @@ export function PhysiqueView({ user }: { user: User }) {
               </div>
             </div>
             {chart && chart.v.length
-              ? <LineChart className="h-56" labels={chart.labels} values={chart.v} trend={chart.trend} extras={chart.v.map((v) => `${v} ${suffix(key)}`)} />
-              : <p className="py-10 text-center text-sm text-muted">No readings in this range.</p>}
+              ? <LineChart className="h-56" labels={chart.labels} values={chart.v} trend={chart.trend} extras={chart.v.map((v, i) => `${v} ${suffix(key)} · ${chart.times[i]}`)} />
+              : <p className="py-10 text-center text-sm text-muted">No {tod === 'all' ? '' : `${tod} `}readings in this range.</p>}
+            {tod !== 'all' && <p className="mt-1 text-center text-[11px] text-faint">{tod === 'morning' ? 'Morning: before 10 AM' : 'Night: 10 AM and later'}</p>}
           </div>
           <div className="grid grid-cols-3 gap-2">
             {fields.map((f) => {

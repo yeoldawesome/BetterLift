@@ -249,3 +249,30 @@ onRecordAfterUpdateSuccess((e) => {
   lib.notify(e.app, { user: e.record.getString("user"), type: "feedback_reply", target: e.record.id,
     text: `Your ${e.record.getString("type") === "general" ? "feedback" : "request"} ${label}${note ? `: ${note}` : ""}` })
 }, "feedback")
+
+// ---- Food search proxy (Nutrition tab) ----
+// GET /api/betterlift/food-search?q=…  → { products: [...] } in Open Food Facts product shape.
+// Browsers can't call OFF's newer search service directly (it sends no CORS header) and the older endpoint is often
+// overloaded (503), so the server asks both: newer first, older as a fallback. Only the search text is sent to OFF.
+routerAdd("GET", "/api/betterlift/food-search", (e) => {
+  const q = String(e.request.url.query().get("q") || "").trim().slice(0, 100)
+  if (q.length < 2) return e.json(200, { products: [] })
+  const fields = "code,product_name,product_name_en,generic_name,brands,serving_size,serving_quantity,nutriments,quantity"
+  const enc = encodeURIComponent(q)
+  const urls = [
+    "https://search.openfoodfacts.org/search?q=" + enc + "&page_size=24&fields=" + fields,
+    "https://world.openfoodfacts.org/cgi/search.pl?search_terms=" + enc + "&search_simple=1&action=process&json=1&page_size=24&fields=" + fields,
+  ]
+  for (const url of urls) {
+    try {
+      const res = $http.send({ url, method: "GET", headers: { "User-Agent": "BetterLift/1.0 (self-hosted fitness tracker)" }, timeout: 12 })
+      if (res.statusCode !== 200) continue
+      const d = res.json || JSON.parse(toString(res.body))
+      const products = (d && (d.hits || d.products)) || []
+      // The newer service returns brands as a list; keep the older comma-separated shape.
+      for (const p of products) if (Array.isArray(p.brands)) p.brands = p.brands.join(", ")
+      return e.json(200, { products })
+    } catch (_) { /* try the next source */ }
+  }
+  return e.json(502, { message: "Food search is unavailable right now. Try again in a minute." })
+}, $apis.requireAuth())

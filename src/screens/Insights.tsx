@@ -8,13 +8,15 @@ import {
   DAY, LEVELS, LIFT_NAMES, bodyFatBand, bodyStrength, describeR, dots, etaFor, ffmi, ffmiBand, fitAt, improvement, liftSeries,
   predict, standings, weeklyVolume, workoutsPerWeek, type BodyCorrKey, type Prediction,
 } from '../lib/insights'
-import { useUnit, type Unit, type User } from '../lib/pb'
+import { me, useUnit, type Unit, type User } from '../lib/pb'
 import { cachedStats, loadStatsRows, type StatRow } from '../lib/statsData'
 
 const n0 = (n: number) => Math.round(n).toLocaleString()
 const r1 = (n: number) => Math.round(n * 10) / 10
 const mon = (t: number) => new Date(t).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })
 const sign = (n: number) => (n > 0 ? '+' : '')
+
+const PERIODS: [number, string, string][] = [[30, '30D', 'the last 30 days'], [90, '90D', 'the last 90 days'], [180, '6M', 'the last 6 months'], [365, '1Y', 'the last year'], [0, 'All', 'all time']]
 
 function Card({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
   return (
@@ -64,7 +66,7 @@ function readGoals(uid: string): Record<string, number> {
   try { return JSON.parse(localStorage.getItem(goalKey(uid)) || '{}') } catch { return {} }
 }
 
-function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit; goalKg?: number; onGoal: (kg: number | null) => void }) {
+function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit; goalKg?: number; onGoal?: (kg: number | null) => void }) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const goal = goalKg ? r1(toUnit(goalKg, unit)) : 0
@@ -93,7 +95,7 @@ function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit;
     return { labels: ts.map(mon), series }
   }, [open, p, goal, unit])
 
-  const save = () => { const v = parseFloat(draft); if (v > 0) { onGoal(fromUnit(v, unit)); setDraft('') } }
+  const save = () => { const v = parseFloat(draft); if (v > 0) { onGoal?.(fromUnit(v, unit)); setDraft('') } }
   return (
     <div className="rounded-xl bg-surface-2">
       <button onClick={() => setOpen((o) => !o)} className="flex w-full items-start justify-between gap-2 p-3 text-left">
@@ -117,12 +119,12 @@ function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit;
       {open && chart && (
         <div className="space-y-2 border-t border-line px-3 pb-3 pt-2">
           <MultiChart className="h-48" labels={chart.labels} series={chart.series} legend />
-          <div className="flex items-center gap-2">
+          {onGoal && <div className="flex items-center gap-2">
             <input inputMode="decimal" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && save()}
               placeholder={`1RM goal (${unit})`} className="h-9 min-w-0 flex-1 rounded-lg border border-line bg-surface px-3 text-sm" />
             <button onClick={save} className="h-9 rounded-lg bg-accent px-3 text-sm font-bold text-accent-ink">Set goal</button>
-            {goal > 0 && <button onClick={() => onGoal(null)} className="h-9 rounded-lg bg-surface px-3 text-sm font-bold text-muted">Clear</button>}
-          </div>
+            {goal > 0 && <button onClick={() => onGoal?.(null)} className="h-9 rounded-lg bg-surface px-3 text-sm font-bold text-muted">Clear</button>}
+          </div>}
           <p className="text-[11px] text-faint">
             Straight-line trend of your last {p.fit.n} sessions ({p.confidence} confidence{p.confidence === 'low' ? ' — sessions are noisy' : ''}). Progress usually slows over time, so far-off dates are optimistic.
           </p>
@@ -135,15 +137,18 @@ function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit;
 /** Lifting insights for yourself: predictions, when you improved most, body ↔ strength, and how you compare. */
 export function InsightsView({ user }: { user: User }) {
   const unit = useUnit()
+  const self = user.id === me() // a friend's insights are read-only (1RM goals live on your own device)
   const [rows, setRows] = useState<StatRow[] | null>(() => cachedStats(user.id))
   const [body, setBody] = useState<BodyMetric[] | null>(null)
   const [goals, setGoals] = useState<Record<string, number>>(() => readGoals(user.id))
   const [showAll, setShowAll] = useState(false)
   const [metric, setMetric] = useState<BodyCorrKey>('weight_kg')
+  const [days, setDays] = useState(0)
+  const period = PERIODS.find(([d]) => d === days)![2]
 
   useEffect(() => {
     loadStatsRows(user.id).then(setRows).catch(() => setRows((r) => r ?? []))
-    loadBody().then(setBody).catch(() => setBody([]))
+    loadBody(user.id).then(setBody).catch(() => setBody([]))
   }, [user.id])
 
   const setGoal = (name: string, kg: number | null) => setGoals((g) => {
@@ -155,25 +160,30 @@ export function InsightsView({ user }: { user: User }) {
 
   const data = useMemo(() => {
     if (!rows || !body) return null
+    // Every section below looks only at the chosen period (0 = all time).
+    const from = days ? Date.now() - days * DAY : 0
     const series = liftSeries(rows, unit)
-    const preds = series.map((s) => predict(s, unit)).filter((p): p is Prediction => !!p)
+    const preds = series.map((s) => predict(s, unit, from)).filter((p): p is Prediction => !!p)
       .sort((a, b) => (goals[b.s.name] ? 1 : 0) - (goals[a.s.name] ? 1 : 0) || b.fit.n - a.fit.n)
-    const lastBody = body[body.length - 1]
+    // Newest scale reading in the period (falling back to the newest overall, then the profile).
+    const inPeriod = body.filter((b) => new Date(b.measured_at).getTime() >= from)
+    const lastBody = inPeriod[inPeriod.length - 1] ?? body[body.length - 1]
     const bwKg = lastBody?.weight_kg || user.bodyweight_kg
     const sex: 'male' | 'female' = user.sex === 'female' ? 'female' : 'male'
     return {
-      series, preds, sex, bwKg, lastBody,
-      imp: improvement(series),
-      bs: bodyStrength(series, body, unit),
-      stand: standings(series, toUnit(bwKg, unit), sex),
-      vol: weeklyVolume(rows),
-      freq: workoutsPerWeek(rows, 8),
+      series, preds, sex, bwKg, lastBody, from,
+      hasSets: series.some((s) => s.pts.some((p) => p.t >= from)),
+      imp: improvement(series, from),
+      bs: bodyStrength(series, body, unit, from),
+      stand: standings(series, toUnit(bwKg, unit), sex, from),
+      vol: weeklyVolume(rows, from),
+      freq: workoutsPerWeek(rows, from),
     }
-  }, [rows, body, unit, user.bodyweight_kg, user.sex, goals])
+  }, [rows, body, unit, user.bodyweight_kg, user.sex, goals, days])
 
   if (!data) return <Spinner />
   if (!data.series.length) return <p className="py-10 text-center text-sm text-muted">Log some weighted sets to unlock insights.</p>
-  const { preds, imp, bs, stand, vol, freq, sex, bwKg, lastBody } = data
+  const { preds, imp, bs, stand, vol, freq, sex, bwKg, lastBody, from, hasSets } = data
 
   return (
     <div className="space-y-3 pb-6">
@@ -182,11 +192,20 @@ export function InsightsView({ user }: { user: User }) {
         <p className="text-sm text-muted">What your training data says, and where it's heading</p>
       </header>
 
-      <Card title="🔮 PR predictions" sub="Based on your est. 1RM trend over the last few months. Tap a lift to see the projection and set a goal.">
+      <div className="sticky top-0 z-10 -mx-1 bg-canvas/90 px-1 py-1 backdrop-blur">
+        <div className="grid grid-cols-5 gap-1 rounded-xl bg-surface-2 p-1">
+          {PERIODS.map(([d, l]) => (
+            <button key={d} onClick={() => setDays(d)} className={`h-8 rounded-lg text-xs font-bold transition ${days === d ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
+          ))}
+        </div>
+      </div>
+      {!hasSets && <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">No weighted sets in {period}. Try a longer period.</p>}
+
+      <Card title="🔮 PR predictions" sub={`Based on your est. 1RM trend over ${days ? period : 'the last few months'}. Tap a lift to see the projection and set a goal.`}>
         {preds.length ? (
           <>
             {(showAll ? preds : preds.slice(0, 5)).map((p) => (
-              <PredictionRow key={p.s.name} p={p} unit={unit} goalKg={goals[p.s.name]} onGoal={(kg) => setGoal(p.s.name, kg)} />
+              <PredictionRow key={p.s.name} p={p} unit={unit} goalKg={self ? goals[p.s.name] : undefined} onGoal={self ? (kg) => setGoal(p.s.name, kg) : undefined} />
             ))}
             {preds.length > 5 && (
               <button onClick={() => setShowAll((s) => !s)} className="w-full rounded-xl bg-surface-2 py-2 text-sm font-bold text-muted">
@@ -194,20 +213,20 @@ export function InsightsView({ user }: { user: User }) {
               </button>
             )}
           </>
-        ) : <p className="text-sm text-muted">Predictions need at least 4 sessions of a weighted lift, with one in the last 2 months.</p>}
+        ) : <p className="text-sm text-muted">Predictions need at least 4 sessions of a weighted lift in {days ? period : 'the last year'}, with one in the last 2 months.</p>}
       </Card>
 
-      <ImprovementCard imp={imp} unit={unit} />
+      <ImprovementCard imp={imp} unit={unit} period={period} allTime={!days} />
 
-      <BodyCard bs={bs} unit={unit} metric={metric} setMetric={setMetric} stand={stand} bwKg={bwKg} sex={sex} />
+      <BodyCard bs={bs} unit={unit} metric={metric} setMetric={setMetric} stand={stand} bwKg={bwKg} sex={sex} hasBody={!!lastBody} period={period} />
 
       <Card title="📊 How you compare" sub={`Approximate standards for ${sex === 'female' ? 'women' : 'men'} at your bodyweight (${n0(toUnit(bwKg, unit))} ${unit})${user.sex ? '' : ' — set your sex in your profile for accurate standards'}.`}>
         {!bwKg ? <p className="text-sm text-muted">Add your bodyweight in your profile (or import scale data) to compare your lifts.</p>
-          : stand.length ? stand.map((s) => <StandingRow key={s.lift} s={s} unit={unit} />)
-            : <p className="text-sm text-muted">Log a squat, bench, deadlift, overhead press or barbell row to see where you stand.</p>}
+          : stand.length ? stand.map((s) => <StandingRow key={s.lift} s={s} unit={unit} from={from} />)
+            : <p className="text-sm text-muted">Log a squat, bench, deadlift, overhead press or barbell row{days ? ` in ${period}` : ''} to see where you stand.</p>}
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <Callout icon="📅" value={`${freq} / week`} text={`Workouts, last 8 weeks. Most lifters who progress well train 3–4×. ${freq < 2.5 ? 'More frequent sessions could speed things up.' : freq > 5.5 ? "That's a lot — make sure you recover." : "You're right in that range."}`} />
+          <Callout icon="📅" value={`${freq} / week`} text={`Workouts per week over ${period}. Most lifters who progress well train 3–4×. ${freq < 2.5 ? 'More frequent sessions could speed things up.' : freq > 5.5 ? "That's a lot — make sure you recover." : "You're right in that range."}`} />
           {lastBody?.body_fat_pct ? (() => { const b = bodyFatBand(lastBody.body_fat_pct, sex); return <Callout icon="🧬" value={`${r1(lastBody.body_fat_pct)}% · ${b.name}`} text={`Body fat. Typical ${sex === 'female' ? 'women: 25–31%' : 'men: 18–24%'}.`} /> })() : null}
           {(() => {
             const ffm = lastBody?.fat_free_kg || (lastBody?.body_fat_pct ? lastBody.weight_kg * (1 - lastBody.body_fat_pct / 100) : 0)
@@ -217,7 +236,7 @@ export function InsightsView({ user }: { user: User }) {
         </div>
 
         <div className="space-y-1.5">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Weekly sets per muscle (last 4 weeks)</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">Weekly sets per muscle ({days ? period.replace('the ', '') : 'all-time average'})</p>
           {vol.map((v) => {
             const pct = Math.min(100, (v.perWeek / 25) * 100)
             const tone = v.perWeek < 10 ? 'bg-faint' : v.perWeek > 20 ? 'bg-danger' : 'bg-accent'
@@ -241,8 +260,8 @@ export function InsightsView({ user }: { user: User }) {
   )
 }
 
-function ImprovementCard({ imp, unit }: { imp: ReturnType<typeof improvement>; unit: Unit }) {
-  const months = useMemo(() => imp.months.slice(-24), [imp])
+function ImprovementCard({ imp, unit, period, allTime }: { imp: ReturnType<typeof improvement>; unit: Unit; period: string; allTime: boolean }) {
+  const months = imp.months
   const hi = imp.bestMonth ? months.findIndex((m) => m.key === imp.bestMonth!.key) : -1
   const labels = useMemo(() => months.map((m) => m.label), [months])
   const series = useMemo<Series[]>(() => [{ label: 'Strength gained', data: months.map((m) => m.gainPct), bar: true, suffix: '%' }], [months])
@@ -254,18 +273,18 @@ function ImprovementCard({ imp, unit }: { imp: ReturnType<typeof improvement>; u
           <Callout icon="🏆" value={new Date(imp.bestMonth.t).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
             text={`Best month: ${imp.bestMonth.prs} PRs on ${imp.bestMonth.names.size} lift${imp.bestMonth.names.size === 1 ? '' : 's'}, +${imp.bestMonth.gainPct}% per lift on average`} />
         )}
-        {imp.bestStretch && (
+        {imp.bestStretch && months.length > 4 && (
           <Callout icon="🚀" value={`${imp.bestStretch.from.label} – ${imp.bestStretch.to.label}`} text={`Best 3-month run: +${imp.bestStretch.gainPct}% per lift`} />
         )}
         {imp.earlyPace !== null && imp.recentPace !== null && (
           <Callout icon="⏳" value={`${imp.earlyPace}% → ${imp.recentPace}% / mo`}
             text={imp.recentPace < imp.earlyPace * 0.5 ? 'First 6 months vs. now. Slowing down is normal as you get stronger.' : 'First 6 months vs. now. You are keeping your pace up!'} />
         )}
-        {imp.byMuscle[0] && <Callout icon="🎯" value={label(imp.byMuscle[0].muscle)} text={`Your fastest-progressing muscle group (+${imp.byMuscle[0].gainPct}% per lift, all time)`} />}
+        {imp.byMuscle[0]?.gainPct > 0 && <Callout icon="🎯" value={label(imp.byMuscle[0].muscle)} text={`Your fastest-progressing muscle group (+${imp.byMuscle[0].gainPct}% per lift, ${period})`} />}
       </div>
       {imp.recent.length > 0 && (
         <div className="space-y-1">
-          <p className="text-xs font-bold uppercase tracking-wider text-muted">Last 90 days vs. your best before</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-muted">{allTime ? 'First session vs. best ever' : `Best in ${period} vs. your best before`}</p>
           {[...imp.recent.slice(0, 3), ...imp.recent.slice(3).filter((r) => r.pct < 0).slice(-2)].map((r) => (
             <div key={r.name} className="flex items-center justify-between gap-2 text-sm">
               <span className="min-w-0 truncate">{r.name}</span>
@@ -286,9 +305,9 @@ function ImprovementCard({ imp, unit }: { imp: ReturnType<typeof improvement>; u
   )
 }
 
-function BodyCard({ bs, unit, metric, setMetric, stand, bwKg, sex }: {
+function BodyCard({ bs, unit, metric, setMetric, stand, bwKg, sex, hasBody, period }: {
   bs: ReturnType<typeof bodyStrength>; unit: Unit; metric: BodyCorrKey; setMetric: (k: BodyCorrKey) => void
-  stand: ReturnType<typeof standings>; bwKg: number; sex: 'male' | 'female'
+  stand: ReturnType<typeof standings>; bwKg: number; sex: 'male' | 'female'; hasBody: boolean; period: string
 }) {
   const corr = bs.corr.find((c) => c.k === metric) ?? bs.corr[0]
   const k = corr?.k
@@ -309,7 +328,9 @@ function BodyCard({ bs, unit, metric, setMetric, stand, bwKg, sex }: {
   return (
     <Card title="⚖️ Body & strength" sub="How your physique has moved alongside your lifts. Strength index = your lifts' recent est. 1RMs as a % of their all-time bests.">
       {!bs.corr.length ? (
-        <p className="text-sm text-muted">Import smart-scale data on the Physique tab (6+ weeks overlapping your training) to see how your body and strength relate.</p>
+        <p className="text-sm text-muted">{hasBody
+          ? `Need at least 6 weeks of scale readings alongside your lifts in ${period} — try a longer period.`
+          : 'Import smart-scale data on the Physique tab (6+ weeks overlapping your training) to see how your body and strength relate.'}</p>
       ) : (
         <>
           <div className="-mx-1 flex gap-1 overflow-x-auto px-1 [scrollbar-width:none]">
@@ -351,10 +372,10 @@ function BodyCard({ bs, unit, metric, setMetric, stand, bwKg, sex }: {
   )
 }
 
-function StandingRow({ s, unit }: { s: ReturnType<typeof standings>[number]; unit: Unit }) {
+function StandingRow({ s, unit, from }: { s: ReturnType<typeof standings>[number]; unit: Unit; from: number }) {
   const max = s.thresholds[4] * 1.15
   const pos = (v: number) => `${Math.min(100, (v / max) * 100)}%`
-  const p = useMemo(() => s.next ? predict(s.series, unit) : null, [s, unit])
+  const p = useMemo(() => s.next ? predict(s.series, unit, from) : null, [s, unit, from])
   const nextEta = p && s.next ? etaFor(p.fit, s.next) : null
   return (
     <div className="space-y-1.5 rounded-xl bg-surface-2 p-3">

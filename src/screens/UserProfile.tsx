@@ -7,6 +7,13 @@ import { errMsg, me, pb, useUnit, type Friendship, type User, type Workout } fro
 import { loadStreak, type Streak } from '../lib/streak'
 
 const StatsView = lazy(() => import('./Stats').then((m) => ({ default: m.StatsView })))
+const PhysiqueView = lazy(() => import('./Physique').then((m) => ({ default: m.PhysiqueView })))
+const InsightsView = lazy(() => import('./Insights').then((m) => ({ default: m.InsightsView })))
+
+type Section = 'lifting' | 'physique' | 'insights'
+const SECTIONS: [Section, string][] = [['lifting', '🏋️ Lifting'], ['physique', '⚖️ Physique'], ['insights', '🔮 Insights']]
+/** What a friend chose to share: Lifting unless hidden; Physique and Insights only when opted in (Insights needs lifting data). */
+const sharedBy = (u: User): Record<Section, boolean> => ({ lifting: !u.hide_stats, physique: !!u.share_physique, insights: !!u.share_insights && !u.hide_stats })
 
 /** Another lifter's profile. Friends see their streak, workouts and (unless they opted out) full lift stats. */
 export default function UserProfile() {
@@ -18,6 +25,7 @@ export default function UserProfile() {
   const [total, setTotal] = useState(0)
   const [streak, setStreak] = useState<Streak | null>(null)
   const [err, setErr] = useState('')
+  const [section, setSection] = useState<Section | null>(null)
 
   const load = async () => {
     const u = await pb.collection('users').getOne<User>(id!)
@@ -68,11 +76,7 @@ export default function UserProfile() {
             <Stat value={streak?.days ?? 0} label="Streak days" />
             <Stat value={streak?.best ?? 0} label="Best streak" />
           </Card>
-          {user.hide_stats ? (
-            <Card className="flex items-center gap-3 text-sm text-muted"><LockIcon width={20} height={20} className="shrink-0" />@{user.username} keeps their lift stats private.</Card>
-          ) : (
-            <Suspense fallback={<Spinner />}><StatsView user={user} embedded /></Suspense>
-          )}
+          <FriendStats user={user} section={section} setSection={setSection} />
           <h2 className="pt-2 text-lg font-extrabold">Recent workouts</h2>
           {workouts.map((w) => (
             <Link key={w.id} to={`/w/${w.id}`} className="block">
@@ -86,5 +90,32 @@ export default function UserProfile() {
         </>
       )}
     </Screen>
+  )
+}
+
+/** A friend's Stats tabs (Lifting / Physique / Insights): only the sections they share, the rest listed as private. */
+function FriendStats({ user, section, setSection }: { user: User; section: Section | null; setSection: (s: Section) => void }) {
+  const shared = sharedBy(user)
+  const open = SECTIONS.filter(([s]) => shared[s])
+  const hidden = SECTIONS.filter(([s]) => !shared[s]).map(([, l]) => l.replace(/^\S+\s/, ''))
+  const tab = open.find(([s]) => s === section)?.[0] ?? open[0]?.[0]
+  return (
+    <>
+      {open.length > 1 && (
+        <div className="grid gap-1 rounded-xl bg-surface-2 p-1" style={{ gridTemplateColumns: `repeat(${open.length}, minmax(0, 1fr))` }}>
+          {open.map(([s, l]) => (
+            <button key={s} onClick={() => setSection(s)} className={`h-9 rounded-lg text-sm font-bold ${tab === s ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
+          ))}
+        </div>
+      )}
+      {hidden.length > 0 && (
+        <Card className="flex items-center gap-3 py-3 text-sm text-muted"><LockIcon width={18} height={18} className="shrink-0" />
+          {open.length ? `@${user.username} keeps ${hidden.join(' and ')} private.` : `@${user.username} keeps their stats private.`}
+        </Card>
+      )}
+      <Suspense fallback={<Spinner />}>
+        {tab === 'lifting' ? <StatsView user={user} embedded /> : tab === 'physique' ? <PhysiqueView user={user} /> : tab === 'insights' ? <InsightsView user={user} /> : null}
+      </Suspense>
+    </>
   )
 }

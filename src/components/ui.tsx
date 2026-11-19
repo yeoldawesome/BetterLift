@@ -111,7 +111,7 @@ export function Sheet({ title, subtitle, back, onClose, children }: { title: str
     return () => { document.body.style.overflow = prev }
   }, [])
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col bg-canvas pt-safe">
+    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[60] flex flex-col bg-canvas pt-safe">
       <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 px-safe py-3">
         {back && <button onClick={onClose} className="-ml-1 grid size-9 shrink-0 place-items-center rounded-full bg-surface-2" aria-label="Back"><BackIcon width={20} height={20} /></button>}
         <div className="min-w-0 flex-1">
@@ -134,7 +134,7 @@ export function BottomSheet({ title, onClose, children }: { title: string; onClo
   }, [])
   return (
     <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60" onClick={onClose}>
-      <div className="mx-auto w-full max-w-lg rounded-t-3xl border-t border-line bg-canvas pb-safe" onClick={(e) => e.stopPropagation()}>
+      <div role="dialog" aria-modal="true" aria-label={title} className="mx-auto w-full max-w-lg rounded-t-3xl border-t border-line bg-canvas pb-safe" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line" />
         <div className="relative px-safe py-3 text-center">
           <h2 className="text-lg font-extrabold">{title}</h2>

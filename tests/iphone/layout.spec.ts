@@ -2,7 +2,8 @@ import { expect, horizontalOverflow, test } from './fixtures'
 
 // Every screen you can reach. HashRouter, so routes live after "#".
 const SCREENS = ['/feed', '/workout', '/routines', '/stats', '/profile', '/calendar', '/reactions', '/history',
-  '/notifications', '/friends', '/exercises', '/settings', '/themes', '/import', '/profile/edit', '/feedback']
+  '/notifications', '/friends', '/exercises', '/settings', '/themes', '/import', '/profile/edit', '/feedback',
+  '/nutrition', '/nutrition/goals', '/nutrition/calendar']
 
 test.describe('Every screen fits an iPhone', () => {
   for (const path of SCREENS) {

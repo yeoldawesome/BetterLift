@@ -74,11 +74,14 @@ export interface Prediction {
   nextPr: number; nextPrEta: number | 'now' | null; milestone: number; milestoneEta: number | 'now' | null; weeksSincePr: number
 }
 
-/** Trend fit on recent sessions (last 4 months, widened to a year if sparse). Only lifts trained in the last 2 months. */
-export function predict(s: LiftSeries, unit: Unit, now = Date.now()): Prediction | null {
+/**
+ * Trend fit for one lift. `from` = start of the chosen period (fit on sessions since then);
+ * 0 = automatic (last 4 months, widened to a year if sparse). Only lifts trained in the last 2 months.
+ */
+export function predict(s: LiftSeries, unit: Unit, from = 0, now = Date.now()): Prediction | null {
   if (now - s.lastAt > 60 * DAY) return null
-  let win = s.pts.filter((p) => p.t >= now - 120 * DAY)
-  if (win.length < 4) win = s.pts.filter((p) => p.t >= now - 365 * DAY)
+  let win = s.pts.filter((p) => p.t >= (from || now - 120 * DAY))
+  if (!from && win.length < 4) win = s.pts.filter((p) => p.t >= now - 365 * DAY)
   if (win.length < 4) return null
   const f = fit(win)
   if (!f) return null
@@ -109,7 +112,8 @@ export interface Improvement {
 const monthKey = (t: number) => { const d = new Date(t); return `${d.getFullYear()}-${d.getMonth()}` }
 const emptyMonth = (k: string, t: number): Month => ({ key: k, t, label: '', prs: 0, gainPct: 0, names: new Set(), trained: new Set() })
 
-export function improvement(series: LiftSeries[], now = Date.now()): Improvement {
+/** PRs are judged against all earlier history, but only months / gains inside the period (`from`, 0 = all time) are reported. */
+export function improvement(series: LiftSeries[], from = 0, now = Date.now()): Improvement {
   const months = new Map<string, Month>()
   const muscle = new Map<string, { gain: number; lifts: number }>()
   let first = Infinity
@@ -124,7 +128,8 @@ export function improvement(series: LiftSeries[], now = Date.now()): Improvement
       // First session sets the baseline; later beats of the running best are PRs. Each capped at 20% so a brand-new lift's ramp-up doesn't swamp everything.
       if (best > 0 && p.v > best * 1.001) {
         const g = Math.min(20, ((p.v - best) / best) * 100)
-        m.prs++; m.gainPct += g; m.names.add(s.name); total += g
+        m.prs++; m.gainPct += g; m.names.add(s.name)
+        if (p.t >= from) total += g
       }
       best = Math.max(best, p.v)
     }
@@ -141,7 +146,7 @@ export function improvement(series: LiftSeries[], now = Date.now()): Improvement
       const row = months.get(k) ?? emptyMonth(k, t)
       row.label = new Date(y, m, 1).toLocaleDateString(undefined, { month: 'short', year: '2-digit' })
       row.gainPct = row.trained.size ? r1(row.gainPct / row.trained.size) : 0
-      list.push(row)
+      if (t + 31 * DAY > from) list.push(row)
     }
   }
   const bestMonth = list.reduce<Month | null>((a, b) => (b.gainPct > (a?.gainPct ?? 0) ? b : a), null)
@@ -153,15 +158,16 @@ export function improvement(series: LiftSeries[], now = Date.now()): Improvement
   const avg = (ms: Month[]) => (ms.length ? r1(ms.reduce((t, m) => t + m.gainPct, 0) / ms.length) : null)
   // Compare beginner pace (first 6 months) with the current pace (last 3 full months) once there is enough history.
   const full = list.slice(0, -1)
-  const earlyPace = full.length >= 9 ? avg(full.slice(0, 6)) : null
-  const recentPace = full.length >= 9 ? avg(full.slice(-3)) : null
+  const earlyPace = !from && full.length >= 9 ? avg(full.slice(0, 6)) : null
+  const recentPace = !from && full.length >= 9 ? avg(full.slice(-3)) : null
 
-  const cut = now - 90 * DAY
+  // Best inside the period vs. best before it (all time: first session vs. best ever).
   const recent = series.flatMap((s) => {
-    const before = s.pts.filter((p) => p.t < cut), after = s.pts.filter((p) => p.t >= cut)
+    if (!from) return s.pts.length >= 3 ? [{ name: s.name, pct: r1(((s.best - s.pts[0].v) / s.pts[0].v) * 100), from: s.pts[0].v, to: s.best }] : []
+    const before = s.pts.filter((p) => p.t < from), after = s.pts.filter((p) => p.t >= from)
     if (!before.length || after.length < 2) return []
-    const from = Math.max(...before.map((p) => p.v)), to = Math.max(...after.map((p) => p.v))
-    return [{ name: s.name, pct: r1(((to - from) / from) * 100), from, to }]
+    const a = Math.max(...before.map((p) => p.v)), b = Math.max(...after.map((p) => p.v))
+    return [{ name: s.name, pct: r1(((b - a) / a) * 100), from: a, to: b }]
   }).sort((a, b) => b.pct - a.pct)
 
   const stalled = series
@@ -206,12 +212,12 @@ export function pearson(xs: number[], ys: number[]) {
  * Weekly strength index (each regular lift's latest e1RM as % of its all-time best, averaged; a lift counts for 6 weeks after it was last trained)
  * next to weekly averages of the body metrics, plus how strongly each metric moves with strength.
  */
-export function bodyStrength(series: LiftSeries[], body: BodyMetric[], unit: Unit) {
+export function bodyStrength(series: LiftSeries[], body: BodyMetric[], unit: Unit, from = 0) {
   const core = series.filter((s) => s.pts.length >= 5)
   const out: { weeks: Week[]; corr: Corr[] } = { weeks: [], corr: [] }
   if (!core.length || !body.length) return out
   const firstBody = new Date(body[0].measured_at).getTime()
-  const start = weekStart(Math.max(firstBody - 8 * 7 * DAY, Math.min(...core.map((s) => s.pts[0].t))))
+  const start = weekStart(Math.max(firstBody - 8 * 7 * DAY, Math.min(...core.map((s) => s.pts[0].t)), from))
   const end = weekStart(Date.now())
   const idx = core.map(() => 0)
   const bw = new Map<number, BodyMetric[]>()
@@ -272,13 +278,14 @@ export const LIFT_NAMES: Record<Lift, string> = { squat: 'Squat', bench: 'Bench 
 
 export interface Standing { lift: Lift; exercise: string; e1rm: number; ratio: number; level: number; percentile: number; thresholds: number[]; next: number | null; series: LiftSeries }
 
-export function standings(series: LiftSeries[], bw: number, sex: 'male' | 'female', now = Date.now()): Standing[] {
+/** Best est. 1RM per main lift within the period (`from`, 0 = all time) against bodyweight standards. */
+export function standings(series: LiftSeries[], bw: number, sex: 'male' | 'female', from = 0): Standing[] {
   if (bw <= 0) return []
   const out: Standing[] = []
   for (const lift of Object.keys(LIFT_NAMES) as Lift[]) {
-    // The strongest recent (12 months) effort among exercises tagged as this main lift.
+    // The strongest effort in the period among exercises tagged as this main lift.
     const cand = series.filter((s) => s.lift === lift).map((s) => {
-      const recent = s.pts.filter((p) => p.t >= now - 365 * DAY)
+      const recent = s.pts.filter((p) => p.t >= from)
       return { s, v: recent.length ? Math.max(...recent.map((p) => p.v)) : 0 }
     }).filter((c) => c.v > 0).sort((a, b) => b.v - a.v)[0]
     if (!cand) continue
@@ -294,16 +301,25 @@ export function standings(series: LiftSeries[], bw: number, sex: 'male' | 'femal
   return out
 }
 
-/** Average weekly sets per muscle over the last 4 weeks, against the commonly recommended 10–20 hard sets per week. */
-export function weeklyVolume(rows: StatRow[], now = Date.now()) {
-  const recent = rows.filter((r) => new Date(r.set.performed_at).getTime() >= now - 28 * DAY)
-  const c = muscleSetCounts(recent)
-  return MAP_MUSCLES.map((m: MapMuscle) => ({ muscle: m, perWeek: r1(c[m] / 4) }))
+/** Rows in the period and its length in weeks (all time: since the first logged set). */
+function periodRows(rows: StatRow[], from: number, now: number) {
+  const inRange = rows.filter((r) => new Date(r.set.performed_at).getTime() >= from)
+  // Don't count weeks before the first logged set (e.g. "1Y" with only 10 months of history).
+  const first = rows.length ? Math.min(...rows.map((r) => new Date(r.set.performed_at).getTime())) : now
+  const start = Math.max(from, first)
+  return { inRange, weeks: Math.max(1, (now - start) / (7 * DAY)) }
 }
 
-export function workoutsPerWeek(rows: StatRow[], weeks: number, now = Date.now()) {
-  const ids = new Set(rows.filter((r) => new Date(r.set.performed_at).getTime() >= now - weeks * 7 * DAY).map((r) => r.set.workout))
-  return r1(ids.size / weeks)
+/** Average weekly sets per muscle over the period, against the commonly recommended 10–20 hard sets per week. */
+export function weeklyVolume(rows: StatRow[], from = 0, now = Date.now()) {
+  const { inRange, weeks } = periodRows(rows, from, now)
+  const c = muscleSetCounts(inRange)
+  return MAP_MUSCLES.map((m: MapMuscle) => ({ muscle: m, perWeek: r1(c[m] / weeks) }))
+}
+
+export function workoutsPerWeek(rows: StatRow[], from = 0, now = Date.now()) {
+  const { inRange, weeks } = periodRows(rows, from, now)
+  return r1(new Set(inRange.map((r) => r.set.workout)).size / weeks)
 }
 
 /** Body-fat category (ACE chart). */

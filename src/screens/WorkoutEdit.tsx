@@ -9,8 +9,10 @@ import { errMsg, me, newId, pb, useUnit, type Exercise, type Visibility, type WS
 import { invalidateStats } from '../lib/statsData'
 import type { SetType } from '../lib/setTypes'
 import { ask } from '../components/Dialog'
+import { CardioEffort } from '../components/nutrition/CardioEffort'
+import { isCardio } from '../lib/energy'
 
-type ESet = { w: string; r: string; sec: string; dist: string; type?: SetType | '' }
+type ESet = { w: string; r: string; sec: string; dist: string; type?: SetType | ''; hr?: string; rpe?: number; kcal?: string }
 /** note/superset are carried through untouched so editing doesn't wipe them. */
 type Block = { key: string; ex: Exercise; sets: ESet[]; note?: string; superset?: number }
 
@@ -42,7 +44,8 @@ export default function WorkoutEdit() {
       const bs: Block[] = []
       for (const s of sets) {
         const last = bs[bs.length - 1]
-        const row: ESet = { w: s.weight_kg ? fmtW(s.weight_kg, unit) : '', r: s.reps ? `${s.reps}` : '', sec: s.seconds ? `${s.seconds}` : '', dist: s.distance_km ? fmtDist(s.distance_km, unit) : '', type: s.set_type }
+        const row: ESet = { w: s.weight_kg ? fmtW(s.weight_kg, unit) : '', r: s.reps ? `${s.reps}` : '', sec: s.seconds ? (isCardio(s.expand?.exercise) ? `${Math.round((s.seconds / 60) * 10) / 10}` : `${s.seconds}`) : '', dist: s.distance_km ? fmtDist(s.distance_km, unit) : '', type: s.set_type,
+          hr: s.avg_hr ? `${s.avg_hr}` : undefined, rpe: s.rpe || undefined, kcal: s.kcal ? `${s.kcal}` : undefined }
         if (last && last.key === `p${s.position}`) last.sets.push(row)
         else if (s.expand?.exercise) bs.push({ key: `p${s.position}`, ex: s.expand.exercise, sets: [row], note: s.note, superset: s.superset })
       }
@@ -62,7 +65,8 @@ export default function WorkoutEdit() {
       const rows = blocks.flatMap((b, pos) => b.sets.map((s, idx) => {
         const kg = fromUnit(num(s.w), unit), reps = Math.round(num(s.r))
         const type = s.type || 'normal'
-        return { ex: b.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec)), dist: fromDist(num(s.dist), unit), type, superset: b.superset ?? 0, note: b.note ?? '',
+        return { ex: b.ex, pos, idx, kg, reps, sec: Math.round(num(s.sec) * (isCardio(b.ex) ? 60 : 1)), dist: fromDist(num(s.dist), unit), type, superset: b.superset ?? 0, note: b.note ?? '',
+          hr: Math.min(250, Math.round(num(s.hr ?? ''))), rpe: s.rpe ?? 0, kcal: Math.min(10000, Math.round(num(s.kcal ?? ''))),
           e1: b.ex.kind === 'weight' && type !== 'warmup' && type !== 'cooldown' ? epley(kg, reps) : 0 }
       })).filter((r) => r.kg || r.reps || r.sec || r.dist)
       // Note lives on the first saved row of each exercise.
@@ -97,7 +101,7 @@ export default function WorkoutEdit() {
       rows.forEach((r, i) => b.collection('workout_sets').create({
         workout: id, user: me(), exercise: r.ex.id, performed_at: iso, position: r.pos, set_index: r.idx,
         weight_kg: r.kg, reps: r.reps, seconds: r.sec, distance_km: r.dist, completed: true, e1rm_kg: r.e1, is_pr: prs.has(i),
-        set_type: r.type, note: r.note, superset: r.superset,
+        set_type: r.type, note: r.note, superset: r.superset, avg_hr: r.hr, rpe: r.rpe, kcal: r.kcal,
       }))
       await b.send()
       invalidateStats(); clearBestCache()
@@ -125,7 +129,8 @@ export default function WorkoutEdit() {
 
       {blocks.map((b) => {
         const k = b.ex.kind
-        const cols: [keyof ESet, string][] = k === 'duration' ? [['sec', 'Sec']] : k === 'cardio' ? [['dist', distLabel(unit)], ['sec', 'Sec']] : [['w', unit], ['r', 'Reps']]
+        const min = isCardio(b.ex) // cardio time is shown and typed in minutes (stored as seconds)
+        const cols: [keyof ESet, string][] = k === 'duration' ? [['sec', min ? 'Min' : 'Sec']] : k === 'cardio' ? [['dist', distLabel(unit)], ['sec', 'Min']] : [['w', unit], ['r', 'Reps']]
         return (
           <Card key={b.key} className="p-3">
             <div className="mb-2 flex items-center justify-between px-1">
@@ -139,11 +144,17 @@ export default function WorkoutEdit() {
               {b.sets.map((s, i) => [
                 <span key={`n${i}`} className="num self-center font-bold text-muted">{i + 1}</span>,
                 ...cols.map(([f]) => (
-                  <input key={`${f}${i}`} inputMode={f === 'r' || f === 'sec' ? 'numeric' : 'decimal'} value={s[f]} placeholder="0"
-                    onChange={(e) => setSet(b.key, i, { [f]: f === 'r' || f === 'sec' ? e.target.value.replace(/\D/g, '') : e.target.value })}
+                  <input key={`${f}${i}`} inputMode={f === 'r' || (f === 'sec' && !min) ? 'numeric' : 'decimal'} value={s[f]} placeholder="0"
+                    onChange={(e) => setSet(b.key, i, { [f]: f === 'r' || (f === 'sec' && !min) ? e.target.value.replace(/\D/g, '') : e.target.value })}
                     className="num h-10 w-full min-w-0 rounded-lg bg-surface-2 text-center font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent" />
                 )),
                 <button key={`d${i}`} onClick={() => setBlock(b.key, (x) => ({ ...x, sets: x.sets.filter((_, j) => j !== i) }))} className="grid h-10 place-items-center text-faint" aria-label="Delete set"><TrashIcon width={16} height={16} /></button>,
+                ...(isCardio(b.ex) ? [
+                  <div key={`e${i}`} style={{ gridColumn: '1 / -1' }}>
+                    <CardioEffort name={b.ex.name} kind={b.ex.kind} seconds={num(s.sec) * 60} distanceKm={fromDist(num(s.dist), unit)}
+                      effort={{ hr: s.hr, rpe: s.rpe, kcal: s.kcal }} onChange={(e) => setSet(b.key, i, { hr: e.hr, rpe: e.rpe, kcal: e.kcal })} />
+                  </div>,
+                ] : []),
               ])}
             </div>
             <button onClick={() => setBlock(b.key, (x) => ({ ...x, sets: [...x.sets, { ...blankSet(), w: x.sets[x.sets.length - 1]?.w ?? '' }] }))} className="mt-2 h-9 w-full rounded-lg bg-surface-2 text-sm font-bold">+ Add set</button>

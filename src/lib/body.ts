@@ -67,8 +67,9 @@ export function parseBodyCsv(text: string): Omit<BodyMetric, 'id'>[] {
   return out
 }
 
-export const loadBody = () =>
-  pb.collection('body_metrics').getFullList<BodyMetric>({ filter: pb.filter('user = {:u}', { u: me() }), sort: 'measured_at' })
+/** Body readings for a user (yourself by default). A friend's come back empty unless they share Physique. */
+export const loadBody = (userId = me()) =>
+  pb.collection('body_metrics').getFullList<BodyMetric>({ filter: pb.filter('user = {:u}', { u: userId }), sort: 'measured_at' })
 
 /** Inserts readings not already stored (matched to the minute). Returns how many were added. */
 export async function importBody(rows: Omit<BodyMetric, 'id'>[], have: BodyMetric[]): Promise<number> {

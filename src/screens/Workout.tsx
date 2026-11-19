@@ -11,7 +11,10 @@ import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAs
 import { prLine, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
-import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromUnit, num } from '../lib/format'
+import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, num } from '../lib/format'
+import { CardioEffort } from '../components/nutrition/CardioEffort'
+import { SwipeRow } from '../components/SwipeRow'
+import { isCardio } from '../lib/energy'
 import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
 import { ask, tell } from '../components/Dialog'
 
@@ -208,6 +211,8 @@ function ActiveWorkout() {
       </div>
       <div className="mt-4 space-y-3">
         <Button variant="ghost" onClick={() => setPicking(true)}><PlusIcon width={18} height={18} className="mr-1 inline" />Add exercises</Button>
+        {/* Same as the Finish button up top, for when you've scrolled to the end. */}
+        {a.exercises.length > 0 && <Button onClick={() => setFinishing(true)}>Finish workout</Button>}
         <Button variant="danger" onClick={async () => { if (await ask({ title: 'Discard this workout?', body: 'Everything you logged in it will be lost.', confirmLabel: 'Discard', danger: true })) discard() }}>Discard workout</Button>
       </div>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
@@ -358,7 +363,7 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
 
 function prevText(p: Prev | undefined, x: AEx, unit: 'kg' | 'lb') {
   if (!p) return '—'
-  if (x.ex.kind === 'duration') return `${p.sec}s`
+  if (x.ex.kind === 'duration') return isCardio(x.ex) ? `${Math.round(p.sec / 60)}m` : `${p.sec}s`
   if (x.ex.kind === 'cardio') return `${fmtDist(p.dist, unit)}${distLabel(unit)} ${Math.round(p.sec / 60)}m`
   if (x.ex.kind === 'bodyweight' && !p.w) return `${p.r} reps`
   return `${fmtW(p.w, unit)}×${p.r}`
@@ -384,6 +389,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
     ['Remove Exercise', async () => { if (await ask({ title: `Remove ${x.ex.name}?`, body: 'Its sets in this workout are removed too.', confirmLabel: 'Remove', danger: true })) onRemove() }, true],
   ]
   const k = x.ex.kind
+  const cardio = isCardio(x.ex)
   // "To PR" line: compare this session's checked-off sets against the all-time best.
   const best = useBest(x.ex.id)
   const done = x.sets.filter((s) => s.done)
@@ -393,7 +399,8 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const prReps = parseInt(x.target) || Math.round(num(done[done.length - 1]?.r ?? '')) || x.prev[0]?.r || 5
   const workingW = num(done[done.length - 1]?.w ?? '') || num(x.sets.find((s) => s.w)?.w ?? '') || (x.prev[0]?.w ? Number(fmtW(x.prev[0].w, unit)) : 0) || (best?.w ? Number(fmtW(best.w, unit)) : 0)
   const pr = prLine(x.ex, best, prReps, unit, liveE1, liveReps, liveSec, workingW)
-  const cols = k === 'duration' ? ['Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
+  // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
+  const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
   const placeholder = (p: Prev | undefined, c: string) => {
     if (c === 'Reps') return x.target || (p?.r ? `${p.r}` : '0')
@@ -445,9 +452,10 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         <span className="text-[11px] font-bold uppercase text-faint">Prev</span>
         {cols.map((c) => <span key={c} className="text-[11px] font-bold uppercase text-faint">{c}</span>)}
         <span />
+        {/* Each set is one row: swipe it right to delete. */}
         {x.sets.map((s, i) => {
           const p = x.prev[i]
-          return [
+          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} onDelete={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) }))}>{[
             <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num h-10 rounded-lg font-bold active:bg-surface-2 ${labels[i].color || 'text-muted'}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
             // Tap the previous-session value to copy it into this set (doesn't check it off).
             p ? (
@@ -462,7 +470,14 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
                 className={`num h-10 w-full min-w-0 rounded-lg text-center font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/15' : 'bg-surface-2'}`} />
             )),
             <button key={`d${i}`} data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)} className={`grid h-10 place-items-center rounded-lg ${s.done ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-faint'}`}><CheckIcon width={20} height={20} /></button>,
-          ]
+            // Cardio: effort (RPE / heart rate / watch calories) and the estimated burn, under the set.
+            ...(cardio ? [
+              <div key={`e${i}`} style={{ gridColumn: '1 / -1' }} className="-mt-0.5 mb-0.5">
+                <CardioEffort name={x.ex.name} kind={x.ex.kind} seconds={num(s.sec)} distanceKm={fromDist(num(s.dist), unit)}
+                  effort={{ hr: s.hr, rpe: s.rpe, kcal: s.kcal }} onChange={(e) => setSet(x.key, i, { hr: e.hr, rpe: e.rpe, kcal: e.kcal })} />
+              </div>,
+            ] : []),
+          ]}</SwipeRow>
         })}
       </div>
       <div className="mt-2 flex gap-2">

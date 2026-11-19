@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { altNames, defaultLogTip, label, type Usage } from '../lib/exercises'
-import { distLabel, epley, fmtDate, fmtDist, fmtW, timeAgo } from '../lib/format'
+import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo } from '../lib/format'
+import { estimateCardio, isCardio } from '../lib/energy'
+import { rpeLabel, usePerson } from './nutrition/CardioEffort'
 import { intensityForExercise } from '../lib/muscles'
-import { me, pb, restFor, useUnit, useUser, userRest, userRestAfter, type Exercise, type Unit, type WSet } from '../lib/pb'
+import { me, nutritionOn, pb, restFor, useUnit, useUser, userRest, userRestAfter, type Exercise, type Unit, type WSet } from '../lib/pb'
 import { saveLiftRest } from '../lib/exercises'
 import { RestPicker, restLabel } from './RestPicker'
 import { TimerIcon } from './icons'
@@ -18,7 +20,7 @@ type Tab = 'about' | 'stats' | 'history'
 type Session = { workout: string; name: string; date: Date; sets: WSet[]; bestE1: number; bestW: number; bestR: number; maxW: number; vol: number; reps: number; maxReps: number; maxSec: number; dist: number }
 
 function setText(s: WSet, ex: Exercise, unit: Unit) {
-  if (ex.kind === 'duration') return `${s.seconds}s`
+  if (ex.kind === 'duration') return isCardio(ex) ? fmtMin(s.seconds) : `${s.seconds}s`
   if (ex.kind === 'cardio') return `${fmtDist(s.distance_km, unit)} ${distLabel(unit)} · ${Math.round(s.seconds / 60)} min`
   if (ex.kind === 'bodyweight' && !s.weight_kg) return `${s.reps} reps`
   return `${fmtW(s.weight_kg, unit)} ${unit} × ${s.reps}`
@@ -35,7 +37,7 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
   useEffect(() => {
     pb.collection('workout_sets').getFullList<WSet>({
       filter: pb.filter('user = {:u} && exercise = {:e} && completed = true', { u: uid, e: ex.id }),
-      sort: 'performed_at,set_index', expand: 'workout', fields: 'id,workout,performed_at,set_index,weight_kg,reps,seconds,distance_km,e1rm_kg,is_pr,expand.workout.name',
+      sort: 'performed_at,set_index', expand: 'workout', fields: 'id,workout,performed_at,set_index,weight_kg,reps,seconds,distance_km,e1rm_kg,is_pr,avg_hr,rpe,kcal,expand.workout.name',
     }).then(setSets).catch(() => setSets([]))
   }, [ex.id, uid])
 
@@ -73,7 +75,7 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
 
         {tab === 'stats' && (!sets ? <Spinner /> : !sessions.length ? (
           <p className="py-10 text-center text-sm text-muted">{isSelf ? 'Log this exercise to see your stats.' : 'No lifts to show — they may keep their lift stats private.'}</p>
-        ) : <StatsTab ex={ex} unit={unit} sessions={sessions} strongest={strongest} />)}
+        ) : <StatsTab ex={ex} unit={unit} sessions={sessions} strongest={strongest} own={uid === me()} />)}
 
         {tab === 'history' && (!sets ? <Spinner /> : !sessions.length ? (
           <p className="py-10 text-center text-sm text-muted">No sessions yet.</p>
@@ -143,22 +145,41 @@ function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Us
   )
 }
 
-function StatsTab({ ex, unit, sessions, strongest }: { ex: Exercise; unit: Unit; sessions: Session[]; strongest: WSet | null }) {
+function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: Unit; sessions: Session[]; strongest: WSet | null; own: boolean }) {
   const k = ex.kind
+  const viewer = useUser()
+  const person = usePerson()
   const weighted = k === 'weight' || k === 'assisted' || (k === 'bodyweight' && sessions.some((s) => s.maxW > 0))
-  const series = k === 'duration' ? sessions.map((s) => s.maxSec) : k === 'cardio' ? sessions.map((s) => Math.round(s.dist * 100) / 100)
+  const timed = k === 'duration' && isCardio(ex) // sports/conditioning: minutes per session, not longest hold
+  const series = timed ? sessions.map((s) => Math.round(s.sets.reduce((t, x) => t + x.seconds, 0) / 60)) : k === 'duration' ? sessions.map((s) => s.maxSec) : k === 'cardio' ? sessions.map((s) => Math.round(s.dist * 100) / 100)
     : weighted ? sessions.map((s) => Number(fmtW(s.bestW, unit))) : sessions.map((s) => s.maxReps)
-  const seriesLabel = k === 'duration' ? 'Best hold (s)' : k === 'cardio' ? `Distance (km)` : weighted ? `Best set each session (${unit})` : 'Best set (reps)'
+  const seriesLabel = timed ? 'Minutes per session' : k === 'duration' ? 'Best hold (s)' : k === 'cardio' ? `Distance (km)` : weighted ? `Best set each session (${unit})` : 'Best set (reps)'
   const allSets = sessions.flatMap((s) => s.sets)
   const tiles: [string, string][] = weighted
     ? [[`${fmtW(Math.max(...sessions.map((s) => s.bestE1)), unit)} ${unit}`, 'Best est. 1RM'], [`${fmtW(Math.max(...sessions.map((s) => s.maxW)), unit)} ${unit}`, 'Heaviest weight'],
       [`${Math.max(...sessions.map((s) => s.maxReps))}`, 'Most reps (set)'], [`${sessions.length}`, 'Sessions'], [`${allSets.length}`, 'Total sets'],
       [`${Math.round(Number(fmtW(sessions.reduce((t, s) => t + s.vol, 0), unit))).toLocaleString()}`, `Total volume ${unit}`]]
+    : timed
+      ? [[fmtMin(Math.max(...sessions.map((s) => s.sets.reduce((t, x) => t + x.seconds, 0)))), 'Longest session'], [fmtMin(allSets.reduce((t, x) => t + x.seconds, 0)), 'Total time'], [`${sessions.length}`, 'Sessions']]
     : k === 'duration'
       ? [[`${Math.max(...sessions.map((s) => s.maxSec))}s`, 'Longest hold'], [`${sessions.length}`, 'Sessions'], [`${allSets.length}`, 'Total sets']]
       : k === 'cardio'
         ? [[`${fmtDist(sessions.reduce((t, s) => t + s.dist, 0), unit)} ${distLabel(unit)}`, 'Total distance'], [`${sessions.length}`, 'Sessions']]
         : [[`${Math.max(...sessions.map((s) => s.maxReps))}`, 'Most reps (set)'], [`${sessions.reduce((t, s) => t + s.reps, 0)}`, 'Total reps'], [`${sessions.length}`, 'Sessions']]
+  // Cardio: effort is this exercise's "how hard" stat (like est. 1RM for a lift), plus heart rate and, with nutrition on, calories.
+  const cardio = isCardio(ex)
+  const rpeSets = allSets.filter((x) => (x.rpe ?? 0) > 0), hrSets = allSets.filter((x) => (x.avg_hr ?? 0) > 0)
+  const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length
+  const burned = cardio && own && person && nutritionOn(viewer)
+    ? allSets.reduce((t, x) => t + estimateCardio({ name: ex.name, kind: ex.kind, seconds: x.seconds, distanceKm: x.distance_km, avgHr: x.avg_hr, rpe: x.rpe, kcal: x.kcal }, person).kcal, 0) : null
+  const effortTiles: [string, string][] = !cardio ? [] : [
+    ...(rpeSets.length ? [[`${Math.round(avg(rpeSets.map((x) => x.rpe!)) * 10) / 10}`, 'Avg effort (RPE)'] as [string, string], [`${Math.max(...rpeSets.map((x) => x.rpe!))}`, 'Hardest (RPE)'] as [string, string]] : []),
+    ...(hrSets.length ? [[`${Math.round(avg(hrSets.map((x) => x.avg_hr!)))} bpm`, 'Avg heart rate'] as [string, string]] : []),
+    ...(burned ? [[`${burned.toLocaleString()}`, 'Est. kcal burned'] as [string, string]] : []),
+  ]
+  const effortSessions = cardio ? sessions.filter((x) => x.sets.some((y) => (y.rpe ?? 0) > 0)) : []
+  const effortSeries = effortSessions.map((x) => { const r = x.sets.filter((y) => (y.rpe ?? 0) > 0).map((y) => y.rpe!); return Math.round(avg(r) * 10) / 10 })
+
   return (
     <>
       {weighted && strongest && strongest.weight_kg > 0 && (
@@ -169,7 +190,7 @@ function StatsTab({ ex, unit, sessions, strongest }: { ex: Exercise; unit: Unit;
         </div>
       )}
       <div className="grid grid-cols-3 gap-2">
-        {tiles.map(([v, l]) => (
+        {[...tiles, ...effortTiles].map(([v, l]) => (
           <div key={l} className="rounded-2xl bg-surface-2 p-3 text-center">
             <p className="num truncate text-lg font-black">{v}</p>
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{l}</p>
@@ -183,6 +204,15 @@ function StatsTab({ ex, unit, sessions, strongest }: { ex: Exercise; unit: Unit;
             extras={weighted ? sessions.map((s) => `${fmtW(s.bestW, unit)} ${unit} × ${s.bestR} reps · est. 1RM ${fmtW(s.bestE1, unit)}`) : undefined} />
         </div>
       )}
+      {cardio && (effortSeries.length > 1 ? (
+        <div className="rounded-2xl border border-line bg-surface p-3">
+          <p className="mb-1 text-xs font-bold text-muted">Effort per session (RPE 1–10)</p>
+          <LineChart className="h-40" labels={effortSessions.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={effortSeries} trend={trendLine(effortSeries)}
+            extras={effortSeries.map((v) => rpeLabel(Math.round(v)))} />
+        </div>
+      ) : own && !rpeSets.length ? (
+        <p className="rounded-2xl bg-surface-2 p-3 text-center text-sm text-muted">Tap “Add effort” under a set to rate how hard it felt (RPE 1–10). It shows up here over time.</p>
+      ) : null)}
     </>
   )
 }

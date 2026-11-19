@@ -17,6 +17,15 @@ export interface User extends RecordModel {
   default_rest_s: number; post_visibility: '' | Visibility; update_routine: boolean; save_as_routine: boolean; height_cm: number
   theme: { base?: string; accent?: string } | null
   hide_stats: boolean
+  /** Friends can see my Physique (body readings) / Insights tabs. Off by default. */
+  share_physique: boolean
+  share_insights: boolean
+  /** Bottom bar layout (tab ids, Profile excluded). Empty = default. */
+  tab_bar: string[] | null
+  /** Settings → Nutrition tracking (opt-in; off = no Nutrition tab, no calorie estimates). */
+  nutrition_on: boolean
+  /** Has tapped the Nutrition switch in Settings (clears the "New" dots). */
+  nutrition_seen: boolean
   default_rest_after_s: number
 }
 export type ReviewStatus = '' | 'pending' | 'approved' | 'rejected'
@@ -47,6 +56,8 @@ export interface WSet extends RecordModel {
   workout: string; user: string; exercise: string; performed_at: string; position: number; set_index: number
   weight_kg: number; reps: number; seconds: number; distance_km: number; completed: boolean; e1rm_kg: number; is_pr: boolean
   set_type?: '' | SetType; note?: string; superset?: number
+  /** Cardio effort: average heart rate, RPE 1–10, active kcal from a watch (0 = not given). */
+  avg_hr?: number; rpe?: number; kcal?: number
   expand?: { exercise?: Exercise; workout?: Workout }
 }
 export interface Friendship extends RecordModel { requester: string; addressee: string; status: 'pending' | 'accepted'; expand?: { requester?: User; addressee?: User } }
@@ -73,6 +84,11 @@ export function restFor(ex: Pick<Exercise, 'rest_s' | 'rest_after_s'>, u?: User 
   const pick = (v: number | undefined, fallback: number) => (v === -1 ? 0 : v && v > 0 ? v : fallback)
   return { rest: pick(ex.rest_s, userRest(u)), after: pick(ex.rest_after_s, userRestAfter(u)) }
 }
+
+/** Whether the user uses nutrition tracking (and so sees calorie estimates). */
+export const nutritionOn = (u?: Partial<Pick<User, 'nutrition_on'>> | null) => !!u?.nutrition_on
+/** Show the "New: Nutrition" dots until the user has tapped the switch in Settings. */
+export const nutritionNew = (u?: Partial<Pick<User, 'nutrition_seen'>> | null) => !!u && !u.nutrition_seen
 
 export const me = () => pb.authStore.record?.id ?? ''
 
@@ -108,7 +124,10 @@ export function errMsg(e: unknown): string {
     if (field) return `${field[0].replace(/_/g, ' ')}: ${(field[1] as { message: string }).message}`
     return b.message || null
   }
-  return fromBody(r.response) || r.message || 'Something went wrong'
+  const msg = fromBody(r.response) || r.message || 'Something went wrong'
+  // PocketBase's reply when a collection doesn't exist yet: the server hasn't applied a newer migration.
+  if (/missing (or invalid )?collection context/i.test(msg)) return 'The server needs an update for this feature. Restart PocketBase so it applies the new database changes, then try again.'
+  return msg
 }
 
 export async function friendIds(): Promise<string[]> {

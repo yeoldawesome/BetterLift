@@ -6,7 +6,14 @@ import { RestPicker, restLabel } from '../components/RestPicker'
 import { Card, ConfirmSheet, ErrorText, Input, Screen, Segmented, Toggle } from '../components/ui'
 import { deleteAllHistory } from '../lib/history'
 import { bmi, fmtW, fromUnit, num } from '../lib/format'
-import { errMsg, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
+import { errMsg, nutritionNew, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
+import { MAX_TABS } from '../lib/tabs'
+
+/** Turning nutrition on with a custom bottom bar: add the Nutrition tab if there's room (the default bar already has it). */
+function withNutritionTab(u: User, on: boolean): Partial<User> {
+  const bar = Array.isArray(u.tab_bar) ? u.tab_bar : []
+  return on && bar.length && !bar.includes('nutrition') && bar.length < MAX_TABS ? { tab_bar: [...bar, 'nutrition'] } : {}
+}
 
 export default function Settings() {
   const user = useUser()!
@@ -38,6 +45,17 @@ export default function Settings() {
         <Segmented value={user.sex === 'female' ? 'female' : 'male'} onChange={(sex) => save({ sex })} options={[['male', 'Male'], ['female', 'Female']]} />
       </div>
       <Link to="/themes" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Themes & colors <span className="text-accent">›</span></Link>
+      <Link to="/settings/tab-bar" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Bottom bar <span className="text-accent">›</span></Link>
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Nutrition</h2>
+      {/* New accounts start with nutrition off; it's highlighted (with dots on Profile) until they tap it once. */}
+      <div className={nutritionNew(user) ? 'relative rounded-xl ring-2 ring-accent ring-offset-2 ring-offset-canvas' : ''}>
+        {nutritionNew(user) && <span className="absolute -top-2 right-3 z-10 rounded-full bg-danger px-2 py-0.5 text-[10px] font-black uppercase tracking-wider text-white">New</span>}
+        <Toggle on={user.nutrition_on} onChange={(on) => save({ nutrition_on: on, nutrition_seen: true, ...withNutritionTab(user, on) })} title="Nutrition tracking"
+          body={user.nutrition_on
+            ? 'On: food logging, calorie & macro targets, and calorie burn estimates for your workouts.'
+            : 'Track food, calories and macros, with targets that use your workouts. Off: no Nutrition tab or calorie estimates.'} />
+      </div>
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Workouts</h2>
       <button onClick={() => setRestOpen(true)} className="flex w-full items-center gap-3 rounded-xl border border-line bg-surface p-3 text-left">
@@ -54,8 +72,13 @@ export default function Settings() {
       <Toggle on={user.save_as_routine} onChange={(save_as_routine) => save({ save_as_routine })} title="Save empty workouts as routines" body="Pre-selects “Save as a routine” for workouts not started from one." />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Privacy</h2>
-      <Toggle on={!user.hide_stats} onChange={(on) => save({ hide_stats: !on })} title="Friends can see my lifts & stats"
-        body={user.hide_stats ? 'Off — friends see your posts, but not your sets, stats or lift history.' : 'On — friends can open your profile to see your stats, strongest sets and lift history.'} />
+      <p className="text-xs text-muted">What friends can see on your profile. Your posts follow each workout's own privacy.</p>
+      <Toggle on={!user.hide_stats} onChange={(on) => save({ hide_stats: !on })} title="Lifting stats"
+        body={user.hide_stats ? 'Off: friends see your posts, but not your sets, stats or lift history.' : 'On: friends can see your lifting stats, strongest sets and lift history.'} />
+      <Toggle on={!!user.share_physique} onChange={(share_physique) => save({ share_physique })} title="Physique"
+        body={user.share_physique ? 'On: friends can see your weight and body composition readings.' : 'Off: your weight and body measurements stay private.'} />
+      <Toggle on={!!user.share_insights && !user.hide_stats} onChange={(share_insights) => save({ share_insights })} title="Insights"
+        body={user.hide_stats ? 'Needs Lifting stats on (insights are built from your lifts).' : user.share_insights ? 'On: friends can see your progress insights and PR predictions.' : 'Off: your insights and PR predictions stay private.'} />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Default post privacy</h2>
       <Card className="grid grid-cols-2 gap-2 p-2">

@@ -27,7 +27,7 @@ export default async function setup() {
     const email = `iphone_${who}_${tag}@test.local`
     const u = await call('/collections/users/records', { method: 'POST', json: {
       email, password, passwordConfirm: password, username: `iphone_${who}_${tag}`,
-      name: who === 'me' ? 'iPhone Tester' : 'Test Friend', bodyweight_kg: 80, height_cm: 180, sex: 'male', unit: 'lb',
+      name: who === 'me' ? 'iPhone Tester' : 'Test Friend', nutrition_on: who === 'me', nutrition_seen: who === 'me', bodyweight_kg: 80, height_cm: 180, sex: 'male', unit: 'lb',
     } })
     created.push(u.id)
     return { ...u, email }
@@ -57,7 +57,7 @@ export default async function setup() {
   const state: Seed = {
     api,
     me: { id: me.id, email: me.email, password, username: me.username, token: meFresh.token, record: meFresh.record },
-    friend: { id: friend.id, username: friend.username, workoutId: w.id, workoutName: 'Friend Push Day' },
+    friend: { id: friend.id, email: friend.email, password, username: friend.username, workoutId: w.id, workoutName: 'Friend Push Day' },
   }
   mkdirSync(dirname(STATE_FILE), { recursive: true })
   writeFileSync(STATE_FILE, JSON.stringify(state, null, 2))

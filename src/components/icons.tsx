@@ -30,3 +30,12 @@ export const InfoIcon = (p: P) => <svg {...base(p)}><circle cx="12" cy="12" r="8
 export const BellIcon = (p: P) => <svg {...base(p)}><path d="M6 16.5V11a6 6 0 0112 0v5.5l1.5 2h-15zM10 20.5a2 2 0 004 0" /></svg>
 export const DotsIcon = (p: P) => <svg {...base(p)}><circle cx="12" cy="5.5" r="1.2" fill="currentColor" /><circle cx="12" cy="12" r="1.2" fill="currentColor" /><circle cx="12" cy="18.5" r="1.2" fill="currentColor" /></svg>
 export const TimerIcon = (p: P) => <svg {...base(p)}><circle cx="12" cy="13" r="7.5" /><path d="M12 9.5V13l2.5 2M10 2.5h4" /></svg>
+export const HistoryIcon = (p: P) => <svg {...base(p)}><path d="M3.5 12a8.5 8.5 0 102.5-6L3.5 8.5M3.5 4v4.5H8M12 7.5V12l3 2" /></svg>
+export const CalendarIcon = (p: P) => <svg {...base(p)}><rect x="3.5" y="5" width="17" height="15.5" rx="2.5" /><path d="M3.5 10h17M8 3v4M16 3v4" /></svg>
+export const FriendsIcon = (p: P) => <svg {...base(p)}><circle cx="9" cy="8.5" r="3.5" /><path d="M2.5 20c.9-3.2 3.4-5 6.5-5s5.6 1.8 6.5 5M16 5.2a3.5 3.5 0 010 6.6M18 15.3c1.7.7 2.9 2.3 3.5 4.7" /></svg>
+export const ExercisesIcon = (p: P) => <svg {...base(p)}><path d="M5 4.5h10.5a2 2 0 012 2V20H7a2 2 0 01-2-2zM5 18a2 2 0 012-2h10.5M9 8.5h5M9 11.5h3" /></svg>
+export const NutritionIcon = (p: P) => <svg {...base(p)}><path d="M12 8c-1.6-1.3-3.6-1.7-5.3-.8C4.4 8.5 3.8 11.6 4.8 14.7c1 3.2 3.1 6 5.2 6.3.8.1 1.3-.4 2-.4s1.2.5 2 .4c2.1-.3 4.2-3.1 5.2-6.3 1-3.1.4-6.2-1.9-7.5-1.7-.9-3.7-.5-5.3.8z" /><path d="M12 8c0-2.2 1-3.8 3-4.5" /></svg>
+export const BarcodeIcon = (p: P) => <svg {...base(p)}><path d="M4 7V5.5A1.5 1.5 0 015.5 4H7M17 4h1.5A1.5 1.5 0 0120 5.5V7M20 17v1.5a1.5 1.5 0 01-1.5 1.5H17M7 20H5.5A1.5 1.5 0 014 18.5V17M8 8v8M11 8v8M14 8v8M17 8v8" /></svg>
+export const FlameIcon = (p: P) => <svg {...base(p)}><path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-2.6 1.4-4.4 2.8-6 .3 1.6 1.2 2.7 2.2 3.2-.3-3.4 1.4-6.3 3.9-8 .2 2.5 1.5 4.2 2.9 5.6 1.2 1.3 1.9 3 1.9 5.2 0 3.6-3.1 6.2-7.2 6.2z" /></svg>
+export const SparkIcon = (p: P) => <svg {...base(p)}><path d="M12 3.5l1.8 4.9 4.9 1.8-4.9 1.8L12 16.9l-1.8-4.9-4.9-1.8 4.9-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>
+export const BoltIcon = (p: P) => <svg {...base(p)}><path d="M13 3L5 13.5h6L10.5 21 19 10.5h-6z" /></svg>

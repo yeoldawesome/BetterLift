@@ -8,7 +8,7 @@ export const STATE_FILE = join(HERE, '.auth', 'state.json')
 export type Seed = {
   api: string
   me: { id: string; email: string; password: string; username: string; token: string; record: unknown }
-  friend: { id: string; username: string; workoutId: string; workoutName: string }
+  friend: { id: string; email: string; password: string; username: string; workoutId: string; workoutName: string }
 }
 export const seed = (): Seed => JSON.parse(readFileSync(STATE_FILE, 'utf8'))
 
@@ -26,7 +26,7 @@ export { expect }
 export const main = (p: Page) => p.locator('main')
 
 /** Tap a bottom tab like a thumb would. */
-export async function tab(p: Page, name: 'Feed' | 'Routines' | 'Workout' | 'Stats' | 'Profile') {
+export async function tab(p: Page, name: 'Feed' | 'Routines' | 'Workout' | 'Nutrition' | 'Stats' | 'Profile') {
   await p.locator('nav').getByRole('link', { name, exact: true }).tap()
 }
 

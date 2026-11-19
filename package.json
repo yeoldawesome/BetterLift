@@ -11,9 +11,12 @@
     "test:api": "node scripts/smoke.mjs",
     "seed:demo": "node scripts/seed-demo.mjs",
     "test:e2e": "esbuild scripts/e2e.ts --bundle --platform=node --format=esm --outfile=node_modules/.e2e.mjs --define:import.meta.env.VITE_API_URL=\\\"http://127.0.0.1:8090\\\" --log-level=warning && node node_modules/.e2e.mjs",
-    "test:iphone": "playwright test -c tests/iphone/playwright.config.ts"
+    "test:iphone": "playwright test -c tests/iphone/playwright.config.ts",
+    "test:nutrition": "esbuild scripts/nutrition-test.ts --bundle --platform=node --format=esm --outfile=node_modules/.nutrition-test.mjs --define:import.meta.env.VITE_API_URL=\\\"http://127.0.0.1:8090\\\" --log-level=warning && node node_modules/.nutrition-test.mjs"
   },
   "dependencies": {
+    "@zxing/browser": "^0.2.1",
+    "@zxing/library": "^0.23.0",
     "chart.js": "^4.6.1",
     "pocketbase": "^0.29.0",
     "react": "^19.3.1",
