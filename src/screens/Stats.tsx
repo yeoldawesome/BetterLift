@@ -6,6 +6,7 @@ import { ExerciseInfo } from '../components/ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { LineChart } from '../components/LineChart'
 import { PhysiqueView } from './Physique'
+import { InsightsView } from './Insights'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
 import { MAP_MUSCLES, muscleSetCounts } from '../lib/muscles'
@@ -20,6 +21,8 @@ const RANGES: [string, number][] = [['15D', 15], ['30D', 30], ['90D', 90], ['6M'
 const METRICS: [Metric, string][] = [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
 const SORTS: [string, string][] = [['recent', 'Most Recent'], ['trend_up', 'Trending Up'], ['trend_down', 'Trending Down'], ['alpha_asc', 'A → Z'], ['alpha_desc', 'Z → A'], ['sessions', 'Most Sessions'], ['muscle', 'Muscle Group']]
 type Dir = 'up' | 'down' | 'neutral'
+type StatsTab = 'lifting' | 'physique' | 'insights'
+const TABS: [StatsTab, string][] = [['lifting', '🏋️ Lifting'], ['physique', '⚖️ Physique'], ['insights', '🔮 Insights']]
 
 const n0 = (n: number) => Math.round(n).toLocaleString()
 const day = (d: Date | null) => (d ? d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) : '')
@@ -270,20 +273,19 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
 
 export default function Stats() {
   const user = useUser()!
-  const [tab, setTab] = useState<'lifting' | 'physique'>(() => { try { return localStorage.getItem('bl.statsTab') === 'physique' ? 'physique' : 'lifting' } catch { return 'lifting' } })
-  const pick = (t: 'lifting' | 'physique') => { setTab(t); try { localStorage.setItem('bl.statsTab', t) } catch { /* private mode */ } }
+  const [tab, setTab] = useState<StatsTab>(() => { try { const t = localStorage.getItem('bl.statsTab'); return TABS.some(([v]) => v === t) ? (t as StatsTab) : 'lifting' } catch { return 'lifting' } })
+  const pick = (t: StatsTab) => { setTab(t); try { localStorage.setItem('bl.statsTab', t) } catch { /* private mode */ } }
   return (
     <>
       <div className="mx-auto max-w-lg px-safe pt-4 sm:max-w-3xl">
-        <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
-          {(['lifting', 'physique'] as const).map((t) => (
-            <button key={t} onClick={() => pick(t)} className={`h-9 rounded-lg text-sm font-bold ${tab === t ? 'bg-accent text-accent-ink' : 'text-muted'}`}>
-              {t === 'lifting' ? '🏋️ Lifting' : '⚖️ Physique'}
-            </button>
+        <div className="grid grid-cols-3 gap-1 rounded-xl bg-surface-2 p-1">
+          {TABS.map(([t, l]) => (
+            <button key={t} onClick={() => pick(t)} className={`h-9 rounded-lg text-sm font-bold ${tab === t ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
           ))}
         </div>
       </div>
-      {tab === 'lifting' ? <StatsView user={user} /> : <section className="mx-auto max-w-lg px-safe pt-4 sm:max-w-3xl"><PhysiqueView user={user} /></section>}
+      {tab === 'lifting' ? <StatsView user={user} />
+        : <section className="mx-auto max-w-lg px-safe pt-4 sm:max-w-3xl">{tab === 'physique' ? <PhysiqueView user={user} /> : <InsightsView user={user} />}</section>}
     </>
   )
 }

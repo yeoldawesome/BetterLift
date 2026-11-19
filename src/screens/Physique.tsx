@@ -3,7 +3,7 @@ import { LineChart } from '../components/LineChart'
 import { Spinner } from '../components/ui'
 import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, type BodyKey, type BodyMetric } from '../lib/body'
 import { toUnit } from '../lib/format'
-import { pb, useUnit, type User } from '../lib/pb'
+import { errMsg, pb, useUnit, type User } from '../lib/pb'
 import { trendLine } from '../lib/stats'
 
 const RANGES: [string, number][] = [['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
@@ -45,7 +45,7 @@ export function PhysiqueView({ user }: { user: User }) {
         await pb.collection('users').update(user.id, { bodyweight_kg: Math.round(last.weight_kg * 100) / 100 }).catch(() => {})
       setMsg(added ? `Imported ${added} new reading${added === 1 ? '' : 's'}.` : 'Already up to date.')
     } catch (e) {
-      setMsg((e as Error).message)
+      setMsg(errMsg(e))
     } finally {
       setBusy(false)
       if (file.current) file.current.value = ''
