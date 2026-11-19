@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { CloseIcon, SearchIcon } from '../components/icons'
 import { LineChart } from '../components/LineChart'
+import { PhysiqueView } from './Physique'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
 import { MAP_MUSCLES, muscleSetCounts } from '../lib/muscles'
@@ -258,7 +259,22 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
 
 export default function Stats() {
   const user = useUser()!
-  return <StatsView user={user} />
+  const [tab, setTab] = useState<'lifting' | 'physique'>(() => { try { return localStorage.getItem('bl.statsTab') === 'physique' ? 'physique' : 'lifting' } catch { return 'lifting' } })
+  const pick = (t: 'lifting' | 'physique') => { setTab(t); try { localStorage.setItem('bl.statsTab', t) } catch { /* private mode */ } }
+  return (
+    <>
+      <div className="mx-auto max-w-lg px-safe pt-4 sm:max-w-3xl">
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-2 p-1">
+          {(['lifting', 'physique'] as const).map((t) => (
+            <button key={t} onClick={() => pick(t)} className={`h-9 rounded-lg text-sm font-bold ${tab === t ? 'bg-accent text-accent-ink' : 'text-muted'}`}>
+              {t === 'lifting' ? '🏋️ Lifting' : '⚖️ Physique'}
+            </button>
+          ))}
+        </div>
+      </div>
+      {tab === 'lifting' ? <StatsView user={user} /> : <section className="mx-auto max-w-lg px-safe pt-4 sm:max-w-3xl"><PhysiqueView user={user} /></section>}
+    </>
+  )
 }
 
 /** Full stats dashboard for `user` (yourself, or a friend who shares their lifts). */

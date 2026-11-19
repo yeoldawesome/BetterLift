@@ -6,13 +6,14 @@ Mobile-first weightlifting PWA. Vite + React 19 + TypeScript + Tailwind v4 front
 - `src/screens/` — one file per route (routes in `src/App.tsx`, hash router).
   - `Workout.tsx` — live workout: `ActiveWorkout`, `ExerciseBlock` (⋮ menu: reorder, note, superset, replace, remove; tap set number → set type sheet), `FinishSheet`.
   - `Feed.tsx` + `components/WorkoutCard.tsx` — feed cards (body map panel, reactions cluster bottom-left, comment button with red count badge, 🙂 reaction picker).
+  - `Stats.tsx` — Lifting | Physique toggle; `Physique.tsx` = body metrics (RENPHO CSV import via `lib/body.ts`, `body_metrics` collection).
   - `Profile.tsx` — hero header, streak card, emoji shortcut grid, `Memories` (2-week calendar), `TotalCard` (duration/volume chart with range menu).
   - `WorkoutDetail.tsx`, `WorkoutEdit.tsx` — finished workout view/edit (carry set_type/note/superset through).
 - `src/lib/active.tsx` — active workout state (localStorage `bl.active`), `finishWorkout`, routine sync. Types `AEx` (note?, superset?), `ASet` (type?).
 - `src/lib/setTypes.ts` — set types (W/1/F/D/C) and `setLabels`.
 - `src/lib/pb.ts` — PocketBase client + record types. `src/lib/format.ts` — unit/format helpers.
 - `src/components/ui.tsx` — `Card`, `Button`, `Sheet` (full screen), `BottomSheet` (slide-up menu), etc. Icons in `components/icons.tsx`.
-- `pb/pb_migrations/` — numbered JS migrations (latest: `1731800016_set_types_notes_supersets.js`). New schema = new migration file.
+- `pb/pb_migrations/` — numbered JS migrations (latest: `1731800017_body_metrics.js`). New schema = new migration file.
 
 ## Conventions
 - Colours via theme tokens: `bg-surface`, `bg-surface-2`, `text-muted`, `text-faint`, `text-accent`, `bg-accent`, `text-danger`, `border-line`. Superset badge: `bg-red-600`.
