@@ -6,7 +6,7 @@ This guide turns a spare PC into the Better Lift server. Everything used here is
 |---|---|---|
 | Your PC + Ubuntu Server | Runs the backend (PocketBase) and stores all data | Free |
 | Cloudflare Tunnel | Makes the backend reachable at `https://api.yourdomain.com`. You don't open router ports, and it keeps working when your home IP changes | Free |
-| Cloudflare Pages | Hosts the app itself at `https://app.yourdomain.com` | Free |
+| GitHub Pages | Hosts the app itself at `https://app.yourdomain.com` | Free (public repo) |
 | Your domain | You already own it | (already paid) |
 
 Throughout this guide, replace `yourdomain.com` with your real domain.
@@ -161,24 +161,36 @@ Skip this part if your domain already uses Cloudflare.
 
 ---
 
-## Part 5: Host the app on Cloudflare Pages
+## Part 5: Host the app on GitHub Pages
 
-1. In the Cloudflare dashboard, go to **Workers & Pages → Create → Pages → Connect to Git**.
-2. Connect your GitHub account and choose the **BetterLift** repo.
-3. Build settings:
-   - Production branch: `main`
-   - Framework preset: **None**
-   - Build command: `npm run build`
-   - Build output directory: `dist`
-4. **Environment variables** (Production): add
-   - `VITE_API_URL` = `https://api.yourdomain.com`
-   - `NODE_VERSION` = `22`
-5. **Save and Deploy**. Wait a couple of minutes.
-6. After it deploys, go to the project → **Custom domains → Set up a custom domain** → `app.yourdomain.com`. Cloudflare adds the DNS record for you.
+The repo already has a workflow (`.github/workflows/deploy.yml`) that builds the app and publishes it to GitHub Pages on every push to `main`.
+
+> **The repo must be public.** GitHub Pages is free only for public repos; private repos need a paid GitHub plan. The code being public is fine, because your data lives on your server, not in the repo.
+
+### 5.1 Tell the app where the backend is
+GitHub → the BetterLift repo → **Settings → Secrets and variables → Actions → Variables tab → New repository variable**:
+- Name: `VITE_API_URL`
+- Value: `https://api.yourdomain.com`
+
+### 5.2 Turn on Pages
+Repo → **Settings → Pages** → under **Build and deployment**, set Source to **GitHub Actions**.
+
+### 5.3 Point `app.yourdomain.com` at GitHub
+A custom domain is **required**: the app is built to run at the root of a domain (`/`), so it won't work at `yeoldawesome.github.io/BetterLift/`.
+
+1. In the Cloudflare dashboard → your domain → **DNS → Records → Add record**:
+   - Type: `CNAME`
+   - Name: `app`
+   - Target: `yeoldawesome.github.io`
+   - Proxy status: **DNS only** (grey cloud). This lets GitHub issue the HTTPS certificate.
+2. In the repo, edit `public/CNAME` so it contains just one line, `app.yourdomain.com`, then commit it to `main`.
+3. Repo → **Settings → Pages → Custom domain**: enter `app.yourdomain.com` → **Save**. Wait for the green "DNS check successful".
+4. Once it's available (can take up to an hour), tick **Enforce HTTPS**.
+
+### 5.4 Deploy
+Repo → **Actions → Deploy → Run workflow** (on `main`). After it finishes (~2 minutes), open `https://app.yourdomain.com`.
 
 From now on, **every push to `main` rebuilds and redeploys the app automatically**.
-
-> Already using GitHub Pages instead? That works too. In GitHub, go to repo → Settings → Secrets and variables → Actions → **Variables**, add `VITE_API_URL = https://api.yourdomain.com`, and re-run the **Deploy** workflow. Then change the address in step 2.5 to your GitHub Pages address and run `sudo systemctl restart betterlift-pb`.
 
 ---
 
@@ -209,7 +221,7 @@ Open `https://app.yourdomain.com`:
 
 ## Updating Better Lift
 
-When new code is merged to `main`, Cloudflare Pages updates the app by itself. To update the backend:
+When new code is merged to `main`, GitHub Pages updates the app by itself. To update the backend:
 ```sh
 ssh dylan@192.168.1.50
 cd /opt/betterlift-src && sudo git pull
@@ -249,7 +261,8 @@ All your data lives in `/opt/betterlift/pb_data` on this one PC. If its drive di
 |---|---|
 | `api.yourdomain.com` doesn't load | `sudo systemctl status cloudflared` and `sudo systemctl status betterlift-pb`. Both should say *active (running)*. Restart with `sudo systemctl restart <name>` |
 | The app says it can't connect / network error | The address in `/etc/systemd/system/betterlift-pb.service` must exactly match where the app is hosted (`https://app.yourdomain.com`, no trailing `/`). After editing it, run `sudo systemctl daemon-reload && sudo systemctl restart betterlift-pb` |
-| The app talks to the wrong server | `VITE_API_URL` in Cloudflare Pages is wrong or missing. Fix it, then **Deployments → Retry deployment** |
+| The app talks to the wrong server | The `VITE_API_URL` GitHub variable is wrong or missing. Fix it, then **Actions → Deploy → Run workflow** |
+| `app.yourdomain.com` shows a GitHub 404 | Check the Custom domain is set in **Settings → Pages**, the `app` CNAME record is **DNS only** (grey cloud), and the Deploy workflow succeeded |
 | Requests blocked or getting challenge pages | Cloudflare → your domain → **Security**: turn off *Bot Fight Mode* |
 | Can't SSH in | The PC's IP changed (finish step 1.4), or the PC is off. Check the router's device list |
 | See live backend logs | `sudo journalctl -u betterlift-pb -f` (Ctrl+C to stop) |
