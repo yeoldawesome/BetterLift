@@ -10,7 +10,8 @@ test.describe('Every screen fits an iPhone', () => {
     test(`${path}: no sideways scroll, no zoom-on-tap inputs`, async ({ app }) => {
       await app.goto('/#' + path)
       await expect(app.locator('main')).toBeVisible()
-      await app.waitForLoadState('networkidle')
+      // Not 'networkidle': the realtime connection stays open, so the network is never idle. Wait for spinners instead.
+      await expect(app.locator('main .animate-spin')).toHaveCount(0, { timeout: 15_000 })
       await app.waitForTimeout(400) // let lists/charts render
 
       expect(await horizontalOverflow(app), 'page must not scroll sideways').toEqual([])

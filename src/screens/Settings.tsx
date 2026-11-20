@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HeightInput } from '../components/HeightInput'
 import { GlobeIcon, LockIcon, TimerIcon, TrashIcon } from '../components/icons'
@@ -10,6 +10,7 @@ import { deleteAllHistory } from '../lib/history'
 import { bmi, fmtW, fromUnit, num } from '../lib/format'
 import { errMsg, nutritionNew, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
 import { MAX_TABS } from '../lib/tabs'
+import { disablePush, enablePush, pushState, type PushState } from '../lib/push'
 
 /** Turning nutrition on with a custom bottom bar: add the Nutrition tab if there's room (the default bar already has it). */
 function withNutritionTab(u: User, on: boolean): Partial<User> {
@@ -50,6 +51,9 @@ export default function Settings() {
       </div>
       <Link to="/themes" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Themes & colors <span className="text-accent">›</span></Link>
       <Link to="/settings/tab-bar" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Bottom bar <span className="text-accent">›</span></Link>
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Notifications</h2>
+      <PushToggle />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Nutrition</h2>
       {/* New accounts start with nutrition off; it's highlighted (with dots on Profile) until they tap it once. */}
@@ -157,5 +161,35 @@ function ChangePassword({ user, onClose, onDone }: { user: User; onClose: () => 
         <Button disabled={busy || !current || !s.ok || !confirm}>{busy ? 'Saving…' : 'Change password'}</Button>
       </form>
     </BottomSheet>
+  )
+}
+
+const PUSH_HELP: Partial<Record<PushState, string>> = {
+  'needs-install': 'On iPhone, add Better Lift to your Home Screen first: tap Share → Add to Home Screen, then open it from there.',
+  unsupported: "This browser can't get push notifications.",
+  denied: 'Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Better Lift, then come back.',
+}
+
+/** Push notifications on this device: comments, reactions, friend requests, reminders… plus the red number on the app icon. */
+function PushToggle() {
+  const [state, setState] = useState<PushState | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  useEffect(() => { pushState().then(setState).catch(() => setState('unsupported')) }, [])
+  if (!state) return null
+  const toggle = async (on: boolean) => {
+    setBusy(true); setErr('')
+    try { setState(on ? await enablePush() : (await disablePush(), 'off')) } catch (e) { setErr(errMsg(e)) }
+    setBusy(false)
+  }
+  const help = PUSH_HELP[state]
+  return (
+    <>
+      {help
+        ? <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted"><span className="block font-bold text-ink">Push notifications</span>{help}</p>
+        : <Toggle on={state === 'on'} onChange={(on) => !busy && toggle(on)} title="Push notifications"
+            body={state === 'on' ? 'On for this device: comments, reactions, friend requests and reminders, with a badge on the app icon.' : 'Get comments, reactions, friend requests and reminders on this device, even when the app is closed.'} />}
+      <ErrorText>{err}</ErrorText>
+    </>
   )
 }

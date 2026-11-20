@@ -1,0 +1,13 @@
+{
+  "name": "betterlift-push",
+  "private": true,
+  "type": "module",
+  "description": "Sends Web Push notifications for the Better Lift PocketBase server (PocketBase's JS hooks can't do the encryption).",
+  "scripts": {
+    "start": "node server.mjs",
+    "keys": "node -e \"const k=require('web-push').generateVAPIDKeys();console.log('VAPID_PUBLIC_KEY='+k.publicKey+'\\nVAPID_PRIVATE_KEY='+k.privateKey)\""
+  },
+  "dependencies": {
+    "web-push": "3.6.7"
+  }
+}

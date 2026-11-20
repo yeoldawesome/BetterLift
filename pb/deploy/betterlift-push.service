@@ -1,0 +1,20 @@
+[Unit]
+Description=Better Lift push notifications (Web Push sidecar for PocketBase)
+After=network.target betterlift-pb.service
+
+[Service]
+Type=simple
+User=betterlift
+Group=betterlift
+WorkingDirectory=/opt/betterlift-src/pb/push
+EnvironmentFile=/etc/betterlift/push.env
+ExecStart=/usr/bin/env node server.mjs
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -298,3 +298,44 @@ routerAdd("POST", "/api/betterlift/request-password-reset", (e) => {
   }
   return e.noContent(204)
 })
+
+// ---- Push notifications (see pb/push) ----
+// Every new in-app notification is also pushed to the user's devices.
+onRecordAfterCreateSuccess((e) => {
+  e.next()
+  require(`${__hooks}/lib.js`).push(e.app, e.record)
+}, "notifications")
+
+// The app needs the server's public VAPID key to subscribe. Empty until push is configured.
+routerAdd("GET", "/api/betterlift/push-key", (e) => e.json(200, { key: $os.getenv("VAPID_PUBLIC_KEY") || "" }))
+
+// Re-subscribing the same device is a no-op; a device that switched accounts moves to the new account.
+onRecordCreateRequest((e) => {
+  const endpoint = e.record.getString("endpoint")
+  let existing = null
+  try { existing = e.app.findFirstRecordByFilter("push_subscriptions", "endpoint = {:e}", { e: endpoint }) } catch (_) {}
+  if (existing) {
+    if (existing.getString("user") === e.record.getString("user")) return e.json(200, existing)
+    e.app.delete(existing)
+  }
+  e.next()
+}, "push_subscriptions")
+
+// The sidecar reports subscriptions the push service says are gone (app deleted, permission revoked).
+routerAdd("POST", "/api/betterlift/push-gone", (e) => {
+  const secret = $os.getenv("PUSH_SECRET")
+  if (!secret || e.request.header.get("x-push-secret") !== secret) throw new ForbiddenError()
+  const body = e.requestInfo().body || {}
+  for (const endpoint of (body.endpoints || []).slice(0, 100)) {
+    try { e.app.delete(e.app.findFirstRecordByFilter("push_subscriptions", "endpoint = {:e}", { e: String(endpoint) })) } catch (_) {}
+  }
+  return e.noContent(204)
+})
+
+// ---- Email verification (see migration 1731800030) ----
+// Send the verification email right after signup. Without SMTP set up this quietly does nothing.
+onRecordAfterCreateSuccess((e) => {
+  e.next()
+  if (e.record.getBool("verified") || !e.app.settings().smtp.enabled) return
+  try { $mails.sendRecordVerification(e.app, e.record) } catch (err) { e.app.logger().error("verification email failed", "error", String(err)) }
+}, "users")

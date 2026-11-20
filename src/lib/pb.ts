@@ -13,7 +13,7 @@ export type Emoji = 'fire' | 'muscle' | 'clap' | 'rocket' | 'trophy' | 'custom'
 
 export type Visibility = 'public' | 'private'
 export interface User extends RecordModel {
-  username: string; name: string; avatar: string; bodyweight_kg: number; sex: '' | 'male' | 'female'; unit: '' | Unit; is_moderator: boolean
+  username: string; name: string; avatar: string; email?: string; verified?: boolean; bodyweight_kg: number; sex: '' | 'male' | 'female'; unit: '' | Unit; is_moderator: boolean
   default_rest_s: number; post_visibility: '' | Visibility; update_routine: boolean; save_as_routine: boolean; height_cm: number
   theme: { base?: string; accent?: string } | null
   hide_stats: boolean

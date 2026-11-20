@@ -1,11 +1,20 @@
-import { defineConfig } from 'vite'
+import { defineConfig, loadEnv, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import { VitePWA } from 'vite-plugin-pwa'
 
-export default defineConfig({
+/** Start the connection to the API server while the page is still loading (saves a round trip on the first request). */
+function preconnectApi(api: string | undefined): Plugin {
+  return {
+    name: 'preconnect-api',
+    transformIndexHtml: () => (api ? [{ tag: 'link', attrs: { rel: 'preconnect', href: new URL(api).origin, crossorigin: '' }, injectTo: 'head' }] : []),
+  }
+}
+
+export default defineConfig(({ mode }) => ({
   base: '/',
   plugins: [
+    preconnectApi(process.env.VITE_API_URL || loadEnv(mode, process.cwd(), 'VITE_').VITE_API_URL),
     react(),
     tailwindcss(),
     VitePWA({
@@ -27,7 +36,8 @@ export default defineConfig({
           { src: 'pwa-512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' },
         ],
       },
-      workbox: { navigateFallbackDenylist: [/^\/api/] },
+      // push-sw.js (in public/) adds push notifications and the app-icon badge to the generated service worker.
+      workbox: { navigateFallbackDenylist: [/^\/api/], importScripts: ['push-sw.js'] },
     }),
   ],
-})
+}))

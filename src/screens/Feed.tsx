@@ -7,6 +7,7 @@ import { Avatar, Button, Card, Empty, Screen, Segmented, Spinner } from '../comp
 import { timeAgo } from '../lib/format'
 import { intensityFromSets, type Intensity } from '../lib/muscles'
 import { anyOf, errMsg, friendIds, me, pb, type Comment, type Nudge, type Reaction, type User, type WSet, type Workout } from '../lib/pb'
+import { idbGet, idbSet } from '../lib/idb'
 import { loadStreak, type Streak } from '../lib/streak'
 import { useRealtime } from '../lib/useRealtime'
 
@@ -34,9 +35,26 @@ export default function FeedScreen() {
   )
 }
 
+// Last feed shown, kept in memory (instant when switching tabs) and on the device (instant on the next app open).
+type PackedFeed = { v: 1; at: number } & Omit<FeedData, 'intensity'> & { intensity: [string, Intensity][] }
+const feedKey = () => `feed:${me()}`
+let memFeed: { user: string; feed: FeedData } | null = null
+const keepFeed = (feed: FeedData) => {
+  memFeed = { user: me(), feed }
+  idbSet(feedKey(), { v: 1, at: Date.now(), ...feed, intensity: [...feed.intensity] } satisfies PackedFeed)
+}
+async function savedFeed(): Promise<FeedData | null> {
+  if (memFeed?.user === me()) return memFeed.feed
+  const p = await idbGet<PackedFeed>(feedKey())
+  if (!p || p.v !== 1) return null
+  // Only the last 7 days belong in the feed, even if the saved copy is older.
+  const since = Date.now() - WEEK_MS
+  return { ...p, workouts: p.workouts.filter((w) => new Date(w.started_at).getTime() >= since), intensity: new Map(p.intensity) }
+}
+
 /** You + all your friends' lifts from the last 7 days, newest first. */
 function WeekFeed() {
-  const [feed, setFeed] = useState<FeedData | null>(null)
+  const [feed, setFeed] = useState<FeedData | null>(() => (memFeed?.user === me() ? memFeed.feed : null))
 
   const load = useCallback(async () => {
     const since = new Date(Date.now() - WEEK_MS)
@@ -54,10 +72,16 @@ function WeekFeed() {
       const ws = byWorkout.get(w.id) ?? []
       intensity.set(w.id, intensityFromSets(ws.map((s) => ({ ex: s.expand?.exercise }))))
     }
-    setFeed({ workouts, intensity, reactions, comments })
+    const next = { workouts, intensity, reactions, comments }
+    keepFeed(next)
+    setFeed(next)
   }, [])
 
-  useEffect(() => { load().catch(() => setFeed({ workouts: [], intensity: new Map(), reactions: [], comments: [] })) }, [load])
+  useEffect(() => {
+    let fresh = false
+    savedFeed().then((saved) => { if (saved && !fresh) setFeed((cur) => cur ?? saved) })
+    load().then(() => { fresh = true }, () => { fresh = true; setFeed((cur) => cur ?? { workouts: [], intensity: new Map(), reactions: [], comments: [] }) })
+  }, [load])
   useRealtime(['workouts', 'reactions', 'comments'], () => { load().catch(() => {}) })
 
   if (!feed) return <Spinner />

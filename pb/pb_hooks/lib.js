@@ -44,6 +44,43 @@ function notify(app, n) {
   } catch (err) { app.logger().error("notify failed", "error", String(err)) }
 }
 
+/** Where tapping a notification takes you (same as notifLink in src/lib/notifications.tsx). */
+function notifPath(type, target) {
+  switch (type) {
+    case "comment": case "reply": case "reaction": return "/w/" + target
+    case "friend_request": return "/friends"
+    case "friend_accept": return "/u/" + target
+    case "nudge": return "/workout"
+    case "exercise_approved": case "exercise_rejected": return "/exercises?open=" + target
+    case "feedback_reply": return "/feedback"
+  }
+  return "/notifications"
+}
+
+/**
+ * Send a new notification to the user's devices as a push (with their unread count for the app-icon badge).
+ * The pb/push sidecar does the Web Push encryption and answers right away, so this never slows the request down.
+ * Does nothing until push is configured (PUSH_URL / PUSH_SECRET in /etc/betterlift/push.env).
+ */
+function push(app, n) {
+  const url = $os.getenv("PUSH_URL"), secret = $os.getenv("PUSH_SECRET")
+  if (!url || !secret) return
+  try {
+    const user = n.getString("user")
+    const subs = app.findRecordsByFilter("push_subscriptions", "user = {:u}", "", 20, 0, { u: user })
+    if (!subs.length) return
+    const unread = app.countRecords("notifications", $dbx.hashExp({ user: user, read: false }))
+    $http.send({
+      url: url + "/send", method: "POST", timeout: 3,
+      headers: { "content-type": "application/json", "x-push-secret": secret },
+      body: JSON.stringify({
+        subscriptions: subs.map((s) => ({ endpoint: s.getString("endpoint"), keys: { p256dh: s.getString("p256dh"), auth: s.getString("auth") } })),
+        payload: { title: "Better Lift", body: n.getString("text"), path: notifPath(n.getString("type"), n.getString("target")), badge: unread, tag: n.id },
+      }),
+    })
+  } catch (err) { app.logger().error("push failed", "error", String(err)) }
+}
+
 const uname = (app, id) => { try { return "@" + app.findRecordById("users", id).getString("username") } catch (_) { return "Someone" } }
 
-module.exports = { epley, areFriends, syncFriends, notify, uname }
+module.exports = { epley, areFriends, syncFriends, notify, uname, push }

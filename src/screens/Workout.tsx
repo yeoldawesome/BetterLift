@@ -467,7 +467,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
             ...cols.map((c) => (
               <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c)}
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
-                className={`num h-10 w-full min-w-0 rounded-lg text-center font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/15' : 'bg-surface-2'}`} />
+                className={`num h-10 w-full min-w-0 rounded-lg text-center text-base font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/15' : 'bg-surface-2'}`} />
             )),
             <button key={`d${i}`} data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)} className={`grid h-10 place-items-center rounded-lg ${s.done ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-faint'}`}><CheckIcon width={20} height={20} /></button>,
             // Cardio: effort (RPE / heart rate / watch calories) and the estimated burn, under the set.

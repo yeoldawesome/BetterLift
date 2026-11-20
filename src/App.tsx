@@ -5,30 +5,33 @@ import { RestBar } from './components/RestBar'
 import { useActive } from './lib/active'
 import { Spinner } from './components/ui'
 import TabBar from './components/TabBar'
+import { VerifyBanner } from './components/VerifyBanner'
 import { pb, useUser } from './lib/pb'
 import { applyTheme } from './lib/theme'
 import Auth from './screens/Auth'
 import ResetPassword from './screens/ResetPassword'
-import Exercises from './screens/Exercises'
 import Feed from './screens/Feed'
-import Friends from './screens/Friends'
-import Profile from './screens/Profile'
 import ProfileEdit from './screens/ProfileEdit'
-import RoutineEditor from './screens/RoutineEditor'
-import Routines from './screens/Routines'
-import MyReactions from './screens/MyReactions'
-import History from './screens/History'
-import Calendar from './screens/Calendar'
-import Recap from './screens/Recap'
-import Settings from './screens/Settings'
-import Themes from './screens/Themes'
-import TabBarSettings from './screens/TabBarSettings'
 import { TAB_DEFS, userTabs } from './lib/tabs'
-import UserProfile from './screens/UserProfile'
-import Compare from './screens/Compare'
 import Workout from './screens/Workout'
-import WorkoutDetail from './screens/WorkoutDetail'
 
+// Only the usual first screens ship in the main download; the rest load when opened (and are cached offline).
+const Exercises = lazy(() => import('./screens/Exercises'))
+const Friends = lazy(() => import('./screens/Friends'))
+const Profile = lazy(() => import('./screens/Profile'))
+const RoutineEditor = lazy(() => import('./screens/RoutineEditor'))
+const Routines = lazy(() => import('./screens/Routines'))
+const MyReactions = lazy(() => import('./screens/MyReactions'))
+const History = lazy(() => import('./screens/History'))
+const Calendar = lazy(() => import('./screens/Calendar'))
+const Recap = lazy(() => import('./screens/Recap'))
+const Settings = lazy(() => import('./screens/Settings'))
+const Themes = lazy(() => import('./screens/Themes'))
+const TabBarSettings = lazy(() => import('./screens/TabBarSettings'))
+const UserProfile = lazy(() => import('./screens/UserProfile'))
+const Compare = lazy(() => import('./screens/Compare'))
+const WorkoutDetail = lazy(() => import('./screens/WorkoutDetail'))
+const VerifyEmail = lazy(() => import('./screens/VerifyEmail'))
 const Stats = lazy(() => import('./screens/Stats'))
 const Import = lazy(() => import('./screens/Import'))
 const Review = lazy(() => import('./screens/Review'))
@@ -39,6 +42,8 @@ const Notifications = lazy(() => import('./screens/Notifications'))
 const Nutrition = lazy(() => import('./screens/Nutrition'))
 const NutritionCalendar = lazy(() => import('./screens/NutritionCalendar'))
 const NutritionGoals = lazy(() => import('./screens/NutritionGoals'))
+
+const PREFETCH = [() => import('./screens/Profile'), () => import('./screens/Routines'), () => import('./screens/Stats'), () => import('./screens/Exercises'), () => import('./screens/WorkoutDetail')]
 
 export default function App() {
   const user = useUser()
@@ -60,12 +65,16 @@ export default function App() {
 
   useEffect(() => {
     if (pb.authStore.isValid) pb.collection('users').authRefresh().catch((e) => { if (e?.status === 401 || e?.status === 404) pb.authStore.clear() })
+    // Once the first screen is up, fetch the other tabs' code in the background so switching tabs is instant.
+    const t = setTimeout(() => { for (const load of PREFETCH) load().catch(() => {}) }, 1500)
+    return () => clearTimeout(t)
   }, [])
 
   // Hidden admin console: reachable only by typing #/admin, with its own superuser sign-in.
   if (loc.pathname.startsWith('/admin')) return <main className="h-full overflow-y-auto"><Suspense fallback={<Spinner />}><Admin /></Suspense></main>
   // Reset links from email work whether or not you're signed in.
   if (loc.pathname.startsWith('/reset-password/')) return <Routes><Route path="/reset-password/:token" element={<ResetPassword />} /></Routes>
+  if (loc.pathname.startsWith('/verify/')) return <Suspense fallback={<Spinner />}><Routes><Route path="/verify/:token" element={<VerifyEmail />} /></Routes></Suspense>
   if (!user) return <Auth />
   // Running-workout banner everywhere except the Workout tab (which already shows the timer).
   const showBanner = !!active && loc.pathname !== '/workout'
@@ -78,6 +87,7 @@ export default function App() {
     <div className="flex h-full flex-col">
       {showBanner && <ActiveBanner />}
       <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
+        <VerifyBanner user={user} />
         <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<Navigate to={home} replace />} />

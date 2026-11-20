@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { me, pb, useUser, type Notification, type NotificationType } from './pb'
+import { refreshPush, setBadge } from './push'
 import { useRealtime } from './useRealtime'
 
 /** Which Profile tile a notification belongs to (its red dot clears when you open that tile). */
@@ -45,6 +46,9 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
       .then(setUnread).catch(() => {})
   }, [])
   useEffect(load, [user?.id, load])
+  useEffect(() => { if (user?.id) refreshPush() }, [user?.id])
+  // Home-screen icon badge = unread count (also set by pushes while the app is closed).
+  useEffect(() => { setBadge(user ? unread.length : 0) }, [user, unread.length])
   useRealtime(user ? ['notifications'] : [], load)
 
   const markRead = useCallback((ids: string[]) => {

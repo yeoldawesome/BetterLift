@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { altNames, defaultLogTip, label, type Usage } from '../lib/exercises'
 import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo } from '../lib/format'
@@ -13,7 +13,8 @@ import { trendLine } from '../lib/stats'
 import { BodyMap } from './BodyMap'
 import { EquipmentUsed, equipmentFor } from './Equipment'
 import { TrophyIcon } from './icons'
-import { LineChart } from './LineChart'
+// Charts load on demand so chart.js stays out of the app's first download.
+const LineChart = lazy(() => import('./LineChart').then((m) => ({ default: m.LineChart })))
 import { Segmented, Sheet, Spinner } from './ui'
 
 type Tab = 'about' | 'stats' | 'history'
@@ -200,15 +201,19 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
       {series.length > 1 && (
         <div className="rounded-2xl border border-line bg-surface p-3">
           <p className="mb-1 text-xs font-bold text-muted">{seriesLabel}</p>
+          <Suspense fallback={<div className="h-48" />}>
           <LineChart className="h-48" labels={sessions.map((s) => s.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={series} trend={trendLine(series)}
             extras={weighted ? sessions.map((s) => `${fmtW(s.bestW, unit)} ${unit} × ${s.bestR} reps · est. 1RM ${fmtW(s.bestE1, unit)}`) : undefined} />
+          </Suspense>
         </div>
       )}
       {cardio && (effortSeries.length > 1 ? (
         <div className="rounded-2xl border border-line bg-surface p-3">
           <p className="mb-1 text-xs font-bold text-muted">Effort per session (RPE 1–10)</p>
+          <Suspense fallback={<div className="h-40" />}>
           <LineChart className="h-40" labels={effortSessions.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={effortSeries} trend={trendLine(effortSeries)}
             extras={effortSeries.map((v) => rpeLabel(Math.round(v)))} />
+          </Suspense>
         </div>
       ) : own && !rpeSets.length ? (
         <p className="rounded-2xl bg-surface-2 p-3 text-center text-sm text-muted">Tap “Add effort” under a set to rate how hard it felt (RPE 1–10). It shows up here over time.</p>

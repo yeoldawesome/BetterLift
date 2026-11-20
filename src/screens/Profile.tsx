@@ -9,6 +9,7 @@ import { StreakCard } from './Workout'
 import { calendarLink } from './Calendar'
 import { resetExercises } from '../lib/exercises'
 import { idbClear } from '../lib/idb'
+import { disablePush } from '../lib/push'
 import { invalidateStats } from '../lib/statsData'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
 import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
@@ -67,7 +68,8 @@ export default function Profile() {
     ...(user.is_moderator ? [{ to: '/review', label: 'Review', icon: '🏆', badge: toReview }] : []),
   ]
 
-  const logout = () => { resetExercises(); idbClear(); invalidateStats(); pb.authStore.clear() }
+  // Stop this phone's pushes first (needs the login), then wipe on-device caches.
+  const logout = async () => { await disablePush().catch(() => {}); resetExercises(); idbClear(); invalidateStats(); pb.authStore.clear() }
 
   return (
     <section className="mx-auto max-w-lg space-y-3 px-safe pb-4">

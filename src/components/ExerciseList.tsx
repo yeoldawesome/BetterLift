@@ -118,13 +118,13 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
         <Input placeholder="Search exercises" value={q} onChange={(e) => setQ(e.target.value)} className="pl-9" />
       </div>
       <div className="flex gap-2">
-        <div className="flex flex-1 rounded-xl bg-surface-2 p-1">
+        <div className="flex min-w-0 flex-1 rounded-xl bg-surface-2 p-1">
           {([['all', 'All'], ['most', 'Most performed'], ['recent', 'Recent']] as [Show, string][]).map(([v, l]) => (
             <button key={v} onClick={() => pickShow(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${show === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
           ))}
         </div>
         <label className="sr-only" htmlFor="ex-sort">Sort</label>
-        <select id="ex-sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="h-10 rounded-xl border border-line bg-surface-2 px-2 text-xs font-bold text-ink">
+        <select id="ex-sort" value={sort} onChange={(e) => setSort(e.target.value as Sort)} className="h-10 w-28 shrink-0 truncate rounded-xl border border-line bg-surface-2 px-2 text-base font-bold text-ink">
           <option value="name">A → Z</option>
           <option value="most">Most performed</option>
           <option value="recent">Recently performed</option>
