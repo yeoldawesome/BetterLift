@@ -1,5 +1,5 @@
 import { bestMatch, LOCAL_FOODS, norm, type Food } from './foods'
-import { kcalFrom, type Macros, type Meal } from './nutrition'
+import { kcalFrom, type Macros, type Meal, type Serving } from './nutrition'
 
 /** Meal named in the text ("…for lunch"), if any. */
 export function mealIn(text: string): Meal | undefined {
@@ -138,6 +138,27 @@ function labelAmount(label: string): { n: number; unit: Unit | null } {
   if (!m) return { n: 1, unit: null }
   const n = parseNum(m[1]) ?? 1
   return { n, unit: m[2] === 'fl oz' ? 'floz' : UNITS[m[2]] ?? null }
+}
+
+/** A unit a logged amount can be shown in. `per` = servings of the base in one of this unit. */
+export type AmountUnit = { u: 'serving' | 'g' | 'oz' | 'lb' | 'ml' | 'floz' | 'cup' | 'tbsp' | 'tsp'; name: string; per: number; approx?: boolean }
+export const UNIT_NAME: Record<AmountUnit['u'], string> = { serving: 'servings', g: 'g', oz: 'oz', lb: 'lb', ml: 'ml', floz: 'fl oz', cup: 'cups', tbsp: 'tbsp', tsp: 'tsp' }
+
+/**
+ * Units a serving can be re-measured in. Mass needs the serving's grams; volume is exact when the serving label is itself a volume
+ * ("1 cup" → tbsp), otherwise it is guessed from the grams at ~0.8 g/ml (1 g/ml for drinks), like the text parser does.
+ */
+export function unitOptions(s: Serving): AmountUnit[] {
+  const out: AmountUnit[] = [{ u: 'serving', name: s.label, per: 1 }]
+  const la = labelAmount(s.label), labelTsp = la.unit && VOL_TSP[la.unit] ? la.n * VOL_TSP[la.unit]! : 0
+  const g = s.g && s.g > 0 ? s.g : 0
+  const density = labelTsp && g ? g / (labelTsp * 4.929) : /fl oz|can|bottle|drink/.test(s.label) ? 1 : 0.8
+  if (g) for (const u of ['g', 'oz', 'lb'] as const) out.push({ u, name: UNIT_NAME[u], per: MASS_G[u]! / g })
+  for (const u of ['cup', 'tbsp', 'tsp', 'floz', 'ml'] as const) {
+    if (labelTsp) out.push({ u, name: UNIT_NAME[u], per: VOL_TSP[u]! / labelTsp })
+    else if (g) out.push({ u, name: UNIT_NAME[u], per: (VOL_TSP[u]! * 4.929 * density) / g, approx: true })
+  }
+  return out
 }
 
 const isDrink = (f: Food) => /fl oz|can|cup|bottle/.test(f.servings[0].label) && (f.servings[0].g ?? 0) >= 200

@@ -60,7 +60,8 @@ export function mealNow(d = new Date()): Meal {
 
 const toRecord = (d: Draft, day: string) => ({
   user: me(), day, meal: d.meal, name: d.name.trim().slice(0, 120) || 'Quick add', detail: (d.detail ?? servingText(d.servings, d.base)).slice(0, 160),
-  servings: r1(d.servings) || 1, base: d.base, kcal: Math.max(0, Math.round(d.macros.kcal)), protein_g: Math.max(0, r1(d.macros.p)),
+  // Kept precise so an amount re-measured in grams/cups reads back exactly (200 g, not 205 g).
+  servings: Math.round(d.servings * 1000) / 1000 || 1, base: d.base, kcal: Math.max(0, Math.round(d.macros.kcal)), protein_g: Math.max(0, r1(d.macros.p)),
   carbs_g: Math.max(0, r1(d.macros.c)), fat_g: Math.max(0, r1(d.macros.f)), source: d.source, barcode: d.barcode ?? '',
 })
 
@@ -117,9 +118,43 @@ export type Settings = {
   tdeeAdjust: number
   /** When a pace suggestion was last applied or dismissed (ms). The next check only uses weigh-ins after it. */
   lastCheckAt: number
+  /** Weight you're cutting or bulking toward, in kg (0 = none set). */
+  goalKg: number
 }
 export const DEFAULT_SETTINGS: Settings = {
-  setUp: false, goal: 'maintain', rate: 0.5, activity: 1.375, birthYear: 0, proteinPerKg: 1.8, fatPct: 0.27, eatBack: 0, countLifting: true, kcalOverride: 0, tdeeAdjust: 0, lastCheckAt: 0,
+  setUp: false, goal: 'maintain', rate: 0.5, activity: 1.375, birthYear: 0, proteinPerKg: 1.8, fatPct: 0.27, eatBack: 0, countLifting: true, kcalOverride: 0, tdeeAdjust: 0, lastCheckAt: 0, goalKg: 0,
+}
+
+export type GoalProgress = {
+  goalKg: number
+  /** kg still to lose (cut) or gain (bulk); ≤ 0 once reached. */
+  leftKg: number
+  reached: boolean
+  /** Goal is on the wrong side of your weight (e.g. cutting to a heavier weight). */
+  wrongWay: boolean
+  /** Estimated weeks to go at your planned pace, and the day you'd get there. */
+  weeks: number
+  eta: string
+}
+
+/** "Mar 14" (with the year when it isn't this year), for a goal's estimated date. */
+export const fmtEta = (day: string) => {
+  const d = parseDay(day)
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', ...(d.getFullYear() !== new Date().getFullYear() ? { year: 'numeric' } : {}) })
+}
+
+/** How far you are from your goal weight while cutting or bulking. Null when there's no goal weight or you're not cutting/bulking. */
+export function goalProgress(s: Settings, kg: number, now = new Date()): GoalProgress | null {
+  if (!s.goalKg || (s.goal !== 'cut' && s.goal !== 'bulk')) return null
+  const dir = s.goal === 'cut' ? -1 : 1
+  const leftKg = (s.goalKg - kg) * dir
+  // Within ~0.25 kg counts as there (scale noise).
+  const reached = leftKg <= 0.25
+  const wrongWay = leftKg < -2
+  const perWk = Math.abs(weeklyChangeKg(s, kg))
+  const weeks = reached || !perWk ? 0 : Math.ceil(leftKg / perWk)
+  const end = new Date(now); end.setDate(end.getDate() + weeks * 7)
+  return { goalKg: s.goalKg, leftKg, reached, wrongWay, weeks, eta: dayStr(end) }
 }
 export const GOALS: [Goal, string][] = [['cut', 'Cut'], ['maintain', 'Maintain'], ['bulk', 'Bulk'], ['track', 'Just track']]
 export const RATES: Record<'cut' | 'bulk', { v: number; label: string; hint: string }[]> = {

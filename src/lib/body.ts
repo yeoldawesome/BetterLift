@@ -5,8 +5,13 @@ export type BodyMetric = {
   id: string; measured_at: string; weight_kg: number; bmi: number; body_fat_pct: number; fat_mass_kg: number; muscle_pct: number; muscle_kg: number
   skeletal_pct: number; skeletal_kg: number; bone_kg: number; protein_pct: number; water_pct: number; fat_free_kg: number
   subcut_fat_pct: number; visceral_fat: number; bmr: number; metabolic_age: number
+  /** 'renpho' (CSV import), 'manual' (weigh-in), or 'workout:<id>' (bodyweight entered when finishing that workout). */
+  source?: string
 }
-export type BodyKey = Exclude<keyof BodyMetric, 'id' | 'measured_at'>
+
+/** The workout a reading was logged with, if any. */
+export const workoutOf = (r: Pick<BodyMetric, 'source'>) => (r.source?.startsWith('workout:') ? r.source.slice(8) : '')
+export type BodyKey = Exclude<keyof BodyMetric, 'id' | 'measured_at' | 'source'>
 /** kind: mass = stored kg, shown in user unit; pct = %; plain = unitless. */
 export const BODY_FIELDS: { k: BodyKey; label: string; kind: 'mass' | 'pct' | 'plain'; suffix?: string }[] = [
   { k: 'weight_kg', label: 'Weight', kind: 'mass' },

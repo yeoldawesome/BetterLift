@@ -15,6 +15,7 @@ import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, 
 import { CardioEffort } from '../components/nutrition/CardioEffort'
 import { SwipeRow } from '../components/SwipeRow'
 import { isCardio } from '../lib/energy'
+import { loadWeight } from '../lib/nutrition'
 import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
 import { ask, tell } from '../components/Dialog'
 
@@ -282,6 +283,8 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
   const [saveRoutine, setSaveRoutine] = useState(user.save_as_routine)
   const [routineName, setRoutineName] = useState('')
   const [bw, setBw] = useState(user.bodyweight_kg ? fmtW(user.bodyweight_kg, unit) : '')
+  // Only a bodyweight you actually typed becomes a Physique reading (the prefilled one is just your last known weight).
+  const [bwTouched, setBwTouched] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -299,6 +302,11 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
       const post = await repairActive({ ...a, name: name.trim() || a.name, notes })
       const bwKg = num(bw) > 0 ? fromUnit(num(bw), unit) : user.bodyweight_kg
       const id = await finishWorkout(post, unit, visibility, Math.round(bwKg * 100) / 100)
+      // A bodyweight you typed here is a weigh-in: it shows on Physique, linked back to this workout.
+      if (bwTouched && num(bw) > 0) {
+        await pb.collection('body_metrics').create({ user: user.id, measured_at: new Date().toISOString(), weight_kg: Math.round(bwKg * 100) / 100, source: `workout:${id}` })
+          .then(() => loadWeight(true)).catch(() => {})
+      }
       const prefs: Partial<User> = {}
       // Only write a new bodyweight if it actually changed in the displayed unit (avoids lb↔kg rounding drift).
       if (num(bw) > 0 && bw !== fmtW(user.bodyweight_kg, unit)) prefs.bodyweight_kg = Math.round(bwKg * 100) / 100
@@ -334,7 +342,7 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
         {a.routine && routineName && name.trim() !== routineName && <p className="-mt-2 text-xs text-muted">Only this post is renamed — your routine stays “{routineName}”.</p>}
         <Input label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did it feel?" />
         <div>
-          <Input label={`Bodyweight today (${unit})`} inputMode="decimal" value={bw} onChange={(e) => setBw(e.target.value)} />
+          <Input label={`Bodyweight today (${unit})`} inputMode="decimal" value={bw} onChange={(e) => { setBw(e.target.value); setBwTouched(true) }} />
           <p className="mt-1 text-xs text-muted">Pre-filled with your last weigh-in. Changing it updates your profile.</p>
         </div>
         <div>

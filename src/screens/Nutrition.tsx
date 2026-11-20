@@ -9,7 +9,7 @@ import { BackIcon, BarcodeIcon, CalendarIcon, ChevronIcon, FlameIcon, PlusIcon, 
 import { Card, ErrorText, Screen, Spinner } from '../components/ui'
 import { loadBurn, type DayBurn } from '../lib/energy'
 import {
-  ACTIVITY, addDays, addLogs, applyPace, computeTargets, dayLabel, deleteLog, isDay, loadLogs, logMacros, mealNow, MEALS, paceCheck, parseDay, saveSettings, sumLogs, today,
+  ACTIVITY, addDays, addLogs, applyPace, computeTargets, dayLabel, deleteLog, goalProgress, isDay, loadLogs, logMacros, mealNow, MEALS, paceCheck, parseDay, saveSettings, sumLogs, today,
   useNutrition, type FoodLog, type Macros, type Meal, type Settings, type Targets,
 } from '../lib/nutrition'
 import { errMsg, useUser } from '../lib/pb'
@@ -165,7 +165,7 @@ export default function Nutrition() {
         ))}
       </div>
 
-      <WeightCard weight={weight} pace={pace} unit={unit} onLog={() => setWeighing(true)} />
+      <WeightCard weight={weight} pace={pace} unit={unit} goal={settings && person ? goalProgress(settings, person.kg) : null} onLog={() => setWeighing(true)} />
 
       {/* Meals */}
       {logs && MEALS.map(([meal, label]) => {

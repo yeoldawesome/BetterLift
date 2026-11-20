@@ -5,9 +5,9 @@ import { fmtK, MACRO_COLORS } from '../components/nutrition/bits'
 import { WeighInSheet } from '../components/nutrition/Weight'
 import { Button, Card, ErrorText, Input, Screen, Segmented, Spinner, Toggle } from '../components/ui'
 import { loadBurn, type BurnItem } from '../lib/energy'
-import { fmtW, KG_LB } from '../lib/format'
+import { fmtW, fromUnit, KG_LB, num } from '../lib/format'
 import {
-  ACTIVITY, addDays, ageOf, computeTargets, dayLabel, GOALS, KCAL_PER_KG, paceCheck, parseDay, personFor, PROTEIN, proteinDefault, RATES, saveSettings, today, useNutrition,
+  ACTIVITY, addDays, ageOf, computeTargets, dayLabel, fmtEta, goalProgress, GOALS, KCAL_PER_KG, paceCheck, parseDay, personFor, PROTEIN, proteinDefault, RATES, saveSettings, today, useNutrition,
   weeklyChangeKg, type Goal, type Settings,
 } from '../lib/nutrition'
 import { errMsg, pb, useUser } from '../lib/pb'
@@ -24,6 +24,7 @@ export default function NutritionGoals() {
   const [d, setD] = useState<Draft | null>(null)
   const [age, setAge] = useState('')
   const [override, setOverride] = useState('')
+  const [goalTxt, setGoalTxt] = useState('')
   const [avgBurn, setAvgBurn] = useState<number | null>(null)
   const [lifts, setLifts] = useState<BurnItem[] | null>(null)
   const [weighing, setWeighing] = useState(false)
@@ -35,6 +36,7 @@ export default function NutritionGoals() {
     setD({ ...s, cm: user.height_cm, sex: user.sex })
     setAge(ageOf(s) ? `${ageOf(s)}` : '')
     setOverride(s.kcalOverride ? `${s.kcalOverride}` : '')
+    setGoalTxt(s.goalKg ? fmtW(s.goalKg, unit) : '')
   }, [s]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const person = d ? personFor({ bodyweight_kg: user.bodyweight_kg, height_cm: d.cm, sex: d.sex }, d) : null
@@ -67,6 +69,7 @@ export default function NutritionGoals() {
   const proteinLabel = (gkg: number) => perLb ? `${Math.round((gkg / KG_LB) * 100) / 100} g/lb` : `${gkg} g/kg`
   const setGoal = (g: Goal) => set({ goal: g, rate: g === 'cut' ? 0.5 : g === 'bulk' ? 0.25 : d.rate, proteinPerKg: g === 'track' ? d.proteinPerKg : proteinDefault(g) })
   const pace = paceCheck(s, weight?.weighIns ?? [], person.kg)
+  const gp = goalProgress(d, person.kg)
 
   const confirm = async () => {
     setBusy(true); setErr('')
@@ -132,6 +135,21 @@ export default function NutritionGoals() {
               </button>
             )
           })}
+          <Input label={`Goal weight (${unit}, optional)`} inputMode="decimal" value={goalTxt} placeholder={`e.g. ${fmtW(person.kg + (d.goal === 'cut' ? -5 : 5), unit)}`}
+            onChange={(e) => {
+              const v = e.target.value.replace(/[^\d.,]/g, '').slice(0, 6)
+              setGoalTxt(v)
+              const kg = fromUnit(num(v), unit)
+              if (!v) set({ goalKg: 0 })
+              else if (kg >= 25 && kg <= 320) set({ goalKg: Math.round(kg * 100) / 100 })
+            }} />
+          {gp && (
+            <p className={`text-xs ${gp.wrongWay ? 'font-semibold text-amber-500' : 'text-muted'}`}>
+              {gp.wrongWay ? `That's ${d.goal === 'cut' ? 'above' : 'below'} your current weight (${fmtW(person.kg, unit)} ${unit}). ${d.goal === 'cut' ? 'Bulk' : 'Cut'} instead?`
+                : gp.reached ? `You're already at ${fmtW(gp.goalKg, unit)} ${unit}.`
+                : `${fmtW(gp.leftKg, unit)} ${unit} to ${d.goal === 'cut' ? 'lose' : 'gain'}: about ${gp.weeks} week${gp.weeks === 1 ? '' : 's'} at this pace, around ${fmtEta(gp.eta)}.`}
+            </p>
+          )}
         </div>
       )}
       {!tracking && (

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { BottomSheet, Button, ErrorText } from '../ui'
 import { fmtW, fromUnit, num, toUnit } from '../../lib/format'
-import { dayLabel, dayStr, logWeighIn, today, type PaceCheck, type WeightInfo } from '../../lib/nutrition'
+import { dayLabel, dayStr, fmtEta, logWeighIn, today, type GoalProgress, type PaceCheck, type WeightInfo } from '../../lib/nutrition'
 import { errMsg, type Unit } from '../../lib/pb'
 import { fmtK } from './bits'
 
@@ -14,7 +14,7 @@ export const ScaleIcon = (p: { width?: number; height?: number; className?: stri
 const signed = (kg: number, unit: Unit) => `${kg >= 0 ? '+' : '−'}${fmtW(Math.abs(kg), unit)}`
 
 /** Latest weigh-in, change over the last week, pace status, and a Log button. */
-export function WeightCard({ weight, pace, unit, onLog }: { weight: WeightInfo | null; pace: PaceCheck; unit: Unit; onLog: () => void }) {
+export function WeightCard({ weight, pace, unit, goal, onLog }: { weight: WeightInfo | null; pace: PaceCheck; unit: Unit; goal?: GoalProgress | null; onLog: () => void }) {
   const ws = weight?.weighIns ?? []
   const last = ws[ws.length - 1]
   const weekAgo = last ? [...ws].reverse().find((w) => w.t <= last.t - 6 * 864e5) : undefined
@@ -33,6 +33,12 @@ export function WeightCard({ weight, pace, unit, onLog }: { weight: WeightInfo |
         <p className="truncate text-xs text-muted">
           {last ? `${dayLabel(dayStr(new Date(last.t)))}${status ? ' · ' : ''}` : 'Log your weight to keep targets on track. '}{status}
         </p>
+        {goal && (
+          <p className={`truncate text-xs font-semibold ${goal.reached ? 'text-accent' : 'text-muted'}`}>
+            {goal.reached ? `Goal of ${fmtW(goal.goalKg, unit)} ${unit} reached! Switch to Maintain in Goals.`
+              : `Goal ${fmtW(goal.goalKg, unit)} ${unit} · ${fmtW(goal.leftKg, unit)} to go · ~${fmtEta(goal.eta)}`}
+          </p>
+        )}
       </div>
       <button onClick={onLog} className="h-9 shrink-0 rounded-xl bg-accent px-3 text-sm font-bold text-accent-ink active:scale-95">Log weight</button>
     </div>

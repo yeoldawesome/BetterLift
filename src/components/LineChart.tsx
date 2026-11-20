@@ -8,13 +8,17 @@ Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryS
  * `yTitle` labels the value axis; `yFormat` formats axis ticks and tooltip values (e.g. minutes → "1h 30m").
  * `onPoint` makes points openable: click one with a mouse, or on a phone tap once to see it and again to open it.
  */
-export function LineChart({ labels, values, trend, extras, className = 'h-56', yTitle, yFormat, onPoint }: {
+export function LineChart({ labels, values, trend, extras, className = 'h-56', yTitle, yFormat, onPoint, pointAction }: {
   labels: string[]; values: number[]; trend?: number[]; extras?: string[]; className?: string; yTitle?: string; yFormat?: (v: number) => string
   onPoint?: (index: number) => void
+  /** What opening a point does, for the tooltip hint (default "open workout"). */
+  pointAction?: (index: number) => string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const point = useRef(onPoint)
   point.current = onPoint
+  const action = useRef(pointAction)
+  action.current = pointAction
   const openable = !!onPoint
   useEffect(() => {
     const mouse = matchMedia('(hover: hover) and (pointer: fine)').matches
@@ -53,7 +57,11 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
             callbacks: {
               label: (i) => (yFormat ? yFormat(Number(i.raw)) : String(i.formattedValue)),
               afterLabel: (i) => (extras?.[i.dataIndex] ? extras[i.dataIndex] : ''),
-              footer: () => (openable ? (mouse ? 'Click to open workout' : 'Tap again to open workout') : ''),
+              footer: (items) => {
+                if (!openable) return ''
+                const what = (items[0] && action.current?.(items[0].dataIndex)) || 'open workout'
+                return `${mouse ? 'Click' : 'Tap again'} to ${what}`
+              },
             },
             footerColor: accent, footerFont: { size: 11, weight: 'bold' },
           },

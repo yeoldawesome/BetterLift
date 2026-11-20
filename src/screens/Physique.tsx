@@ -1,10 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LineChart } from '../components/LineChart'
-import { Spinner } from '../components/ui'
+import { useNavigate } from 'react-router-dom'
+import { BottomSheet, Button, ErrorText, Spinner } from '../components/ui'
+import { ask } from '../components/Dialog'
 import { ScaleIcon } from '../components/icons'
-import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, type BodyKey, type BodyMetric } from '../lib/body'
-import { toUnit } from '../lib/format'
-import { errMsg, me, pb, useUnit, type User } from '../lib/pb'
+import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, workoutOf, type BodyKey, type BodyMetric } from '../lib/body'
+import { fromUnit, num, toUnit } from '../lib/format'
+import { loadWeight } from '../lib/nutrition'
+import { errMsg, me, pb, useUnit, type Unit, type User } from '../lib/pb'
 import { trendLine } from '../lib/stats'
 
 const RANGES: [string, number][] = [['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
@@ -30,6 +33,8 @@ export function PhysiqueView({ user }: { user: User }) {
   const [tod, setTodState] = useState<Tod>(() => { try { const v = localStorage.getItem(TOD_KEY); return v === 'morning' || v === 'night' ? v : 'all' } catch { return 'all' } })
   const setTod = (t: Tod) => { setTodState(t); try { localStorage.setItem(TOD_KEY, t) } catch { /* private mode */ } }
   const [msg, setMsg] = useState('')
+  const [editing, setEditing] = useState<BodyMetric | null>(null)
+  const nav = useNavigate()
   const [busy, setBusy] = useState(false)
   const file = useRef<HTMLInputElement>(null)
 
@@ -72,11 +77,30 @@ export function PhysiqueView({ user }: { user: User }) {
     const pts = rows.filter((r) => r[key] > 0 && inTod(r.measured_at, tod) && (!days || new Date(r.measured_at).getTime() >= Date.now() - days * 86400000))
     const v = pts.map((r) => show(key, r[key]))
     return {
-      v, trend: v.length >= 2 ? trendLine(v) : undefined, times: pts.map((r) => timeOf(r.measured_at)),
+      pts, v, trend: v.length >= 2 ? trendLine(v) : undefined, times: pts.map((r) => timeOf(r.measured_at)),
       labels: pts.map((r) => new Date(r.measured_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows, key, days, unit, tod])
+
+  /** A reading from a workout opens that workout; any other reading (or one whose workout was deleted) opens the editor. */
+  const openPoint = async (r: BodyMetric) => {
+    const wid = workoutOf(r)
+    if (wid) {
+      const exists = await pb.collection('workouts').getOne(wid, { fields: 'id' }).then(() => true).catch(() => false)
+      if (exists) return nav(`/w/${wid}`)
+    }
+    setEditing(r)
+  }
+  /** After an edit or delete: reload, and keep profile bodyweight on the newest reading. */
+  const changed = async () => {
+    const all = await loadBody()
+    setRows(all)
+    const newest = [...all].reverse().find((r) => r.weight_kg > 0)
+    if (newest && Math.abs(newest.weight_kg - user.bodyweight_kg) > 0.01)
+      await pb.collection('users').update(user.id, { bodyweight_kg: Math.round(newest.weight_kg * 100) / 100 }).catch(() => {})
+    loadWeight(true).catch(() => {})
+  }
 
   if (!rows) return <Spinner />
 
@@ -136,7 +160,9 @@ export function PhysiqueView({ user }: { user: User }) {
               </div>
             </div>
             {chart && chart.v.length
-              ? <LineChart className="h-56" labels={chart.labels} values={chart.v} trend={chart.trend} extras={chart.v.map((v, i) => `${v} ${suffix(key)} · ${chart.times[i]}`)} />
+              ? <LineChart className="h-56" labels={chart.labels} values={chart.v} trend={chart.trend}
+                  extras={chart.v.map((v, i) => `${v} ${suffix(key)} · ${chart.times[i]}${workoutOf(chart.pts[i]) ? ' · from a workout' : ''}`)}
+                  {...(self ? { onPoint: (i: number) => openPoint(chart.pts[i]), pointAction: (i: number) => (workoutOf(chart.pts[i]) ? 'open workout' : 'edit') } : {})} />
               : <p className="py-10 text-center text-sm text-muted">No {tod === 'all' ? '' : `${tod} `}readings in this range.</p>}
             {tod !== 'all' && <p className="mt-1 text-center text-[11px] text-faint">{tod === 'morning' ? 'Morning: before 10 AM' : 'Night: 10 AM and later'}</p>}
           </div>
@@ -158,6 +184,61 @@ export function PhysiqueView({ user }: { user: User }) {
 
         </>
       )}
+      {editing && <ReadingEditor r={editing} field={key} unit={unit} onClose={() => setEditing(null)} onChanged={changed} />}
     </div>
+  )
+}
+
+/** "YYYY-MM-DDTHH:mm" in local time, for a datetime-local input. */
+const localInput = (iso: string) => {
+  const d = new Date(iso), p = (n: number) => `${n}`.padStart(2, '0')
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`
+}
+
+/** Edit one reading's value (for the metric on the chart) and time, or delete it. */
+function ReadingEditor({ r, field, unit, onClose, onChanged }: { r: BodyMetric; field: BodyKey; unit: Unit; onClose: () => void; onChanged: () => Promise<void> }) {
+  const f = BODY_FIELDS.find((x) => x.k === field)!
+  const mass = f.kind === 'mass'
+  const [val, setVal] = useState(`${mass ? r1(toUnit(r[field], unit)) : r1(r[field])}`)
+  const [when, setWhen] = useState(localInput(r.measured_at))
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const v = num(val)
+  const at = new Date(when)
+  const bad = !(v > 0) || isNaN(at.getTime()) || at.getTime() > Date.now() + 60e3
+  const sfx = mass ? unit : f.kind === 'pct' ? '%' : f.suffix ?? ''
+  const src = r.source === 'renpho' ? 'Imported from your smart scale' : r.source === 'manual' ? 'Logged weigh-in' : workoutOf(r) ? 'Logged with a workout (since deleted)' : 'Reading'
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true); setErr('')
+    try { await fn(); await onChanged(); onClose() } catch (e) { setErr(errMsg(e)); setBusy(false) }
+  }
+  const save = () => run(() => pb.collection('body_metrics').update(r.id, {
+    [field]: Math.round((mass ? fromUnit(v, unit) : v) * 1000) / 1000, measured_at: at.toISOString(),
+  }))
+  const remove = async () => {
+    if (await ask({ title: 'Delete this reading?', body: `${new Date(r.measured_at).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}${r.source === 'renpho' ? ' · removes every metric from this scale reading' : ''}`, confirmLabel: 'Delete', danger: true }))
+      run(() => pb.collection('body_metrics').delete(r.id))
+  }
+
+  return (
+    <BottomSheet title={`Edit ${f.label.toLowerCase()}`} onClose={onClose}>
+      <div className="space-y-3">
+        <p className="text-sm text-muted">{src}</p>
+        <label className="relative block">
+          <input autoFocus inputMode="decimal" value={val} onChange={(e) => setVal(e.target.value.replace(/[^\d.,]/g, ''))} aria-label={`${f.label} (${sfx})`}
+            className="num h-16 w-full rounded-2xl border border-line bg-surface-2 px-4 pr-14 text-3xl font-black text-ink outline-none focus:border-accent" />
+          <span className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-lg font-bold text-faint">{sfx}</span>
+        </label>
+        <label className="flex items-center justify-between gap-3 rounded-xl bg-surface p-2 pl-3">
+          <span className="text-sm text-muted">When</span>
+          <input type="datetime-local" value={when} max={localInput(new Date().toISOString())} onChange={(e) => setWhen(e.target.value)}
+            className="h-10 rounded-lg bg-surface-2 px-2 text-base font-semibold text-ink outline-none" />
+        </label>
+        <ErrorText>{err}</ErrorText>
+        <Button disabled={busy || bad} onClick={save}>{busy ? 'Saving…' : 'Save'}</Button>
+        <Button variant="danger" disabled={busy} onClick={remove}>Delete reading</Button>
+      </div>
+    </BottomSheet>
   )
 }

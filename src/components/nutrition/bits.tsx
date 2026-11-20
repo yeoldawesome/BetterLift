@@ -86,15 +86,15 @@ export function NumField({ label, value, onChange, placeholder, suffix, dot }: {
 }
 
 /** − value + stepper for servings. Typing keeps its own text so "1." or "0,5" can be entered. */
-export function Stepper({ value, onChange, step = 0.5, min = 0.25 }: { value: number; onChange: (v: number) => void; step?: number; min?: number }) {
+export function Stepper({ value, onChange, step = 0.5, min = 0.25, max = 100 }: { value: number; onChange: (v: number) => void; step?: number; min?: number; max?: number }) {
   const [txt, setTxt] = useState(`${value}`)
   useEffect(() => { if (parseFloat(txt.replace(',', '.')) !== value) setTxt(`${value}`) }, [value]) // eslint-disable-line react-hooks/exhaustive-deps
-  const set = (v: number) => onChange(Math.max(min, Math.round(v * 100) / 100))
+  const set = (v: number) => onChange(Math.min(max, Math.max(min, Math.round(v * 100) / 100)))
   return (
     <div className="flex h-10 shrink-0 items-center overflow-hidden rounded-xl bg-surface-2">
       <button type="button" onClick={() => set(value - step)} className="h-full w-9 text-lg font-bold text-muted active:bg-line" aria-label="Less">−</button>
       <input inputMode="decimal" value={txt} onBlur={() => setTxt(`${value}`)}
-        onChange={(e) => { setTxt(e.target.value); const n = parseFloat(e.target.value.replace(',', '.')); if (Number.isFinite(n) && n > 0) onChange(Math.min(100, n)) }}
+        onChange={(e) => { setTxt(e.target.value); const n = parseFloat(e.target.value.replace(',', '.')); if (Number.isFinite(n) && n > 0) onChange(Math.min(max, n)) }}
         className="num h-full w-12 bg-transparent text-center font-bold outline-none" aria-label="Servings" />
       <button type="button" onClick={() => set(value + step)} className="h-full w-9 text-lg font-bold text-muted active:bg-line" aria-label="More">+</button>
     </div>
