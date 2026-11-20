@@ -387,7 +387,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const [restOpen, setRestOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  const collapsed = !!x.collapsed
   const [typeFor, setTypeFor] = useState<number | null>(null)
   // Swiped-away set, kept for a few seconds so it can be put back.
   const [undo, setUndo] = useState<{ i: number; set: ASet } | null>(null)
@@ -447,7 +447,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
             </>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <button onClick={() => setCollapsed((c) => !c)} className="grid size-9 place-items-center rounded-lg text-accent active:bg-surface-2" aria-label={collapsed ? `Expand ${x.ex.name}` : `Collapse ${x.ex.name}`} aria-expanded={!collapsed}>
+          <button onClick={() => setEx(x.key, (e) => ({ ...e, collapsed: !e.collapsed }))} className="grid size-9 place-items-center rounded-lg text-accent active:bg-surface-2" aria-label={collapsed ? `Expand ${x.ex.name}` : `Collapse ${x.ex.name}`} aria-expanded={!collapsed}>
             <UpIcon width={22} height={22} strokeWidth={2.5} className={`transition-transform ${collapsed ? 'rotate-180' : ''}`} />
           </button>
           <div className="relative">

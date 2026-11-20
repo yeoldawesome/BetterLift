@@ -10,7 +10,7 @@ export type ASet = { w: string; r: string; sec: string; dist: string; done: bool
 export type Prev = { w: number; r: number; sec: number; dist: number }
 /** rest = between sets, restAfter = after the last set (transition to the next exercise). */
 /** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
-export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string }
+export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
 type Rest = { end: number; total: number } | null
 
