@@ -27,6 +27,10 @@ export interface User extends RecordModel {
   /** Has tapped the Nutrition switch in Settings (clears the "New" dots). */
   nutrition_seen: boolean
   default_rest_after_s: number
+  /** Kinds of push notification turned off in Settings (see PUSH_KINDS). */
+  push_off: string[] | null
+  /** Has seen the "turn on notifications" popup. */
+  push_asked: boolean
 }
 export type ReviewStatus = '' | 'pending' | 'approved' | 'rejected'
 export interface Exercise extends RecordModel {

@@ -10,7 +10,7 @@ import { deleteAllHistory } from '../lib/history'
 import { bmi, fmtW, fromUnit, num } from '../lib/format'
 import { errMsg, nutritionNew, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
 import { MAX_TABS } from '../lib/tabs'
-import { disablePush, enablePush, pushState, type PushState } from '../lib/push'
+import { disablePush, enablePush, PUSH_KINDS, pushState, type PushState } from '../lib/push'
 
 /** Turning nutrition on with a custom bottom bar: add the Nutrition tab if there's room (the default bar already has it). */
 function withNutritionTab(u: User, on: boolean): Partial<User> {
@@ -37,7 +37,10 @@ export default function Settings() {
   return (
     <Screen title="Settings" back>
       <ErrorText>{err}</ErrorText>
-      <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Units</h2>
+      <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Notifications</h2>
+      <NotificationSettings user={user} save={save} />
+
+      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Units</h2>
       <Segmented value={unit} onChange={(u) => { save({ unit: u }); setBw(user.bodyweight_kg ? fmtW(user.bodyweight_kg, u) : '') }} options={[['lb', 'Pounds (lb)'], ['kg', 'Kilograms (kg)']]} />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Body</h2>
@@ -51,9 +54,6 @@ export default function Settings() {
       </div>
       <Link to="/themes" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Themes & colors <span className="text-accent">›</span></Link>
       <Link to="/settings/tab-bar" className="flex items-center justify-between rounded-xl border border-line bg-surface p-3 font-bold">Bottom bar <span className="text-accent">›</span></Link>
-
-      <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Notifications</h2>
-      <PushToggle />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Nutrition</h2>
       {/* New accounts start with nutrition off; it's highlighted (with dots on Profile) until they tap it once. */}
@@ -197,26 +197,50 @@ const PUSH_HELP:Partial<Record<PushState, string>> = {
   denied: 'Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Better Lift, then come back.',
 }
 
-/** Push notifications on this device: comments, reactions, friend requests, reminders… plus the red number on the app icon. */
-function PushToggle() {
+/**
+ * Settings → Notifications: the switch for this device (push + the red number on the app icon), a test button, and
+ * which kinds of notification you want (saved on your account, so they apply to every device).
+ */
+function NotificationSettings({ user, save }: { user: User; save: (patch: Partial<User>) => Promise<unknown> }) {
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
-  useEffect(() => { pushState().then(setState).catch(() => setState('unsupported')) }, [])
-  if (!state) return null
+  const [tested, setTested] = useState('')
+  useEffect(() => { pushState().then(setState).catch(() => setState('off')) }, [])
+  const off = new Set(Array.isArray(user.push_off) ? user.push_off : [])
+
   const toggle = async (on: boolean) => {
-    setBusy(true); setErr('')
+    setBusy(true); setErr(''); setTested('')
     try { setState(on ? await enablePush() : (await disablePush(), 'off')) } catch (e) { setErr(errMsg(e)) }
     setBusy(false)
   }
-  const help = PUSH_HELP[state]
+  const test = async () => {
+    setTested(''); setErr('')
+    try { await pb.send('/api/betterlift/push-test', { method: 'POST' }); setTested('Sent. It should show up in a few seconds.') } catch (e) { setErr(errMsg(e)) }
+  }
+  const setKind = (k: string, on: boolean) => {
+    const next = new Set(off)
+    if (on) next.delete(k); else next.add(k)
+    save({ push_off: [...next] })
+  }
+  const help = state && PUSH_HELP[state]
+
   return (
     <>
-      {help
-        ? <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted"><span className="block font-bold text-ink">Push notifications</span>{help}</p>
-        : <Toggle on={state === 'on'} onChange={(on) => !busy && toggle(on)} title="Push notifications"
-            body={state === 'on' ? 'On for this device: comments, reactions, friend requests and reminders, with a badge on the app icon.' : 'Get comments, reactions, friend requests and reminders on this device, even when the app is closed.'} />}
+      {!state ? <Card className="p-3 text-sm text-muted">Checking this device…</Card>
+        : help ? <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted"><span className="block font-bold text-ink">Push notifications</span>{help}</p>
+        : <Toggle on={state === 'on'} onChange={(on) => !busy && toggle(on)} title={busy ? 'Push notifications…' : 'Push notifications on this device'}
+            body={state === 'on' ? 'On, with a badge on the app icon for anything unread.' : 'Get notified even when the app is closed, with a badge on the app icon.'} />}
+      {state === 'on' && (
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={test}>Send a test</Button>
+          {tested && <span className="text-sm font-semibold text-accent">{tested}</span>}
+        </div>
+      )}
       <ErrorText>{err}</ErrorText>
+      <p className="pt-1 text-xs font-bold uppercase tracking-wider text-muted">Notify me about</p>
+      {PUSH_KINDS.map((k) => <Toggle key={k.k} on={!off.has(k.k)} onChange={(on) => setKind(k.k, on)} title={k.title} body={k.body} />)}
+      <p className="text-xs text-faint">These apply to all your devices. Everything still shows in the app's notification list.</p>
     </>
   )
 }

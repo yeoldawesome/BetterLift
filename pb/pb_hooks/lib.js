@@ -66,6 +66,12 @@ function sendPush(app, user, msg) {
   const url = $os.getenv("PUSH_URL"), secret = $os.getenv("PUSH_SECRET")
   if (!url || !secret) return
   try {
+    // Settings → Notifications: skip kinds this user turned off.
+    if (msg.kind) {
+      let off = []
+      try { off = JSON.parse(app.findRecordById("users", user).getString("push_off") || "[]") } catch (_) {}
+      if (Array.isArray(off) && off.indexOf(msg.kind) >= 0) return
+    }
     const subs = app.findRecordsByFilter("push_subscriptions", "user = {:u}", "", 20, 0, { u: user })
     if (!subs.length) return
     const unread = app.countRecords("notifications", $dbx.hashExp({ user: user, read: false }))
@@ -81,9 +87,22 @@ function sendPush(app, user, msg) {
   } catch (err) { app.logger().error("push failed", "error", String(err)) }
 }
 
+/** Which Settings switch controls a notification type (same as PUSH_KINDS in src/lib/push.ts). */
+function pushKind(type) {
+  switch (type) {
+    case "comment": case "reply": return "comments"
+    case "reaction": return "reactions"
+    case "friend_request": case "friend_accept": return "friends"
+    case "nudge": return "nudges"
+    case "exercise_approved": case "exercise_rejected": case "feedback_reply": return "updates"
+  }
+  return ""
+}
+
 /** Push a new in-app notification to the user's devices. */
 function push(app, n) {
-  sendPush(app, n.getString("user"), { body: n.getString("text"), path: notifPath(n.getString("type"), n.getString("target")), tag: n.id })
+  const type = n.getString("type")
+  sendPush(app, n.getString("user"), { body: n.getString("text"), path: notifPath(type, n.getString("target")), tag: n.id, kind: pushKind(type) })
 }
 
 const uname = (app, id) => { try { return "@" + app.findRecordById("users", id).getString("username") } catch (_) { return "Someone" } }

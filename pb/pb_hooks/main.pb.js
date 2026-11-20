@@ -95,7 +95,7 @@ onRecordEnrich((e) => {
   const superuser = info && info.auth && info.auth.isSuperuser()
   if (!superuser && viewer !== e.record.id) {
     e.record.hide("unit", "theme", "tab_bar", "post_visibility", "update_routine", "save_as_routine",
-      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen")
+      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen", "push_off", "push_asked")
     let friend = false
     if (viewer) for (const id of e.record.getStringSlice("friends")) if (id === viewer) { friend = true; break }
     if (!friend) e.record.hide("bodyweight_kg", "height_cm")
@@ -357,8 +357,18 @@ onRecordAfterCreateSuccess((e) => {
     body: text.length > 140 ? text.slice(0, 137) + "…" : text,
     path: "/messages/" + from,
     tag: "msg-" + from,
+    kind: "messages",
   })
 }, "messages")
+
+// Settings → "Send a test": a push to your own devices, so you can check notifications work.
+routerAdd("POST", "/api/betterlift/push-test", (e) => {
+  const lib = require(`${__hooks}/lib.js`)
+  if (!e.app.findRecordsByFilter("push_subscriptions", "user = {:u}", "", 1, 0, { u: e.auth.id }).length)
+    throw new BadRequestError("This account has no devices with notifications on yet.")
+  lib.sendPush(e.app, e.auth.id, { body: "Notifications are working 💪", path: "/settings", tag: "test" })
+  return e.noContent(204)
+}, $apis.requireAuth())
 
 // The app needs the server's public VAPID key to subscribe. Empty until push is configured.
 routerAdd("GET", "/api/betterlift/push-key", (e) => e.json(200, { key: $os.getenv("VAPID_PUBLIC_KEY") || "" }))

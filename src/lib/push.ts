@@ -10,15 +10,37 @@ const isIos = () => /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.p
 const isStandalone = () => window.matchMedia('(display-mode: standalone)').matches || (navigator as { standalone?: boolean }).standalone === true
 const supported = () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window
 
-async function registration() {
-  return navigator.serviceWorker.ready
+/** Kinds of push you can switch off in Settings (same as pushKind in pb/pb_hooks/lib.js). */
+export const PUSH_KINDS: { k: string; title: string; body: string }[] = [
+  { k: 'messages', title: 'Messages', body: 'Private messages from friends.' },
+  { k: 'comments', title: 'Comments & replies', body: 'On your workouts, and replies to your comments.' },
+  { k: 'reactions', title: 'Reactions', body: 'When someone reacts to your workout.' },
+  { k: 'friends', title: 'Friend requests', body: 'New requests, and when someone accepts yours.' },
+  { k: 'nudges', title: 'Nudges', body: 'When a friend wants you back in the gym.' },
+  { k: 'updates', title: 'App updates', body: 'Your exercise submissions approved or declined, and replies to your feedback.' },
+]
+
+/**
+ * The service worker that receives pushes. `ready` never settles if it failed to install (or hasn't yet), which used to
+ * leave Settings blank, so this gives up after a few seconds, registering it again if it's missing.
+ */
+async function registration(): Promise<ServiceWorkerRegistration> {
+  const timeout = new Promise<null>((r) => setTimeout(() => r(null), 4000))
+  const ready = await Promise.race([navigator.serviceWorker.ready, timeout])
+  if (ready) return ready
+  const reg = (await navigator.serviceWorker.getRegistration()) ?? (await navigator.serviceWorker.register('/sw.js').catch(() => undefined))
+  if (reg?.active) return reg
+  const later = await Promise.race([navigator.serviceWorker.ready, new Promise<null>((r) => setTimeout(() => r(null), 6000))])
+  if (later) return later
+  throw new Error('The app is still finishing an update. Close it completely, reopen it, and try again.')
 }
 
 export async function pushState(): Promise<PushState> {
   if (!supported()) return isIos() && !isStandalone() ? 'needs-install' : 'unsupported'
   if (Notification.permission === 'denied') return 'denied'
-  const sub = await (await registration()).pushManager.getSubscription()
-  return sub && Notification.permission === 'granted' ? 'on' : 'off'
+  if (Notification.permission !== 'granted') return 'off'
+  const sub = await (await registration()).pushManager.getSubscription().catch(() => null)
+  return sub ? 'on' : 'off'
 }
 
 function keyBytes(base64url: string) {

@@ -2,6 +2,7 @@ import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { ActiveBanner } from './components/ActiveBanner'
 import { RestBar } from './components/RestBar'
+import { PushWelcome } from './components/PushPrompt'
 import { useActive } from './lib/active'
 import { Spinner } from './components/ui'
 import TabBar from './components/TabBar'
@@ -128,6 +129,7 @@ export default function App() {
         </Suspense>
       </main>
       <RestBar />
+      <PushWelcome user={user} />
       <TabBar />
     </div>
   )
