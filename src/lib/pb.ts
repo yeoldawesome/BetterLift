@@ -12,9 +12,15 @@ export type Lift = 'squat' | 'bench' | 'deadlift' | 'ohp' | 'row'
 export type Emoji = 'fire' | 'muscle' | 'clap' | 'rocket' | 'trophy' | 'custom'
 
 export type Visibility = 'public' | 'private'
+/** all = exercises, sets, reps, weights, notes · weights = only the planned weights · none = keep the routine. */
+export type RoutineUpdate = 'all' | 'weights' | 'none'
+export const routineUpdate = (u?: Partial<Pick<User, 'routine_update' | 'update_routine'>> | null): RoutineUpdate =>
+  u?.routine_update || (u?.update_routine ? 'all' : 'none')
 export interface User extends RecordModel {
   username: string; name: string; avatar: string; email?: string; verified?: boolean; bodyweight_kg: number; sex: '' | 'male' | 'female'; unit: '' | Unit; is_moderator: boolean
-  default_rest_s: number; post_visibility: '' | Visibility; update_routine: boolean; save_as_routine: boolean; height_cm: number
+  default_rest_s: number; post_visibility: '' | Visibility; update_routine: boolean
+  /** What finishing a routine workout saves back to it (empty = from update_routine). */
+  routine_update?: '' | RoutineUpdate; save_as_routine: boolean; height_cm: number
   theme: { base?: string; accent?: string } | null
   hide_stats: boolean
   /** Friends can see my Physique (body readings) / Insights tabs. Off by default. */
@@ -49,6 +55,9 @@ export interface Exercise extends RecordModel {
 export interface Routine extends RecordModel { user: string; name: string; notes: string; position: number }
 export interface RoutineExercise extends RecordModel {
   routine: string; user: string; exercise: string; position: number; target_sets: number; reps: number; rest_s: number
+  /** Planned weight (kg) and reps per set. */
+  sets?: { w: number; r: number }[] | null
+  note?: string
   expand?: { exercise?: Exercise }
 }
 export interface Workout extends RecordModel {

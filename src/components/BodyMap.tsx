@@ -132,6 +132,17 @@ function fill(v: number) {
   return `color-mix(in oklab, var(--color-accent) ${Math.round(30 + 70 * Math.min(1, v))}%, ${REST})`
 }
 
+/**
+ * Recovery map (v = 0..1, 1 = fully recovered): ready muscles are solid accent, anything still recovering is a
+ * clearly different, dim red that gets stronger the more worn out it is — so "train this" vs "rest this" pops.
+ */
+export function recoveryFill(v: number) {
+  if (v >= 0.95) return 'var(--color-accent)'
+  if (v >= 0.8) return `color-mix(in oklab, var(--color-accent) 45%, ${REST})`
+  const sore = 1 - v / 0.8 // 0 at 80% recovered → 1 at fully worn out
+  return `color-mix(in oklab, var(--color-danger) ${Math.round(35 + 55 * sore)}%, var(--color-surface-2))`
+}
+
 /*
  * The heart: an anatomical silhouette drawn under the chest, slightly to the figure's left (viewer's right), with the
  * broad base up and the apex pointing down and out. It's layered over the upper abs and under the pecs; the pecs are
@@ -142,7 +153,7 @@ const HEART: Pt[] = [
   [59.5, 52.9], [62.1, 51.7], [64.8, 52.1], [67.7, 54.0], [70.0, 57.2], [70.9, 61.1], [70.2, 65.1], [68.1, 68.1], [65.7, 69.3], [63.1, 68.3], [60.5, 65.8], [58.6, 62.4], [57.9, 58.5], [58.2, 55.2],
 ]
 
-function Figure({ sex, view, intensity }: { sex: Sex; view: View; intensity: Intensity }) {
+function Figure({ sex, view, intensity, paint = fill }: { sex: Sex; view: View; intensity: Intensity; paint?: (v: number) => string }) {
   const { outline, heart, parts } = build(sex, view)
   const clip = `chest${useId().replace(/:/g, '')}`
   return (
@@ -155,7 +166,7 @@ function Figure({ sex, view, intensity }: { sex: Sex; view: View; intensity: Int
             <path
               key={p.d}
               d={p.d}
-              fill={p.m ? fill(intensity[p.m] ?? 0) : 'none'}
+              fill={p.m ? paint(intensity[p.m] ?? 0) : 'none'}
               stroke={p.m ? 'var(--color-surface-2)' : REST}
               strokeWidth={p.m ? 0.45 : 0.7}
               strokeLinejoin="round"
@@ -174,7 +185,7 @@ function Figure({ sex, view, intensity }: { sex: Sex; view: View; intensity: Int
 }
 
 /** Front + back muscle map. Worked muscles take the theme accent, stronger = more work; cardio lights up the heart. */
-export function BodyMap({ sex, intensity, className = 'h-28', labels, accent }: { sex?: string; intensity: Intensity; className?: string; labels?: boolean; accent?: string }) {
+export function BodyMap({ sex, intensity, className = 'h-28', labels, accent, recovery }: { sex?: string; intensity: Intensity; className?: string; labels?: boolean; accent?: string; recovery?: boolean }) {
   const s: Sex = sex === 'female' ? 'female' : 'male'
   // A workout's own accent (the lifter's color when they logged it) overrides the viewer's theme for this graph only.
   const style = accent && /^#[0-9a-f]{6}$/i.test(accent) ? ({ '--color-accent': accent } as CSSProperties) : undefined
@@ -182,7 +193,7 @@ export function BodyMap({ sex, intensity, className = 'h-28', labels, accent }: 
     <div className={`flex shrink-0 items-start gap-1 ${className}`} style={style}>
       {(['front', 'back'] as const).map((v) => (
         <div key={v} className="flex h-full flex-col items-center">
-          <Figure sex={s} view={v} intensity={intensity} />
+          <Figure sex={s} view={v} intensity={intensity} paint={recovery ? recoveryFill : fill} />
           {labels && <span className="text-[10px] font-semibold uppercase tracking-wider text-faint">{v}</span>}
         </div>
       ))}

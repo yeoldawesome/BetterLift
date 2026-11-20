@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, usageFrom, type Usage } from '../lib/exercises'
+import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, quickUsage, recentUsage, usageFrom, type Usage } from '../lib/exercises'
 import { cachedStats, invalidateStats } from '../lib/statsData'
 import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
@@ -24,8 +24,8 @@ function status(e: Exercise) {
 export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise[]) => void; multi?: boolean; openId?: string }) {
   // Start from whatever is already in memory so the picker opens instantly.
   const [all, setAll] = useState<Exercise[] | null>(cachedExercises)
-  const [usage, setUsage] = useState<Usage>(() => { const r = cachedStats(me()); return r ? usageFrom(r) : new Map() })
-  const [usageLoaded, setUsageLoaded] = useState(() => !!cachedStats(me()))
+  const [usage, setUsage] = useState<Usage>(() => { const r = cachedStats(me()); return r ? usageFrom(r) : quickUsage() ?? new Map() })
+  const [usageLoaded, setUsageLoaded] = useState(() => !!cachedStats(me()) || !!quickUsage())
   const [personal, setPersonal] = useState<Exercise | null>(null)
   const [merging, setMerging] = useState(false)
   const dupes = useMemo(() => (all ? findDuplicates(all) : []), [all])
@@ -51,7 +51,10 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
       // Nothing logged yet (new account): "Most performed" would be empty, so show everything instead.
       if (!u.size && onPick) { setShow('all'); setSort('name') }
     }
-    cachedUsage().then((u) => { if (u && !fresh) apply(u) }).catch(() => {})
+    let warm = false
+    cachedUsage().then((u) => { if (u && !fresh) { warm = true; apply(u) } }).catch(() => {})
+    // Nothing on the device yet: the latest sets (one quick request) are enough for Most performed / Recent.
+    if (!quickUsage()) recentUsage().then((u) => { if (!fresh && !warm) apply(u) }).catch(() => {})
     loadUsage().then((u) => { fresh = true; apply(u) }).catch(() => {}).finally(() => live && setUsageLoaded(true))
     return () => { live = false }
   }, [])

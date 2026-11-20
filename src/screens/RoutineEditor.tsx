@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ExercisePicker } from '../components/ExerciseList'
+import { DragList } from '../components/DragList'
+import { selectAll } from '../lib/selectAll'
+import { fmtW } from '../lib/format'
 import { DownIcon, TimerIcon, TrashIcon, UpIcon } from '../components/icons'
 import { RestPicker, restLabel } from '../components/RestPicker'
 import { Button, Card, ErrorText, Input, Screen, Spinner } from '../components/ui'
 import { routineExercises, useActive } from '../lib/active'
-import { errMsg, me, pb, restFor as liftRest, useUser, type Exercise, type Routine, type RoutineExercise } from '../lib/pb'
+import { errMsg, me, pb, restFor as liftRest, useUnit, useUser, type Exercise, type Routine, type RoutineExercise } from '../lib/pb'
 import { ask } from '../components/Dialog'
 
 export default function RoutineEditor() {
   const { id } = useParams()
   const nav = useNavigate()
   const user = useUser()
+  const unit = useUnit()
   const { active, start } = useActive()
   const [r, setR] = useState<Routine | null>(null)
   const [items, setItems] = useState<RoutineExercise[]>([])
@@ -45,9 +49,11 @@ export default function RoutineEditor() {
     loadItems()
   }
 
-  const move = async (i: number, d: -1 | 1) => {
+  const move = (i: number, d: -1 | 1) => moveTo(i, i + d)
+  const moveTo = async (from: number, to: number) => {
     const next = [...items]
-    ;[next[i], next[i + d]] = [next[i + d], next[i]]
+    const [it] = next.splice(from, 1)
+    next.splice(to, 0, it)
     setItems(next)
     await Promise.all(next.map((x, pos) => (x.position !== pos ? pb.collection('routine_exercises').update(x.id, { position: pos }) : null)))
     loadItems()
@@ -75,7 +81,7 @@ export default function RoutineEditor() {
   const numField = (it: RoutineExercise, k: 'target_sets' | 'reps', lbl: string) => (
     <label className="block text-center">
       <span className="block text-[10px] font-bold uppercase text-faint">{lbl}</span>
-      <input inputMode="numeric" defaultValue={it[k] || ''} onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, '') }}
+      <input inputMode="numeric" defaultValue={it[k] || ''} onFocus={selectAll} onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, '') }}
         onBlur={(e) => { const v = parseInt(e.target.value) || 0; if (v !== it[k]) saveItem(it, { [k]: k === 'target_sets' ? Math.max(1, v) : v }) }}
         className="num h-10 w-full rounded-lg bg-surface-2 text-center font-bold outline-none focus:ring-2 focus:ring-accent" />
     </label>
@@ -91,9 +97,10 @@ export default function RoutineEditor() {
           className="block w-full resize-y rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none placeholder:text-faint focus:border-accent" />
       </label>
       <ErrorText>{err}</ErrorText>
-      {items.map((it, i) => (
-        <Card key={it.id} className="space-y-2 p-3">
+      <DragList items={items} keyOf={(it) => it.id} onMove={moveTo} className="space-y-3" render={(it, i, handle) => (
+        <Card className="space-y-2 p-3">
           <div className="flex items-center gap-1">
+            <span className="-ml-2">{handle}</span>
             <p className="min-w-0 flex-1 truncate font-extrabold text-accent">{it.expand?.exercise?.name}</p>
             <button disabled={i === 0} onClick={() => move(i, -1)} className="p-1.5 text-muted disabled:opacity-30"><UpIcon width={18} height={18} /></button>
             <button disabled={i === items.length - 1} onClick={() => move(i, 1)} className="p-1.5 text-muted disabled:opacity-30"><DownIcon width={18} height={18} /></button>
@@ -109,8 +116,12 @@ export default function RoutineEditor() {
               </button>
             </div>
           </div>
+          {!!it.sets?.length && it.sets.some((p) => p.w > 0) && (
+            <p className="num text-xs text-muted">Planned: {it.sets.map((p) => `${fmtW(p.w, unit)}×${p.r}`).join(', ')} {unit}</p>
+          )}
+          {it.note && <p className="text-xs italic text-muted">“{it.note}”</p>}
         </Card>
-      ))}
+      )} />
       <Button variant="ghost" onClick={() => setPicking(true)}>+ Add exercises</Button>
       {items.length > 0 && <Button variant="ghost" onClick={launch}>Start this routine</Button>}
       <Button onClick={saveAndClose} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>

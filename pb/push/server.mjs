@@ -32,9 +32,13 @@ async function send(subscriptions, payload) {
   }
 }
 
+// Scheduled pushes (rest timers), by key. In memory: a sidecar restart drops pending ones, which is fine for rest timers.
+const timers = new Map()
+const MAX_DELAY = 3600 * 1000
+
 http.createServer((req, res) => {
   if (req.method === 'GET' && req.url === '/health') return res.end('ok')
-  if (req.method !== 'POST' || req.url !== '/send') { res.statusCode = 404; return res.end() }
+  if (req.method !== 'POST' || (req.url !== '/send' && req.url !== '/cancel')) { res.statusCode = 404; return res.end() }
   if (req.headers['x-push-secret'] !== PUSH_SECRET) { res.statusCode = 403; return res.end() }
   let raw = ''
   req.on('data', (c) => { raw += c; if (raw.length > 1e6) req.destroy() })
@@ -42,6 +46,13 @@ http.createServer((req, res) => {
     let msg
     try { msg = JSON.parse(raw) } catch { res.statusCode = 400; return res.end() }
     res.statusCode = 202; res.end()
-    if (Array.isArray(msg.subscriptions) && msg.payload) send(msg.subscriptions.slice(0, 20), msg.payload).catch((e) => console.error(e))
+    const key = typeof msg.key === 'string' ? msg.key.slice(0, 100) : ''
+    if (key && timers.has(key)) { clearTimeout(timers.get(key)); timers.delete(key) }
+    if (req.url === '/cancel') return
+    if (!Array.isArray(msg.subscriptions) || !msg.payload) return
+    const go = () => send(msg.subscriptions.slice(0, 20), msg.payload).catch((e) => console.error(e))
+    const delay = Number(msg.at) - Date.now()
+    if (key && delay > 0 && delay <= MAX_DELAY) timers.set(key, setTimeout(() => { timers.delete(key); go() }, delay))
+    else go()
   })
 }).listen(PORT, '127.0.0.1', () => console.log(`push sidecar on 127.0.0.1:${PORT}`))

@@ -20,6 +20,7 @@ function blocksX(target: Element, root: Element) {
 /** Pulling down only dismisses when whatever you're touching is already scrolled to the top. */
 function blocksY(target: Element, root: Element) {
   for (let n: Element | null = target; n; n = n.parentElement) {
+    if (n.matches('[data-no-swipe]')) return true
     if (n.scrollTop > 0 && /auto|scroll/.test(getComputedStyle(n).overflowY)) return true
     if (n === root) break
   }

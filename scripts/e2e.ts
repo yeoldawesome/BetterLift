@@ -1,5 +1,5 @@
 // Frontend-logic end-to-end test against a running PocketBase. Run: npm run test:e2e
-import { emptySet, finishWorkout, makeEx, saveAsRoutine, syncRoutine, type Active } from '../src/lib/active'
+import { emptySet, finishWorkout, makeEx, routineExercises, saveAsRoutine, syncRoutine, type Active } from '../src/lib/active'
 import { findDuplicates, loadExercises, loadUsage, matchOfficial, mergeExercise, nameKey, saveLiftRest } from '../src/lib/exercises'
 import { intensityForExercise, intensityFromSets } from '../src/lib/muscles'
 import { inkFor, resolve } from '../src/lib/theme'
@@ -63,13 +63,22 @@ const live = await pb.collection('workout_sets').getFullList<WSet>({ filter: `wo
 ok(live.length === 1 && live[0].is_pr, 'finish saves only completed sets and flags PR')
 const lw = await pb.collection('workouts').getOne<Workout>(wid)
 ok(lw.visibility === 'private' && lw.bodyweight_kg === 91.5, 'finish stores visibility and bodyweight')
-const rid = await saveAsRoutine(a, 'My Push')
+const rid = await saveAsRoutine(a, 'My Push', 'lb')
 let rex = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: `routine="${rid}"` })
 ok(rex.length === 1 && rex[0].reps === 3 && rex[0].target_sets === 1 && rex[0].rest_s === x.rest, 'save-as-routine stores sets, single reps, rest')
 x.rest = 150; x.sets = [{ ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '4', done: true }]
-await syncRoutine(a, rid)
+x.note = 'pause at chest'
+await syncRoutine(a, rid, 'lb', 'all')
 rex = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: `routine="${rid}"` })
 ok(rex.length === 1 && rex[0].reps === 5 && rex[0].target_sets === 3 && rex[0].rest_s === 150, 'update-routine replaces sets/reps/rest')
+ok(rex[0].sets?.length === 3 && Math.round(rex[0].sets[0].w * 2.20462) === 200 && rex[0].sets[2].r === 4 && rex[0].note === 'pause at chest', 'update-routine (everything) saves per-set weights and note')
+x.rest = 60; x.note = 'other'; x.sets = [{ ...emptySet(), w: '210', r: '2', done: true }]
+await syncRoutine(a, rid, 'lb', 'weights')
+rex = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: `routine="${rid}"` })
+ok(rex.length === 1 && rex[0].target_sets === 3 && rex[0].reps === 5 && rex[0].rest_s === 150 && rex[0].note === 'pause at chest', 'weights-only keeps sets/reps/rest/note')
+ok(rex[0].sets?.length === 3 && rex[0].sets.every((p) => Math.round(p.w * 2.20462) === 210) && rex[0].sets[0].r === 5, `weights-only updates every set's weight (${JSON.stringify(rex[0].sets)})`)
+const started = await routineExercises(rid)
+ok(started[0].plan?.length === 3 && started[0].note === 'pause at chest', 'starting the routine carries the plan and note')
 ok((await pb.collection('routines').getOne(rid)).name === 'My Push', 'routine name unchanged by sync')
 
 const all = await pb.collection('workout_sets').getFullList<WSet>({ filter: `user="${pb.authStore.record!.id}"`, expand: 'exercise,workout', sort: 'performed_at' })

@@ -1,8 +1,10 @@
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
 import { epley, fromDist, fromUnit, num } from './format'
 import type { SetType } from './setTypes'
 import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
+import { idbDel, idbGet, idbSet } from './idb'
+import { scheduleRestPush } from './push'
 import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
@@ -10,9 +12,11 @@ export type ASet = { w: string; r: string; sec: string; dist: string; done: bool
 export type Prev = { w: number; r: number; sec: number; dist: number }
 /** rest = between sets, restAfter = after the last set (transition to the next exercise). */
 /** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
-export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean }
+export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean
+  /** Planned weight (kg) and reps per set, saved on the routine. Used before `prev` for placeholders / one-tap fill. */
+  plan?: { w: number; r: number }[] }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
-type Rest = { end: number; total: number } | null
+type Rest = { end: number; total: number; name?: string } | null
 
 interface Ctx {
   active: Active | null
@@ -20,7 +24,7 @@ interface Ctx {
   start: (name: string, routine?: string, exercises?: AEx[]) => void
   discard: () => void
   rest: Rest
-  startRest: (s: number) => void
+  startRest: (s: number, name?: string) => void
   adjustRest: (d: number) => void
   stopRest: () => void
 }
@@ -34,18 +38,39 @@ function load<T>(k: string): T | null {
 }
 function store(k: string, v: unknown) {
   try { if (v) localStorage.setItem(k, JSON.stringify(v)); else localStorage.removeItem(k) } catch { /* private mode */ }
+  // Mirror to IndexedDB: survives if the OS clears localStorage or the app is killed / updated mid-workout.
+  if (v) idbSet(k, v); else idbDel(k)
+}
+// Ask the browser not to evict our storage under pressure (best effort).
+try { navigator.storage?.persist?.().catch(() => {}) } catch { /* unsupported */ }
+
+/** Drop fields from older saved sessions (e.g. RPE). */
+function clean(a: Active | null): Active | null {
+  if (!a || !Array.isArray(a.exercises)) return null
+  return { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: (x.sets ?? []).map(({ w, r, sec, dist, done, type, hr, rpe, kcal }) => ({ w, r, sec, dist, done, type, hr, rpe, kcal })) })) }
 }
 
 export const emptySet = (): ASet => ({ w: '', r: '', sec: '', dist: '', done: false })
 
 export function ActiveProvider({ children }: { children: ReactNode }) {
-  const [active, setActive] = useState<Active | null>(() => {
-    const a = load<Active>(KEY)
-    // Drop fields from older saved sessions (e.g. RPE).
-    return a ? { ...a, exercises: a.exercises.map((x) => ({ ...x, sets: x.sets.map(({ w, r, sec, dist, done, type, hr, rpe, kcal }) => ({ w, r, sec, dist, done, type, hr, rpe, kcal })) })) } : null
-  })
+  const [active, setActive] = useState<Active | null>(() => clean(load<Active>(KEY)))
   const [rest, setRest] = useState<Rest>(() => load(RKEY))
-  useEffect(() => store(KEY, active), [active])
+  const restored = useRef(!!active)
+  // localStorage came back empty (cleared / evicted): fall back to the IndexedDB copy.
+  useEffect(() => {
+    if (restored.current) return
+    idbGet<Active>(KEY).then((a) => {
+      const c = clean(a ?? null)
+      if (c && !restored.current) { restored.current = true; setActive((cur) => cur ?? c) }
+    })
+    idbGet<Rest>(RKEY).then((r) => r && r.end > Date.now() && setRest((cur) => cur ?? r))
+  }, [])
+  useEffect(() => {
+    // Don't wipe the IndexedDB copy before we've had a chance to read it.
+    if (!active && !restored.current) { try { localStorage.removeItem(KEY) } catch { /* */ } return }
+    restored.current = true
+    store(KEY, active)
+  }, [active])
   useEffect(() => {
     const onMerge = (ev: Event) => {
       const { from } = (ev as CustomEvent<{ from: string; to: string }>).detail
@@ -59,12 +84,23 @@ export function ActiveProvider({ children }: { children: ReactNode }) {
     return () => window.removeEventListener('bl:exercise-merged', onMerge)
   }, [])
   useEffect(() => store(RKEY, rest), [rest])
+  // Push "rest is over" from the server, so it arrives with the app closed or the phone locked.
+  const pushed = useRef<number | null>(rest?.end ?? null)
+  useEffect(() => {
+    const end = rest && rest.end > Date.now() ? rest.end : null
+    if (end === pushed.current) return
+    if (end) scheduleRestPush((end - Date.now()) / 1000, rest?.name)
+    else if (pushed.current && pushed.current > Date.now() + 1000) scheduleRestPush(0)
+    pushed.current = end
+  }, [rest])
 
   const update = useCallback((fn: (a: Active) => Active) => setActive((a) => (a ? fn(a) : a)), [])
-  const start = useCallback((name: string, routine = '', exercises: AEx[] = []) =>
-    setActive({ id: newId(), name, routine, startedAt: new Date().toISOString(), notes: '', exercises }), [])
-  const discard = useCallback(() => { setActive(null); setRest(null) }, [])
-  const startRest = useCallback((s: number) => setRest(s > 0 ? { end: Date.now() + s * 1000, total: s } : null), [])
+  const start = useCallback((name: string, routine = '', exercises: AEx[] = []) => {
+    restored.current = true
+    setActive({ id: newId(), name, routine, startedAt: new Date().toISOString(), notes: '', exercises })
+  }, [])
+  const discard = useCallback(() => { restored.current = true; setActive(null); setRest(null) }, [])
+  const startRest = useCallback((s: number, name?: string) => setRest(s > 0 ? { end: Date.now() + s * 1000, total: s, name } : null), [])
   const adjustRest = useCallback((d: number) => setRest((r) => (r ? { end: r.end + d * 1000, total: Math.max(1, r.total + d) } : r)), [])
   const stopRest = useCallback(() => setRest(null), [])
 
@@ -94,7 +130,10 @@ export async function routineExercises(routineId: string): Promise<AEx[]> {
   const u = pb.authStore.record as User | null
   return Promise.all(items.filter((i) => i.expand?.exercise).map((i) => {
     const ex = lib.get(i.exercise) ?? i.expand!.exercise!
-    return makeEx(ex, i.target_sets || 1, i.rest_s, i.reps ? `${i.reps}` : '', restFor(ex, u).after)
+    return makeEx(ex, i.target_sets || 1, i.rest_s, i.reps ? `${i.reps}` : '', restFor(ex, u).after).then((x) => {
+      const plan = Array.isArray(i.sets) ? i.sets.filter((p) => p && (p.w > 0 || p.r > 0)) : []
+      return { ...x, ...(plan.length ? { plan } : {}), ...(i.note ? { note: i.note } : {}) }
+    })
   }))
 }
 
@@ -173,23 +212,50 @@ const mode = (xs: number[]) => {
   return [...c.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0
 }
 
-/** Replaces a routine's exercises with what was done in this workout (sets, reps, rest). Never renames the routine. */
-export async function syncRoutine(a: Active, routineId: string) {
+/** Per-set weight (kg) and reps from the checked-off sets, for the routine's plan. */
+function planOf(x: AEx, unit: Unit) {
+  return x.sets.filter((s) => s.done).map((s) => ({ w: Math.round(fromUnit(num(s.w), unit) * 100) / 100, r: Math.round(num(s.r)) }))
+}
+
+/**
+ * Saves this workout back to its routine. Never renames the routine.
+ *  - all: replaces the routine's exercises with what was done (order, sets, reps, rest, weights, notes).
+ *  - weights: keeps the routine as it is, only updating each exercise's planned weights.
+ */
+export async function syncRoutine(a: Active, routineId: string, unit: Unit, how: 'all' | 'weights' = 'all') {
   const uid = me()
-  const old = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: pb.filter('routine = {:r}', { r: routineId }), fields: 'id' })
+  const old = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: pb.filter('routine = {:r}', { r: routineId }), fields: 'id,exercise,target_sets,reps,sets' })
   const b = pb.createBatch()
+  if (how === 'weights') {
+    let n = 0
+    for (const o of old) {
+      const x = a.exercises.find((e) => e.ex.id === o.exercise)
+      if (!x || x.ex.kind === 'duration' || x.ex.kind === 'cardio') continue
+      const done = planOf(x, unit)
+      if (!done.length) continue
+      // Keep the routine's set count and reps; only the weights change (the last done weight fills extra sets).
+      const count = Math.max(1, o.target_sets || done.length)
+      const sets = Array.from({ length: count }, (_, i) => ({ w: (done[i] ?? done[done.length - 1]).w, r: o.sets?.[i]?.r || o.reps || done[i]?.r || 0 }))
+      b.collection('routine_exercises').update(o.id, { sets })
+      n++
+    }
+    if (n) await b.send()
+    return
+  }
   old.forEach((o) => b.collection('routine_exercises').delete(o.id))
   a.exercises.forEach((x, pos) => {
     const done = x.sets.filter((s) => s.done)
     const reps = mode(done.map((s) => Math.round(num(s.r))).filter((r) => r > 0)) || parseInt(x.target) || 0
-    b.collection('routine_exercises').create({ routine: routineId, user: uid, exercise: x.ex.id, position: pos, target_sets: Math.max(1, done.length || x.sets.length), reps, rest_s: x.rest })
+    const plan = x.ex.kind === 'duration' || x.ex.kind === 'cardio' ? [] : planOf(x, unit)
+    b.collection('routine_exercises').create({ routine: routineId, user: uid, exercise: x.ex.id, position: pos, target_sets: Math.max(1, done.length || x.sets.length), reps, rest_s: x.rest,
+      sets: plan.length ? plan : null, note: (x.note ?? '').trim() })
   })
   await b.send()
 }
 
-export async function saveAsRoutine(a: Active, name: string) {
+export async function saveAsRoutine(a: Active, name: string, unit: Unit) {
   const count = (await pb.collection('routines').getList(1, 1, { filter: pb.filter('user = {:u}', { u: me() }) })).totalItems
   const r = await pb.collection('routines').create<Routine>({ user: me(), name: name.trim() || 'Workout', position: count })
-  await syncRoutine(a, r.id)
+  await syncRoutine(a, r.id, unit)
   return r.id
 }

@@ -14,9 +14,12 @@ import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, num } from '../lib/format'
 import { CardioEffort } from '../components/nutrition/CardioEffort'
 import { SwipeRow } from '../components/SwipeRow'
+import { RoutineUpdatePicker } from '../components/RoutineUpdatePicker'
+import { DragList } from '../components/DragList'
+import { selectAll } from '../lib/selectAll'
 import { isCardio } from '../lib/energy'
 import { loadWeight } from '../lib/nutrition'
-import { errMsg, me, newId, pb, restFor, useUnit, useUser, type Exercise, type Routine, type User, type Visibility, type Workout as W } from '../lib/pb'
+import { errMsg, me, newId, pb, restFor, routineUpdate, useUnit, useUser, type Exercise, type Routine, type RoutineUpdate, type User, type Visibility, type Workout as W } from '../lib/pb'
 import { ask, tell } from '../components/Dialog'
 
 export default function Workout() {
@@ -148,6 +151,12 @@ function ActiveWorkout() {
     const out = [...xs]; [out[i], out[j]] = [out[j], out[i]]
     return out
   })
+  const moveTo = (from: number, to: number) => setList((xs) => {
+    const out = [...xs]
+    const [it] = out.splice(from, 1)
+    out.splice(to, 0, it)
+    return out
+  })
   const leaveSuperset = (key: string) => setList((xs) => xs.map((e) => (e.key === key ? { ...e, superset: undefined } : e)))
   /** Put `src` in the same superset as `tgt` and pull every member together so they sit back-to-back. */
   const joinSuperset = (src: string, tgt: string) => setList((xs) => {
@@ -181,9 +190,11 @@ function ActiveWorkout() {
     if (!s.done) {
       // Fill blanks from the placeholder (previous session / target) so one tap logs a repeat.
       const p = x.prev[i] ?? x.prev[x.prev.length - 1]
+      // The routine's planned weight wins over last session's.
+      const plan = x.plan?.[i] ?? x.plan?.[x.plan.length - 1]
       const patch: Partial<ASet> = { done: true }
-      if (!s.w && p?.w) patch.w = fmtW(p.w, unit)
-      if (!s.r && (x.target || p?.r)) patch.r = x.target || `${p!.r}`
+      if (!s.w && (plan?.w || p?.w)) patch.w = fmtW(plan?.w || p!.w, unit)
+      if (!s.r && (x.target || plan?.r || p?.r)) patch.r = x.target || `${plan?.r || p!.r}`
       if (!s.sec && p?.sec) patch.sec = `${p.sec}`
       if (!s.dist && p?.dist) patch.dist = fmtDist(p.dist, unit)
       setSet(x.key, i, patch)
@@ -192,7 +203,7 @@ function ActiveWorkout() {
       if (group[group.length - 1].key !== x.key) return
       // Last unchecked set of this exercise (or whole superset) → transition rest before the next exercise.
       const finishing = group.every((e) => e.sets.every((t, j) => (e.key === x.key && j === i) || t.done))
-      startRest(finishing ? (x.restAfter ?? x.rest) : x.rest)
+      startRest(finishing ? (x.restAfter ?? x.rest) : x.rest, finishing ? undefined : x.ex.name)
     } else setSet(x.key, i, { done: false })
   }
 
@@ -221,14 +232,16 @@ function ActiveWorkout() {
       {reordering && (
         <BottomSheet title="Reorder exercises" onClose={() => setReordering(false)}>
           <div className="space-y-2">
-            {a.exercises.map((e, i) => (
-              <div key={e.key} className="flex items-center gap-2 rounded-xl bg-surface-2 p-2 pl-3">
+            <p className="text-center text-xs text-muted">Drag the handle or use the arrows.</p>
+            <DragList items={a.exercises} keyOf={(e) => e.key} onMove={moveTo} render={(e, i, handle) => (
+              <div className="flex items-center gap-2 rounded-xl bg-surface-2 p-2 pl-1">
+                {handle}
                 <span className="min-w-0 flex-1 truncate font-bold">{e.ex.name}</span>
                 {e.superset && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Superset</span>}
                 <button disabled={i === 0} onClick={() => move(e.key, -1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move up"><UpIcon width={18} height={18} /></button>
                 <button disabled={i === a.exercises.length - 1} onClick={() => move(e.key, 1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move down"><DownIcon width={18} height={18} /></button>
               </div>
-            ))}
+            )} />
             <Button onClick={() => setReordering(false)}>Done</Button>
           </div>
         </BottomSheet>
@@ -279,7 +292,7 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
   const [name, setName] = useState(a.name)
   const [notes, setNotes] = useState(a.notes)
   const [visibility, setVisibility] = useState<Visibility>(user.post_visibility || 'public')
-  const [updateRoutine, setUpdateRoutine] = useState(user.update_routine)
+  const [updateRoutine, setUpdateRoutine] = useState<RoutineUpdate>(routineUpdate(user))
   const [saveRoutine, setSaveRoutine] = useState(user.save_as_routine)
   const [routineName, setRoutineName] = useState('')
   const [bw, setBw] = useState(user.bodyweight_kg ? fmtW(user.bodyweight_kg, unit) : '')
@@ -311,12 +324,12 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
       // Only write a new bodyweight if it actually changed in the displayed unit (avoids lb↔kg rounding drift).
       if (num(bw) > 0 && bw !== fmtW(user.bodyweight_kg, unit)) prefs.bodyweight_kg = Math.round(bwKg * 100) / 100
       if (visibility !== (user.post_visibility || 'public')) prefs.post_visibility = visibility
-      if (a.routine && routineName && updateRoutine !== user.update_routine) prefs.update_routine = updateRoutine
+      if (a.routine && routineName && updateRoutine !== routineUpdate(user)) { prefs.routine_update = updateRoutine; prefs.update_routine = updateRoutine !== 'none' }
       if (!a.routine && saveRoutine !== user.save_as_routine) prefs.save_as_routine = saveRoutine
       await Promise.all([
         Object.keys(prefs).length ? pb.collection('users').update(user.id, prefs) : null,
-        a.routine && routineName && updateRoutine ? syncRoutine(post, a.routine) : null,
-        !a.routine && saveRoutine ? saveAsRoutine(post, post.name) : null,
+        a.routine && routineName && updateRoutine !== 'none' ? syncRoutine(post, a.routine, unit, updateRoutine) : null,
+        !a.routine && saveRoutine ? saveAsRoutine(post, post.name, unit) : null,
       ])
       clearBestCache()
       invalidateStats()
@@ -357,7 +370,10 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
           </div>
         </div>
         {a.routine && routineName ? (
-          <Toggle on={updateRoutine} onChange={setUpdateRoutine} title={`Update “${routineName}”`} body="Save today's exercises, set counts, reps and rest times to the routine." />
+          <div>
+            <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Update “{routineName}”</span>
+            <RoutineUpdatePicker value={updateRoutine} onChange={setUpdateRoutine} />
+          </div>
         ) : !a.routine && (
           <Toggle on={saveRoutine} onChange={setSaveRoutine} title="Save as a routine" body="Turn this workout into a routine you can start again." />
         )}
@@ -415,12 +431,13 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
-  const placeholder = (p: Prev | undefined, c: string) => {
-    if (c === 'Reps') return x.target || (p?.r ? `${p.r}` : '0')
+  const placeholder = (p: Prev | undefined, c: string, i: number) => {
+    const plan = x.plan?.[i] ?? x.plan?.[x.plan.length - 1]
+    if (c === 'Reps') return x.target || (plan?.r ? `${plan.r}` : p?.r ? `${p.r}` : '0')
     if (c === 'Sec') return p?.sec ? `${p.sec}` : '0'
     if (c === 'Min') return p?.sec ? `${Math.round(p.sec / 60)}` : '0'
     if (c === distLabel(unit)) return p?.dist ? fmtDist(p.dist, unit) : '0'
-    return p?.w ? fmtW(p.w, unit) : '0'
+    return plan?.w ? fmtW(plan.w, unit) : p?.w ? fmtW(p.w, unit) : '0'
   }
   // Cardio minutes are entered as minutes but stored as seconds.
   const getVal = (s: ASet, c: string) => (c === 'Min' ? (s.sec ? `${Math.round((parseFloat(s.sec) / 60) * 10) / 10}` : '') : (s[field(c)] as string))
@@ -497,7 +514,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
                 aria-label={`Use previous: ${prevText(p, x, unit)}`}>{prevText(p, x, unit).replace('×', ' × ')}</button>
             ) : <span key={`p${i}`} className={`num grid ${box} place-items-center text-sm text-faint ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`}>–</span>,
             ...cols.map((c) => (
-              <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c)}
+              <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c, i)} onFocus={selectAll}
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
                 className={`num ${box} w-full min-w-0 text-center text-xl font-extrabold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`} />
             )),

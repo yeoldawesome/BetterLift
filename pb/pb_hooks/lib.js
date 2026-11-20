@@ -62,6 +62,15 @@ function notifPath(type, target) {
  * The pb/push sidecar does the Web Push encryption and answers right away, so this never slows the request down.
  * Does nothing until push is configured (PUSH_URL / PUSH_SECRET in /etc/betterlift/push.env).
  */
+/** Cancel a scheduled push (see sendPush's msg.at / msg.key). */
+function cancelPush(key) {
+  const url = $os.getenv("PUSH_URL"), secret = $os.getenv("PUSH_SECRET")
+  if (!url || !secret || !key) return
+  try {
+    $http.send({ url: url + "/cancel", method: "POST", timeout: 3, headers: { "content-type": "application/json", "x-push-secret": secret }, body: JSON.stringify({ key: key }) })
+  } catch (_) {}
+}
+
 function sendPush(app, user, msg) {
   const url = $os.getenv("PUSH_URL"), secret = $os.getenv("PUSH_SECRET")
   if (!url || !secret) return
@@ -82,6 +91,8 @@ function sendPush(app, user, msg) {
       body: JSON.stringify({
         subscriptions: subs.map((s) => ({ endpoint: s.getString("endpoint"), keys: { p256dh: s.getString("p256dh"), auth: s.getString("auth") } })),
         payload: { title: msg.title || "Better Lift", body: msg.body, path: msg.path, badge: unread, tag: msg.tag },
+        // Scheduled pushes (rest timer): the sidecar holds it until `at`; a newer one with the same key replaces it.
+        at: msg.at || 0, key: msg.key || "",
       }),
     })
   } catch (err) { app.logger().error("push failed", "error", String(err)) }
@@ -107,4 +118,4 @@ function push(app, n) {
 
 const uname = (app, id) => { try { return "@" + app.findRecordById("users", id).getString("username") } catch (_) { return "Someone" } }
 
-module.exports = { epley, areFriends, syncFriends, notify, uname, push, sendPush }
+module.exports = { epley, areFriends, syncFriends, notify, uname, push, sendPush, cancelPush }

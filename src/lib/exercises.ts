@@ -31,14 +31,33 @@ export function usageFrom(rows: { set: Pick<WSet, 'exercise' | 'workout' | 'perf
   }
   return out
 }
+const usageKey = () => `bl.usage:${me()}`
+/** Small synchronous copy of the usage map, so the picker's Most performed / Recent lists show instantly. */
+export function quickUsage(): Usage | null {
+  try {
+    const raw = JSON.parse(localStorage.getItem(usageKey()) || 'null') as [string, number, number][] | null
+    return Array.isArray(raw) ? new Map(raw.map(([id, count, last]) => [id, { count, last }])) : null
+  } catch { return null }
+}
+function keepUsage(u: Usage) {
+  try { localStorage.setItem(usageKey(), JSON.stringify([...u].map(([id, v]) => [id, v.count, v.last]))) } catch { /* full / private */ }
+  return u
+}
 /** Shares the Stats data (and its on-device cache), so the picker and Stats page never download sets twice. */
 export async function loadUsage(force = false): Promise<Usage> {
-  return usageFrom(await loadStatsRows(me(), force))
+  return keepUsage(usageFrom(await loadStatsRows(me(), force)))
 }
-/** Usage from data already on this device (instant), or null. */
+/** Usage from data already on this device, or null. */
 export async function cachedUsage(): Promise<Usage | null> {
   const rows = await warmStats(me())
-  return rows ? usageFrom(rows) : null
+  return rows ? keepUsage(usageFrom(rows)) : null
+}
+/** Fast first guess from the latest sets only (one small request), for when nothing is on the device yet. */
+export async function recentUsage(): Promise<Usage> {
+  const r = await pb.collection('workout_sets').getList<WSet>(1, 1000, {
+    filter: pb.filter('user = {:u} && completed = true', { u: me() }), sort: '-performed_at', fields: 'exercise,workout,performed_at', skipTotal: true, requestKey: null,
+  })
+  return usageFrom(r.items.map((set) => ({ set })))
 }
 
 export const label =(s: string) => s.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())

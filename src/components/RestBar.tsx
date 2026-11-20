@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useActive } from '../lib/active'
 import { fmtClock } from '../lib/format'
 
 export function RestBar() {
-  const { rest, adjustRest, stopRest } = useActive()
+  const { active, rest, adjustRest, stopRest } = useActive()
+  const nav = useNavigate()
+  const onWorkout = useLocation().pathname === '/workout'
   const [now, setNow] = useState(Date.now())
   const buzzed = useRef(0)
   useEffect(() => {
@@ -23,7 +26,10 @@ export function RestBar() {
   const pct = Math.max(0, Math.min(1, left / rest.total))
   return (
     <div className="fixed inset-x-0 bottom-[calc(64px+env(safe-area-inset-bottom))] z-40 mx-auto max-w-lg px-3">
-      <div className="relative overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-2xl">
+      {/* Tap the bar (not its buttons) to jump back to the workout. */}
+      <div onClick={(e) => { if (!(e.target as Element).closest('button') && active && !onWorkout) nav('/workout') }}
+        role={onWorkout ? undefined : 'link'} aria-label={onWorkout ? undefined : 'Back to workout'}
+        className={`relative overflow-hidden rounded-2xl border border-line bg-surface-2 shadow-2xl ${onWorkout ? '' : 'cursor-pointer'}`}>
         <div className="absolute inset-y-0 left-0 bg-accent/20 transition-[width] duration-200" style={{ width: `${pct * 100}%` }} />
         <div className="relative flex items-center gap-2 p-2">
           <span className="num flex-1 pl-2 text-2xl font-black">{left > 0 ? fmtClock(left) : 'Go!'}</span>

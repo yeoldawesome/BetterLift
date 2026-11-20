@@ -12,7 +12,8 @@ const supported = () => 'serviceWorker' in navigator && 'PushManager' in window 
 
 /** Kinds of push you can switch off in Settings (same as pushKind in pb/pb_hooks/lib.js). */
 export const PUSH_KINDS: { k: string; title: string; body: string }[] = [
-  { k: 'messages', title: 'Messages', body: 'Private messages from friends.' },
+  { k: 'rest', title: 'Rest timer', body: 'When your rest between sets is over (even with the app closed).' },
+    { k: 'messages', title: 'Messages', body: 'Private messages from friends.' },
   { k: 'comments', title: 'Comments & replies', body: 'On your workouts, and replies to your comments.' },
   { k: 'reactions', title: 'Reactions', body: 'When someone reacts to your workout.' },
   { k: 'friends', title: 'Friend requests', body: 'New requests, and when someone accepts yours.' },
@@ -94,4 +95,10 @@ export function setBadge(count: number) {
   const n = navigator as Navigator & { setAppBadge?: (n?: number) => Promise<void>; clearAppBadge?: () => Promise<void> }
   if (!n.setAppBadge) return
   ;(count > 0 ? n.setAppBadge(count) : n.clearAppBadge?.())?.catch(() => {})
+}
+
+/** Ask the server to push "rest is over" in `seconds` (0 cancels). Silent no-op without push. */
+export function scheduleRestPush(seconds: number, name = '') {
+  if (!pb.authStore.isValid) return
+  pb.send('/api/betterlift/rest-timer', { method: 'POST', body: seconds > 0 ? { seconds: Math.round(seconds), name } : { cancel: true }, requestKey: 'rest-timer' }).catch(() => {})
 }

@@ -11,6 +11,9 @@ import './index.css'
 
 applyTheme(localTheme())
 registerSW({ immediate: true })
+// iOS ignores user-scalable=no for pinches: block the pinch gesture itself.
+for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false })
+document.addEventListener('touchmove', (e) => { if (e.touches.length > 1) e.preventDefault() }, { passive: false })
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

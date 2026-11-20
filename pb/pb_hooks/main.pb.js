@@ -95,7 +95,7 @@ onRecordEnrich((e) => {
   const superuser = info && info.auth && info.auth.isSuperuser()
   if (!superuser && viewer !== e.record.id) {
     e.record.hide("unit", "theme", "tab_bar", "post_visibility", "update_routine", "save_as_routine",
-      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen", "push_off", "push_asked", "plan")
+      "default_rest_s", "default_rest_after_s", "routine_update", "nutrition_on", "nutrition_seen", "push_off", "push_asked", "plan")
     let friend = false
     if (viewer) for (const id of e.record.getStringSlice("friends")) if (id === viewer) { friend = true; break }
     if (!friend) e.record.hide("bodyweight_kg", "height_cm")
@@ -367,6 +367,23 @@ routerAdd("POST", "/api/betterlift/push-test", (e) => {
   if (!e.app.findRecordsByFilter("push_subscriptions", "user = {:u}", "", 1, 0, { u: e.auth.id }).length)
     throw new BadRequestError("This account has no devices with notifications on yet.")
   lib.sendPush(e.app, e.auth.id, { body: "Notifications are working 💪", path: "/settings", tag: "test" })
+  return e.noContent(204)
+}, $apis.requireAuth())
+
+// Rest timer: push "rest is over" at the end of the rest, even with the app closed or the phone locked.
+// Body { seconds, name } schedules (replacing any earlier one); { cancel: true } cancels. Off via Settings → Rest timer.
+routerAdd("POST", "/api/betterlift/rest-timer", (e) => {
+  const lib = require(`${__hooks}/lib.js`)
+  const body = e.requestInfo().body || {}
+  const key = "rest:" + e.auth.id
+  if (body.cancel) { lib.cancelPush(key); return e.noContent(204) }
+  const s = Math.round(Number(body.seconds) || 0)
+  if (s <= 0 || s > 3600) { lib.cancelPush(key); return e.noContent(204) }
+  const name = String(body.name || "").slice(0, 80)
+  lib.sendPush(e.app, e.auth.id, {
+    title: "Rest is over", body: name ? `Time for your next set of ${name} 💪` : "Time for your next set 💪",
+    path: "/workout", tag: "rest", kind: "rest", at: Date.now() + s * 1000, key: key,
+  })
   return e.noContent(204)
 }, $apis.requireAuth())
 

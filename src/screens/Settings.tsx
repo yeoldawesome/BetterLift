@@ -1,14 +1,15 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { HeightInput } from '../components/HeightInput'
-import { GlobeIcon, LockIcon, TimerIcon, TrashIcon } from '../components/icons'
+import { RoutineUpdatePicker } from '../components/RoutineUpdatePicker'
+import { BellIcon, ChevronIcon, GlobeIcon, LockIcon, TimerIcon, TrashIcon } from '../components/icons'
 import { RestPicker, restLabel } from '../components/RestPicker'
 import { PasswordField } from '../components/PasswordField'
 import { checkPassword } from '../lib/password'
 import { BottomSheet, Button, Card, ConfirmSheet, ErrorText, Input, Screen, Segmented, Toggle } from '../components/ui'
 import { deleteAllHistory } from '../lib/history'
 import { bmi, fmtW, fromUnit, num } from '../lib/format'
-import { errMsg, nutritionNew, pb, useUser, userRest, userRestAfter, type User } from '../lib/pb'
+import { errMsg, nutritionNew, pb, routineUpdate, useUser, userRest, userRestAfter, type User } from '../lib/pb'
 import { MAX_TABS } from '../lib/tabs'
 import { disablePush, enablePush, PUSH_KINDS, pushState, type PushState } from '../lib/push'
 
@@ -37,7 +38,6 @@ export default function Settings() {
   return (
     <Screen title="Settings" back>
       <ErrorText>{err}</ErrorText>
-      <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Notifications</h2>
       <NotificationSettings user={user} save={save} />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Units</h2>
@@ -76,7 +76,11 @@ export default function Settings() {
         <span className="flex-1"><span className="block font-bold">Default rest after an exercise</span><span className="block text-sm text-muted">Starts when you finish an exercise's last set, before the next one. Set per lift in its info sheet.</span></span>
         <span className="num text-lg font-black">{restLabel(userRestAfter(user))}</span>
       </button>
-      <Toggle on={user.update_routine} onChange={(update_routine) => save({ update_routine })} title="Update routine when finishing" body="Pre-selects “Update routine” on the finish screen." />
+      <div>
+        <span className="mb-1 block font-bold">Update routine when finishing</span>
+        <p className="mb-2 text-sm text-muted">What the finish screen saves back to a routine by default. You can change it each time.</p>
+        <RoutineUpdatePicker value={routineUpdate(user)} onChange={(v) => save({ routine_update: v, update_routine: v !== 'none' })} />
+      </div>
       <Toggle on={user.save_as_routine} onChange={(save_as_routine) => save({ save_as_routine })} title="Save empty workouts as routines" body="Pre-selects “Save as a routine” for workouts not started from one." />
 
       <h2 className="pt-3 text-sm font-bold uppercase tracking-wider text-muted">Privacy</h2>
@@ -202,6 +206,7 @@ const PUSH_HELP:Partial<Record<PushState, string>> = {
  * which kinds of notification you want (saved on your account, so they apply to every device).
  */
 function NotificationSettings({ user, save }: { user: User; save: (patch: Partial<User>) => Promise<unknown> }) {
+  const [open, setOpen] = useState(false)
   const [state, setState] = useState<PushState | null>(null)
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -224,9 +229,18 @@ function NotificationSettings({ user, save }: { user: User; save: (patch: Partia
     save({ push_off: [...next] })
   }
   const help = state && PUSH_HELP[state]
+  const onCount = PUSH_KINDS.filter((k) => !off.has(k.k)).length
+  const summary = !state ? 'Checking this device…' : help ? 'Off on this device' : `${state === 'on' ? 'On' : 'Off'} on this device · ${onCount} of ${PUSH_KINDS.length} kinds`
 
   return (
-    <>
+    <div className="overflow-hidden rounded-xl border border-line bg-surface">
+      {/* One row: tap to show every notification setting. */}
+      <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-3 text-left">
+        <BellIcon width={22} height={22} className="text-accent" />
+        <span className="min-w-0 flex-1"><span className="block font-bold">Notifications</span><span className="block text-sm text-muted">{summary}</span></span>
+        <ChevronIcon width={18} height={18} className={`shrink-0 text-faint transition-transform ${open ? 'rotate-90' : ''}`} />
+      </button>
+      {open && <div className="space-y-3 border-t border-line bg-canvas/40 p-3">
       {!state ? <Card className="p-3 text-sm text-muted">Checking this device…</Card>
         : help ? <p className="rounded-xl border border-line bg-surface p-3 text-sm text-muted"><span className="block font-bold text-ink">Push notifications</span>{help}</p>
         : <Toggle on={state === 'on'} onChange={(on) => !busy && toggle(on)} title={busy ? 'Push notifications…' : 'Push notifications on this device'}
@@ -241,6 +255,7 @@ function NotificationSettings({ user, save }: { user: User; save: (patch: Partia
       <p className="pt-1 text-xs font-bold uppercase tracking-wider text-muted">Notify me about</p>
       {PUSH_KINDS.map((k) => <Toggle key={k.k} on={!off.has(k.k)} onChange={(on) => setKind(k.k, on)} title={k.title} body={k.body} />)}
       <p className="text-xs text-faint">These apply to all your devices. Everything still shows in the app's notification list.</p>
-    </>
+      </div>}
+    </div>
   )
 }
