@@ -202,7 +202,6 @@ const ALIASES: Record<string, string> = Object.fromEntries(([
   ['Dumbbell Overhead Tricep Extension', ['tricep extension', 'overhead dumbbell extension', 'dumbbell tricep extension', 'seated dumbbell tricep extension']],
   ['Overhead Tricep Extension', ['cable overhead extension', 'rope overhead tricep extension']],
   ['Tricep Rope Pushdown', ['rope pushdown', 'rope tricep pushdown', 'triceps rope pushdown']],
-  ['Single-Arm Dumbbell Preacher Curl', ['dumbbell preacher curl']],
   ['Barbell Curl', ['strict curl', 'barbell strict curl', 'standing barbell curl']],
   ['Cable Hammer Curl', ['rope hammer curl']],
   ['Leg Press', ['sled leg press', '45 degree leg press', 'incline leg press']],
