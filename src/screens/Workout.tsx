@@ -438,7 +438,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         <button onClick={() => setInfoOpen(true)} aria-hidden tabIndex={-1}
           className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-accent/35 bg-accent/15 text-base font-extrabold text-accent active:opacity-70">{initials}</button>
         <div className="min-w-0 flex-1">
-          <button onClick={() => setInfoOpen(true)} className="block max-w-full truncate text-left text-lg font-extrabold leading-tight active:opacity-70">{x.ex.name}</button>
+          <button onClick={() => setInfoOpen(true)} className="block max-w-full text-left text-base font-extrabold leading-snug break-words active:opacity-70">{x.ex.name}</button>
           {collapsed
             ? <p className="num text-xs font-semibold text-muted">{done.length}/{x.sets.length} sets done</p>
             : <>
