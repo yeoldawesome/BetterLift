@@ -110,6 +110,8 @@ export default function Settings() {
         <span className="flex-1"><span className="block font-bold text-danger">Delete all workout history</span><span className="block text-sm text-muted">Removes every workout and lift you've logged, plus their comments and reactions. Your routines, exercises and friends stay.</span></span>
       </button>
       {done && <p className="text-sm font-semibold text-accent">{done}</p>}
+
+      <BackendCheck />
       {clearOpen && (
         <ConfirmSheet title="Delete all workout history?" confirmLabel={progress ? `Deleting… ${progress}` : 'Delete everything'} typeToConfirm="DELETE"
           body={<>Every workout and set you've ever logged (including Liftoff imports) will be <span className="font-bold text-ink">permanently deleted</span>. Your stats, PRs and history will reset to zero. This can't be undone.</>}
@@ -164,7 +166,32 @@ function ChangePassword({ user, onClose, onDone }: { user: User; onClose: () => 
   )
 }
 
-const PUSH_HELP: Partial<Record<PushState, string>> = {
+/** Small diagnostic: pings the server's health endpoint and shows whether it answered (and how fast). */
+function BackendCheck() {
+  const [state, setState] = useState<{ ok: boolean; text: string } | null>(null)
+  const [busy, setBusy] = useState(false)
+  const test = async () => {
+    setBusy(true)
+    const t0 = performance.now()
+    try {
+      await pb.health.check({ requestKey: null })
+      setState({ ok: true, text: `Connected · ${Math.round(performance.now() - t0)} ms` })
+    } catch (e) {
+      setState({ ok: false, text: `Not connected${(e as { status?: number }).status ? ` (${(e as { status: number }).status})` : ''}` })
+    }
+    setBusy(false)
+  }
+  return (
+    <div className="flex items-center justify-center gap-3 pt-6 text-xs text-muted">
+      <Button variant="ghost" size="sm" onClick={test} disabled={busy}>{busy ? 'Testing…' : 'Test backend'}</Button>
+      {state && <span className={`flex items-center gap-1.5 font-semibold ${state.ok ? 'text-accent' : 'text-danger'}`}>
+        <span className={`size-2 rounded-full ${state.ok ? 'bg-accent' : 'bg-danger'}`} />{state.text}
+      </span>}
+    </div>
+  )
+}
+
+const PUSH_HELP:Partial<Record<PushState, string>> = {
   'needs-install': 'On iPhone, add Better Lift to your Home Screen first: tap Share → Add to Home Screen, then open it from there.',
   unsupported: "This browser can't get push notifications.",
   denied: 'Notifications are blocked. Turn them on in your phone’s Settings → Notifications → Better Lift, then come back.',

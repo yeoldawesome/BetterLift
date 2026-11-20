@@ -12,13 +12,13 @@ export default function VerifyEmail() {
   useEffect(() => {
     pb.collection('users').confirmVerification(token)
       .then(async () => {
-        // Signed in on this device: pick up verified = true so the banner goes away.
+        // Signed in on this device: pick up verified = true so the app unlocks.
         if (pb.authStore.isValid) await pb.collection('users').authRefresh().catch(() => {})
         setState('done')
       })
       .catch((x) => {
         const st = (x as { status?: number }).status
-        setState(st === 400 ? 'This link has expired or was already used. If the banner in the app still asks you to verify, tap Resend there.' : errMsg(x))
+        setState(st === 400 ? 'This link has expired or was already used. If the app still asks you to verify, tap Resend email there.' : errMsg(x))
       })
   }, [token])
 

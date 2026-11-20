@@ -5,7 +5,7 @@ import { RestBar } from './components/RestBar'
 import { useActive } from './lib/active'
 import { Spinner } from './components/ui'
 import TabBar from './components/TabBar'
-import { VerifyBanner } from './components/VerifyBanner'
+import VerifyGate from './screens/VerifyGate'
 import { pb, useUser } from './lib/pb'
 import { applyTheme } from './lib/theme'
 import Auth from './screens/Auth'
@@ -76,6 +76,8 @@ export default function App() {
   if (loc.pathname.startsWith('/reset-password/')) return <Routes><Route path="/reset-password/:token" element={<ResetPassword />} /></Routes>
   if (loc.pathname.startsWith('/verify/')) return <Suspense fallback={<Spinner />}><Routes><Route path="/verify/:token" element={<VerifyEmail />} /></Routes></Suspense>
   if (!user) return <Auth />
+  // New accounts can't use the app until their email is verified (pre-existing accounts were marked verified).
+  if (!user.verified && user.email) return <VerifyGate user={user} />
   // Running-workout banner everywhere except the Workout tab (which already shows the timer).
   const showBanner = !!active && loc.pathname !== '/workout'
 
@@ -87,7 +89,6 @@ export default function App() {
     <div className="flex h-full flex-col">
       {showBanner && <ActiveBanner />}
       <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
-        <VerifyBanner user={user} />
         <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<Navigate to={home} replace />} />
