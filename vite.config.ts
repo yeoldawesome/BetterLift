@@ -13,6 +13,8 @@ function preconnectApi(api: string | undefined): Plugin {
 
 export default defineConfig(({ mode }) => ({
   base: '/',
+  // Shown at the bottom of Profile, so you can tell when a new version has reached your phone.
+  define: { __BUILD_TIME__: JSON.stringify(new Date().toISOString()) },
   plugins: [
     preconnectApi(loadEnv(mode, '.', 'VITE_').VITE_API_URL), // loadEnv also picks up VITE_* from the real environment (CI)
     react(),

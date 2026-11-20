@@ -14,6 +14,13 @@ import { invalidateStats } from '../lib/statsData'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
 import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
 
+// Commit + build time of this copy of the app (set at build; "dev" when running locally).
+const VERSION = (() => {
+  const sha = (import.meta.env.VITE_COMMIT as string | undefined)?.slice(0, 7) || 'dev'
+  const at = new Date(__BUILD_TIME__).toLocaleString(undefined, { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
+  return `Version ${sha} · built ${at}`
+})()
+
 type Tile = { to: string; label: string; icon: typeof StatsIcon; badge?: number; dot?: boolean }
 type WRow = Pick<Workout, 'id' | 'started_at' | 'duration_s' | 'volume_kg'>
 
@@ -118,6 +125,7 @@ export default function Profile() {
       <Memories ws={ws} />
       <TotalCard ws={ws} unit={unit} />
       <button onClick={logout} className="w-full py-4 text-sm font-bold text-danger">Log out</button>
+      <p className="num -mt-2 pb-2 text-center text-[11px] text-faint">{VERSION}</p>
       {photoMenu && (
         <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60" onClick={() => setPhotoMenu(false)}>
           <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg space-y-2 rounded-t-3xl border-t border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
