@@ -387,6 +387,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const [restOpen, setRestOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const [typeFor, setTypeFor] = useState<number | null>(null)
   // Swiped-away set, kept for a few seconds so it can be put back.
   const [undo, setUndo] = useState<{ i: number; set: ASet } | null>(null)
@@ -424,22 +425,35 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const getVal = (s: ASet, c: string) => (c === 'Min' ? (s.sec ? `${Math.round((parseFloat(s.sec) / 60) * 10) / 10}` : '') : (s[field(c)] as string))
   const setVal = (i: number, c: string, v: string) => setSet(x.key, i, { [field(c)]: c === 'Min' ? (v ? `${Math.round(parseFloat(v) * 60)}` : '') : v })
 
+  const initials = x.ex.name.replace(/\(.*?\)/g, '').split(/[\s-]+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase() || '?'
+  const head = 'text-xs font-extrabold uppercase tracking-wider text-accent'
+  const box = 'h-12 rounded-xl'
+
   return (
-    <Card className={`relative p-3 ${x.superset ? 'mt-5 border-red-600/50' : ''}`}>
-      {x.superset && <span className="absolute -top-3 right-12 rounded-lg bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Superset</span>}
-      <div className="mb-2 flex items-center justify-between gap-2 px-1">
-        <div className="min-w-0">
-          {/* Tap the name for instructions, history and stats. */}
-          <button onClick={() => setInfoOpen(true)} className="block max-w-full truncate text-left font-extrabold text-accent active:opacity-70">{x.ex.name}</button>
-          {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
-          {x.target && <p className="text-xs text-faint">Target {x.target} reps</p>}
+    <Card className={`relative p-0! ${x.superset ? 'mt-5 border-red-600/50' : ''}`}>
+      {x.superset && <span className="absolute -top-3 right-12 z-10 rounded-lg bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Superset</span>}
+      <div className="flex items-center gap-3 px-3 py-3">
+        {/* Tap the icon or name for instructions, history and stats. */}
+        <button onClick={() => setInfoOpen(true)} aria-hidden tabIndex={-1}
+          className="grid size-12 shrink-0 place-items-center rounded-full border-2 border-accent/35 bg-accent/15 text-base font-extrabold text-accent active:opacity-70">{initials}</button>
+        <div className="min-w-0 flex-1">
+          <button onClick={() => setInfoOpen(true)} className="block max-w-full truncate text-left text-lg font-extrabold leading-tight active:opacity-70">{x.ex.name}</button>
+          {collapsed
+            ? <p className="num text-xs font-semibold text-muted">{done.length}/{x.sets.length} sets done</p>
+            : <>
+              {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
+              {x.target && <p className="text-xs text-faint">Target {x.target} reps</p>}
+            </>}
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <button onClick={() => setRestOpen(true)} className="flex h-8 items-center gap-1 rounded-lg bg-surface-2 px-2.5 text-xs font-bold text-muted">
+        <div className="flex shrink-0 items-center gap-0.5">
+          <button onClick={() => setRestOpen(true)} className="flex h-8 items-center gap-1 rounded-lg bg-surface-2 px-2 text-xs font-bold text-muted">
             <TimerIcon width={14} height={14} /><span className="num">{restLabel(x.rest)}{(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''}</span>
           </button>
+          <button onClick={() => setCollapsed((c) => !c)} className="grid size-9 place-items-center rounded-lg text-accent active:bg-surface-2" aria-label={collapsed ? `Expand ${x.ex.name}` : `Collapse ${x.ex.name}`} aria-expanded={!collapsed}>
+            <UpIcon width={22} height={22} strokeWidth={2.5} className={`transition-transform ${collapsed ? 'rotate-180' : ''}`} />
+          </button>
           <div className="relative">
-            <button onClick={() => setMenuOpen(true)} className="grid size-8 place-items-center rounded-lg text-muted active:bg-surface-2" aria-label={`${x.ex.name} options`}><DotsIcon width={20} height={20} /></button>
+            <button onClick={() => setMenuOpen(true)} className="grid size-9 place-items-center rounded-lg text-muted active:bg-surface-2" aria-label={`${x.ex.name} options`}><DotsIcon width={20} height={20} /></button>
             {menuOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} />
@@ -455,35 +469,50 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         </div>
       </div>
       {x.note !== undefined && (
-        <textarea value={x.note} onChange={(e) => setEx(x.key, (ex) => ({ ...ex, note: e.target.value }))} placeholder="Add a note for this exercise…" rows={Math.min(5, Math.max(1, x.note.split('\n').length))}
-          autoFocus={!x.note} maxLength={1000} className="mb-2 block w-full resize-none rounded-lg bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-accent" />
+        <div className="px-3 pb-3">
+          <textarea value={x.note} onChange={(e) => setEx(x.key, (ex) => ({ ...ex, note: e.target.value }))} placeholder="Add a note for this exercise…" rows={Math.min(5, Math.max(1, x.note.split('\n').length))}
+            autoFocus={!x.note} maxLength={1000} className="block w-full resize-none rounded-lg bg-surface-2 px-3 py-2 text-sm outline-none placeholder:text-faint focus:ring-2 focus:ring-accent" />
+        </div>
       )}
-      <div className="grid gap-x-2 gap-y-1.5 text-center text-sm" style={{ gridTemplateColumns: `1.5rem minmax(3.5rem,1fr) ${cols.map(() => 'minmax(0,1fr)').join(' ')} 2.75rem` }}>
-        <span className="text-[11px] font-bold uppercase text-faint">Set</span>
-        <span className="text-[11px] font-bold uppercase text-faint">Prev</span>
-        {cols.map((c) => <span key={c} className="text-[11px] font-bold uppercase text-faint">{c}</span>)}
-        <span />
-        {/* Each set is one row: swipe it left or right to delete. */}
+      {!collapsed && <div className="overflow-hidden rounded-b-2xl bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]">
+      <div className="grid gap-x-2 text-center" style={{ gridTemplateColumns: `0 2.75rem minmax(3.5rem,1.4fr) ${cols.map(() => 'minmax(0,1fr)').join(' ')} 3rem 0` }}>
+        <div className="col-span-full grid grid-cols-subgrid bg-[color-mix(in_srgb,var(--color-canvas)_55%,var(--color-surface))] py-3">
+          <span />
+          <span className={head}>Set</span>
+          <span className={head}>Prev</span>
+          {cols.map((c) => <span key={c} className={head}>{c === 'lb' || c === 'kg' ? `${c}s` : c}</span>)}
+          <span /><span />
+        </div>
+        {/* Each set is one row: swipe it left or right to delete. Checked-off rows light up. */}
         {x.sets.map((s, i) => {
           const p = x.prev[i]
-          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} onDelete={() => { setUndo({ i, set: x.sets[i] }); setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) })) }}>{[
-            <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num h-10 rounded-lg font-bold active:bg-surface-2 ${labels[i].color || 'text-muted'}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
+          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} flush
+            rowClass={`py-1.5 ${s.done ? 'bg-[color-mix(in_srgb,var(--color-accent)_13%,var(--color-surface))]' : 'bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]'}`}
+            onDelete={() => { setUndo({ i, set: x.sets[i] }); setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) })) }}>{[
+            <span key={`l${i}`} />,
+            <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num ${box} text-xl font-extrabold active:opacity-70 ${s.done ? 'bg-accent/10' : 'bg-surface-2'} ${labels[i].color || ''}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
             // Tap the previous-session value to copy it into this set (doesn't check it off).
             p ? (
               <button key={`p${i}`} type="button" onClick={() => setSet(x.key, i, {
                 w: p.w ? fmtW(p.w, unit) : s.w, r: p.r ? `${p.r}` : s.r, sec: p.sec ? `${p.sec}` : s.sec, dist: p.dist ? fmtDist(p.dist, unit) : s.dist,
-              })} className="num h-10 min-w-0 truncate rounded-lg text-xs font-semibold text-muted underline decoration-dotted underline-offset-2 active:bg-surface-2"
-                aria-label={`Use previous: ${prevText(p, x, unit)}`}>{prevText(p, x, unit)}</button>
-            ) : <span key={`p${i}`} className="num self-center text-xs text-faint">—</span>,
+              })} className={`num ${box} min-w-0 truncate px-1 text-sm font-medium text-muted active:opacity-70 ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`}
+                aria-label={`Use previous: ${prevText(p, x, unit)}`}>{prevText(p, x, unit).replace('×', ' × ')}</button>
+            ) : <span key={`p${i}`} className={`num grid ${box} place-items-center text-sm text-faint ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`}>–</span>,
             ...cols.map((c) => (
               <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c)}
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
-                className={`num h-10 w-full min-w-0 rounded-lg text-center text-base font-bold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/15' : 'bg-surface-2'}`} />
+                className={`num ${box} w-full min-w-0 text-center text-xl font-extrabold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`} />
             )),
-            <button key={`d${i}`} data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)} className={`grid h-10 place-items-center rounded-lg ${s.done ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-faint'}`}><CheckIcon width={20} height={20} /></button>,
+            <div key={`d${i}`} className="grid place-items-center">
+              <button data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)}
+                className={`grid size-12 place-items-center rounded-full transition-colors active:translate-y-0.5 ${s.done
+                  ? 'bg-accent text-accent-ink shadow-[0_3px_0_color-mix(in_srgb,var(--color-accent)_60%,black)]'
+                  : 'bg-surface-2 text-muted shadow-[0_3px_0_color-mix(in_srgb,var(--color-surface-2)_50%,black)]'}`}><CheckIcon width={24} height={24} strokeWidth={2.75} /></button>
+            </div>,
+            <span key={`r${i}`} />,
             // Cardio: effort (RPE / heart rate / watch calories) and the estimated burn, under the set.
             ...(cardio ? [
-              <div key={`e${i}`} style={{ gridColumn: '1 / -1' }} className="-mt-0.5 mb-0.5">
+              <div key={`e${i}`} style={{ gridColumn: '2 / -2' }} className="-mt-0.5 mb-0.5">
                 <CardioEffort name={x.ex.name} kind={x.ex.kind} seconds={num(s.sec)} distanceKm={fromDist(num(s.dist), unit)}
                   effort={{ hr: s.hr, rpe: s.rpe, kcal: s.kcal }} onChange={(e) => setSet(x.key, i, { hr: e.hr, rpe: e.rpe, kcal: e.kcal })} />
               </div>,
@@ -491,10 +520,12 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
           ]}</SwipeRow>
         })}
       </div>
-      <div className="mt-2 flex gap-2">
-        <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: [...e.sets, { ...emptySet(), w: e.sets[e.sets.length - 1]?.w ?? '' }] }))} className="h-9 flex-1 rounded-lg bg-surface-2 text-sm font-bold">+ Add set</button>
-        {x.sets.length > 1 && <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.slice(0, -1) }))} className="h-9 rounded-lg bg-surface-2 px-4 text-sm font-bold text-muted">−</button>}
+      <div className="flex gap-2 p-3 pt-1.5">
+        <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: [...e.sets, { ...emptySet(), w: e.sets[e.sets.length - 1]?.w ?? '' }] }))}
+          className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-surface-2 text-base font-extrabold uppercase tracking-wider text-muted active:opacity-70"><PlusIcon width={20} height={20} strokeWidth={2.5} />Add set</button>
+        {x.sets.length > 1 && <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.slice(0, -1) }))} className="h-12 rounded-xl bg-surface-2 px-5 text-lg font-extrabold text-muted active:opacity-70" aria-label="Remove last set">−</button>}
       </div>
+      </div>}
       {typeFor !== null && (
         <BottomSheet title="Select Set Type" onClose={() => setTypeFor(null)}>
           {SET_TYPES.map((t) => (

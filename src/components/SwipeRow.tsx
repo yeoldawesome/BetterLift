@@ -9,7 +9,13 @@ import { TrashIcon } from './icons'
  * Touch uses touch events (not pointer events): the browser fires pointercancel as soon as a finger that started on a
  * text input moves, which used to kill the swipe on unchecked sets. With touchmove we can preventDefault and keep it.
  */
-export function SwipeRow({ onDelete, children, label = 'Delete' }: { onDelete: () => void; children: ReactNode; label?: string }) {
+export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-surface', flush = false }: {
+  onDelete: () => void; children: ReactNode; label?: string
+  /** Background/padding of the sliding row (must be opaque so the delete layer stays hidden). */
+  rowClass?: string
+  /** Square edges, for rows that run edge to edge. */
+  flush?: boolean
+}) {
   const wrap = useRef<HTMLDivElement>(null)
   const row = useRef<HTMLDivElement>(null)
   const bg = useRef<HTMLDivElement>(null)
@@ -119,13 +125,13 @@ export function SwipeRow({ onDelete, children, label = 'Delete' }: { onDelete: (
   }, [])
 
   return (
-    <div ref={wrap} className="relative col-span-full grid grid-cols-subgrid overflow-hidden rounded-lg">
+    <div ref={wrap} className={`relative col-span-full grid grid-cols-subgrid overflow-hidden ${flush ? '' : 'rounded-lg'}`}>
       <div ref={bg} aria-hidden style={{ opacity: 0 }}
-        className="group absolute inset-0 flex items-center gap-2 rounded-lg bg-danger px-4 text-sm font-bold text-white">
+        className={`group absolute inset-0 flex items-center gap-2 ${flush ? '' : 'rounded-lg'} bg-danger px-4 text-sm font-bold text-white`}>
         <TrashIcon width={18} height={18} className="transition-transform group-data-[past=1]:scale-125" />{label}
       </div>
       <div ref={row} data-swipe-row
-        className="relative col-span-full grid grid-cols-subgrid gap-y-1.5 bg-surface"
+        className={`relative col-span-full grid grid-cols-subgrid gap-y-1.5 transition-colors ${rowClass}`}
         style={{ touchAction: 'pan-y' }}
         // A swipe shouldn't also count as a tap (or focus an input) on whatever it started on.
         onClickCapture={(e) => { if (Date.now() - swipedAt.current < 350) { e.stopPropagation(); e.preventDefault() } }}>
