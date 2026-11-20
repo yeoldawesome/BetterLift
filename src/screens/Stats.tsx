@@ -38,7 +38,7 @@ function Trend({ dir, size = 12 }: { dir: Dir; size?: number }) {
 
 function Pills<T extends string | number>({ value, options, onChange, small }: { value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean }) {
   return (
-    <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]" onClick={(e) => e.stopPropagation()}>
+    <div className="flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]" onClick={(e) => e.stopPropagation()}>
       {options.map(([v, l]) => (
         <button key={String(v)} onClick={() => onChange(v)}
           className={`shrink-0 rounded-lg font-bold transition ${small ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'} ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
@@ -119,7 +119,7 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
   const s = useMemo(() => series(data, kind, metric, days, unit), [data, kind, metric, days, unit])
   const empty = !s.d.length
   return (
-    <div onClick={onOpen} className={`cursor-pointer space-y-2 rounded-2xl border border-line bg-surface p-3 transition active:scale-[0.99] ${empty ? 'opacity-50' : ''}`}>
+    <div onClick={onOpen} className={`min-w-0 cursor-pointer space-y-2 rounded-2xl border border-line bg-surface p-3 transition active:scale-[0.99] ${empty ? 'opacity-50' : ''}`}>
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
           <p className="flex items-center gap-1.5 font-extrabold" title={name}><span className="truncate">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
@@ -428,7 +428,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
       </div>
 
       {list.length ? (
-        <div className="grid gap-3 pb-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-3 pb-4 sm:grid-cols-2">
           {list.map((n) => (
             <ExerciseCard key={n} name={n} kind={snap.kinds.get(n)!} muscle={muscleOf.get(n) ?? ''} data={snap.summaries.get(n)!}
               globalMetric={metric} globalDays={days} unit={unit} onOpen={() => setOpen(n)} onInfo={exOf.get(n) ? () => setInfo(exOf.get(n)!) : undefined} />
