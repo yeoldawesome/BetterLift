@@ -5,6 +5,9 @@ import { addLogs, dayLabel, deleteLog, isDay, kcalFrom, logMacros, scale, servin
 import { errMsg } from '../../lib/pb'
 import { unitOptions, type AmountUnit } from '../../lib/foodParse'
 import { fmtK, MealChips, NumField, Stepper } from './bits'
+import { ItemsEditor } from './ItemsEditor'
+import { createSaved, itemFromDraft, itemsTotal } from '../../lib/meals'
+import type { MealItem } from '../../lib/nutrition'
 
 const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
 const str = (n: number) => (n ? `${Math.round(n * 10) / 10}` : '')
@@ -38,6 +41,8 @@ export function LogEditor({ log, onClose, onChanged }: { log: FoodLog; onClose: 
   const [kcal, setKcal] = useState(str(m0.kcal))
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
+  // A logged meal is edited item by item; this copy belongs to this day only (the saved meal stays as it is).
+  const [items, setItems] = useState<MealItem[] | null>(log.items?.length ? log.items : null)
 
   const changeServings = (v: number) => {
     setServings(v)
@@ -49,9 +54,11 @@ export function LogEditor({ log, onClose, onChanged }: { log: FoodLog; onClose: 
   const cur = base ? unit ?? units[0] : undefined
   const amount = cur ? roundFor(cur.u, servings / cur.per) : servings
   const typed = (set: (v: string) => void) => (v: string) => { set(v); setBase(null) }
-  const macros = { kcal: kcal.trim() ? Math.round(num(kcal)) : Math.round(kcalFrom(num(p), num(c), num(f))), p: num(p), c: num(c), f: num(f) }
+  const macros = items ? itemsTotal(items) : { kcal: kcal.trim() ? Math.round(num(kcal)) : Math.round(kcalFrom(num(p), num(c), num(f))), p: num(p), c: num(c), f: num(f) }
   const amountText = cur && cur.u !== 'serving' ? `${amount} ${cur.u === 'cup' && amount <= 1 ? 'cup' : cur.name}` : servingText(servings, base)
-  const draft = (): Draft => ({
+  const draft = (): Draft => items ? ({
+    name, meal, servings: 1, base: null, macros, source: log.source, detail: items.map((i) => i.name).join(', '), items, savedMeal: log.saved_meal,
+  }) : ({
     name, meal, servings: base ? servings : 1, base, macros, source: log.source,
     detail: base ? (log.detail.includes(' · ') ? `${log.detail.split(' · ')[0]} · ${amountText}` : amountText) : log.detail && !log.base ? log.detail : '',
     barcode: log.barcode,
@@ -62,7 +69,7 @@ export function LogEditor({ log, onClose, onChanged }: { log: FoodLog; onClose: 
   }
 
   return (
-    <BottomSheet title="Edit food" onClose={onClose}>
+    <BottomSheet title={items ? 'Edit meal' : 'Edit food'} onClose={onClose}>
       <div className="space-y-3">
         <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} aria-label="Name" />
         {base && cur && (
@@ -85,12 +92,16 @@ export function LogEditor({ log, onClose, onChanged }: { log: FoodLog; onClose: 
             )}
           </div>
         )}
-        <div className="grid grid-cols-4 gap-2">
+        {items && <>
+          <ItemsEditor items={items} onChange={setItems} />
+          {log.saved_meal && <p className="px-1 text-xs text-faint">Changes here only affect this day. Edit the saved meal in Meals to change it for next time.</p>}
+        </>}
+        {!items && <div className="grid grid-cols-4 gap-2">
           <NumField label="kcal" value={kcal} onChange={typed(setKcal)} placeholder={`${Math.round(kcalFrom(num(p), num(c), num(f)))}`} />
           <NumField label="P" value={p} onChange={typed(setP)} dot="#0ea5e9" />
           <NumField label="C" value={c} onChange={typed(setC)} dot="#f59e0b" />
           <NumField label="F" value={f} onChange={typed(setF)} dot="#ec4899" />
-        </div>
+        </div>}
         <MealChips value={meal} onChange={setMeal} />
         <label className="flex items-center justify-between gap-3 rounded-xl bg-surface p-2 pl-3">
           <span className="text-sm text-muted">Day</span>
@@ -98,6 +109,9 @@ export function LogEditor({ log, onClose, onChanged }: { log: FoodLog; onClose: 
         </label>
         <ErrorText>{err}</ErrorText>
         <Button disabled={busy || !name.trim() || macros.kcal < 0} onClick={() => run(() => updateLog(log.id, draft(), day))}>{busy ? 'Saving…' : `Save · ${fmtK(macros.kcal)} kcal`}</Button>
+        {!log.saved_meal && (
+          <Button variant="ghost" disabled={busy} onClick={() => run(() => createSaved(name, items && items.length > 1 ? 'meal' : 'food', items ?? [itemFromDraft(draft())]))}>Save to My meals</Button>
+        )}
         <div className="grid grid-cols-2 gap-2">
           <Button variant="ghost" disabled={busy} onClick={() => run(() => addLogs([draft()], today()))}>{log.day === today() ? 'Log again' : 'Log again today'}</Button>
           <Button variant="danger" disabled={busy} onClick={async () => { if (await ask({ title: `Delete ${log.name}?`, body: `${dayLabel(log.day)} · ${fmtK(log.kcal)} kcal`,confirmLabel: 'Delete', danger: true })) run(() => deleteLog(log.id)) }}>Delete</Button>

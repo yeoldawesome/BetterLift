@@ -44,6 +44,7 @@ const Chat = lazy(() => import('./screens/Chat'))
 const Nutrition = lazy(() => import('./screens/Nutrition'))
 const NutritionCalendar = lazy(() => import('./screens/NutritionCalendar'))
 const NutritionGoals = lazy(() => import('./screens/NutritionGoals'))
+const Meals = lazy(() => import('./screens/Meals'))
 
 const PREFETCH = [() => import('./screens/Profile'), () => import('./screens/Routines'), () => import('./screens/Stats'), () => import('./screens/Exercises'), () => import('./screens/WorkoutDetail')]
 
@@ -122,6 +123,7 @@ export default function App() {
             <Route path="/nutrition" element={<Nutrition />} />
             <Route path="/nutrition/calendar" element={<NutritionCalendar />} />
             <Route path="/nutrition/goals" element={<NutritionGoals />} />
+            <Route path="/nutrition/meals" element={<Meals />} />
           </>}
           {user.is_moderator && <Route path="/review" element={<Review />} />}
           <Route path="*" element={<Navigate to={home} replace />} />

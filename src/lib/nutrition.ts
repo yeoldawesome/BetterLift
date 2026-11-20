@@ -29,13 +29,17 @@ export const MEALS: [Meal, string][] = [['breakfast', 'Breakfast'], ['lunch', 'L
 export type Macros = { kcal: number; p: number; c: number; f: number }
 /** One serving of a food. g = grams (or ml) in the serving, when known. */
 export type Serving = Macros & { label: string; g?: number }
-export type Source = 'quick' | 'text' | 'estimate' | 'search' | 'barcode' | 'recent'
+export type Source = 'quick' | 'text' | 'estimate' | 'search' | 'barcode' | 'recent' | 'saved'
+/** One ingredient of a logged (or saved) meal: macros are for `servings` of `base` when it's set. */
+export type MealItem = { name: string; detail?: string; servings: number; base: Serving | null; macros: Macros }
 
 export interface FoodLog extends RecordModel {
   user: string; day: string; meal: Meal; name: string; detail: string; servings: number; base: Serving | null
   kcal: number; protein_g: number; carbs_g: number; fat_g: number; source: Source; barcode: string
+  /** Ingredients when this entry is a meal; edits here change only this day's copy. */
+  items?: MealItem[] | null; saved_meal?: string
 }
-export type Draft = { name: string; detail?: string; meal: Meal; servings: number; base: Serving | null; macros: Macros; source: Source; barcode?: string }
+export type Draft = { name: string; detail?: string; meal: Meal; servings: number; base: Serving | null; macros: Macros; source: Source; barcode?: string; items?: MealItem[]; savedMeal?: string }
 
 export const ZERO: Macros = { kcal: 0, p: 0, c: 0, f: 0 }
 export const kcalFrom = (p: number, c: number, f: number) => p * 4 + c * 4 + f * 9
@@ -63,6 +67,7 @@ const toRecord = (d: Draft, day: string) => ({
   // Kept precise so an amount re-measured in grams/cups reads back exactly (200 g, not 205 g).
   servings: Math.round(d.servings * 1000) / 1000 || 1, base: d.base, kcal: Math.max(0, Math.round(d.macros.kcal)), protein_g: Math.max(0, r1(d.macros.p)),
   carbs_g: Math.max(0, r1(d.macros.c)), fat_g: Math.max(0, r1(d.macros.f)), source: d.source, barcode: d.barcode ?? '',
+  items: d.items?.length ? d.items : null, saved_meal: d.savedMeal ?? '',
 })
 
 export const loadLogs = (from: string, to: string) =>

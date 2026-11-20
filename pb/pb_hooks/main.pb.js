@@ -95,7 +95,7 @@ onRecordEnrich((e) => {
   const superuser = info && info.auth && info.auth.isSuperuser()
   if (!superuser && viewer !== e.record.id) {
     e.record.hide("unit", "theme", "tab_bar", "post_visibility", "update_routine", "save_as_routine",
-      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen", "push_off", "push_asked")
+      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen", "push_off", "push_asked", "plan")
     let friend = false
     if (viewer) for (const id of e.record.getStringSlice("friends")) if (id === viewer) { friend = true; break }
     if (!friend) e.record.hide("bodyweight_kg", "height_cm")

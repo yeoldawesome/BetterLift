@@ -82,10 +82,18 @@ export default function Nutrition() {
   }
   const undoDelete = async (l: FoodLog) => {
     setUndo(null)
-    try { onAdded(await addLogs([{ name: l.name, detail: l.detail, meal: l.meal, servings: l.servings, base: l.base, macros: logMacros(l), source: l.source, barcode: l.barcode }], l.day)) }
+    try { onAdded(await addLogs([{ name: l.name, detail: l.detail, meal: l.meal, servings: l.servings, base: l.base, macros: logMacros(l), source: l.source, barcode: l.barcode, items: l.items ?? undefined, savedMeal: l.saved_meal }], l.day)) }
     catch (e) { setErr2(errMsg(e)) }
   }
   const open = (tab: Tab, meal: Meal = day === today() ? mealNow() : 'snack') => setAdding({ meal, tab })
+  // Food buttons in the bottom bar arrive as ?add=search|scan|quick|describe.
+  const addParam = params.get('add')
+  useEffect(() => {
+    if (!addParam) return
+    if (['describe', 'search', 'scan', 'quick'].includes(addParam)) open(addParam as Tab)
+    const next = new URLSearchParams(params); next.delete('add')
+    setParams(next, { replace: true })
+  }, [addParam]) // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <Screen title="Nutrition" action={
@@ -200,7 +208,7 @@ export default function Nutrition() {
             ) : prev.length > 0 ? (
               <div className="px-4 pb-3">
                 <button onClick={async () => {
-                  try { onAdded(await addLogs(prev.map((p) => ({ name: p.name, detail: p.detail, meal, servings: p.servings, base: p.base, macros: logMacros(p), source: 'recent' as const, barcode: p.barcode })), day)) }
+                  try { onAdded(await addLogs(prev.map((p) => ({ name: p.name, detail: p.detail, meal, servings: p.servings, base: p.base, macros: logMacros(p), source: 'recent' as const, barcode: p.barcode, items: p.items ?? undefined })), day)) }
                   catch (e) { setErr2(errMsg(e)) }
                 }} className="text-sm font-semibold text-accent">Copy {dayLabel(addDays(day, -1)) === 'Yesterday' ? "yesterday's" : "previous day's"} {label.toLowerCase()} ({prev.length} item{prev.length === 1 ? '' : 's'} · {fmtK(sumLogs(prev).kcal)} kcal)</button>
               </div>

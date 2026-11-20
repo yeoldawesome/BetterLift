@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { BellIcon, CheckIcon, CloseIcon, FlameIcon } from '../components/icons'
 import { useNotifications } from '../lib/notifications'
 import { WorkoutCard } from '../components/WorkoutCard'
@@ -11,6 +11,7 @@ import { idbGet, idbSet } from '../lib/idb'
 import { loadStreak, type Streak } from '../lib/streak'
 import { useRealtime } from '../lib/useRealtime'
 
+const ForYou = lazy(() => import('../components/ForYou'))
 const WEEK_MS = 7 * 86400000
 type FeedData = { workouts: Workout[]; intensity: Map<string, Intensity>; reactions: Reaction[]; comments: Comment[] }
 
@@ -24,13 +25,19 @@ function NotificationBell() {
   )
 }
 
+// Remembered while the app is open, so coming back to Feed keeps your tab.
+let feedTab: 'foryou' | 'feed' | 'friends' = 'foryou'
+
 export default function FeedScreen() {
-  const [tab, setTab] = useState<'feed' | 'friends'>('feed')
+  const [params] = useSearchParams()
+  const asked = params.get('tab')
+  const [tab, setTab] = useState<'foryou' | 'feed' | 'friends'>(() => (asked === 'foryou' || asked === 'feed' || asked === 'friends' ? asked : feedTab))
+  const pick = (t: typeof tab) => { feedTab = t; setTab(t) }
   return (
     <Screen title="Feed" action={<NotificationBell />}>
       <NudgeBanner />
-      <Segmented value={tab} onChange={setTab} options={[['feed', 'Feed'], ['friends', 'Friends']]} />
-      {tab === 'feed' ? <WeekFeed /> : <FriendsTab />}
+      <Segmented value={tab} onChange={pick} options={[['foryou', 'For You'], ['feed', 'Feed'], ['friends', 'Friends']]} />
+      {tab === 'foryou' ? <Suspense fallback={<Spinner />}><ForYou /></Suspense> : tab === 'feed' ? <WeekFeed /> : <FriendsTab />}
     </Screen>
   )
 }

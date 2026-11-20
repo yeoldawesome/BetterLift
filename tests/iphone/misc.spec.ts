@@ -23,7 +23,7 @@ test('routines have a multi-line description', async ({ app }) => {
 test('stats tabs have plain labels; reaction button is a blank circle with a plus', async ({ app }) => {
   await app.goto('/#/stats')
   for (const l of ['Lifting', 'Physique', 'Insights']) await expect(main(app).getByRole('button', { name: l, exact: true })).toBeVisible()
-  await app.goto('/#/feed')
+  await app.goto('/#/feed?tab=feed')
   const react = main(app).getByRole('button', { name: 'React', exact: true }).first()
   await expect(react).toBeVisible()
   expect((await react.innerText()).trim()).toBe('')

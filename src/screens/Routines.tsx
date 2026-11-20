@@ -8,6 +8,7 @@ import { errMsg, me, pb, type Routine, type RoutineExercise } from '../lib/pb'
 const PREVIEW = 3
 const sets = (n: number) => `${n} set${n === 1 ? '' : 's'}`
 import { ask, tell } from '../components/Dialog'
+import { WeeklyPlan } from '../components/WeeklyPlan'
 
 export default function Routines() {
   const [list, setList] = useState<Routine[] | null>(null)
@@ -57,6 +58,7 @@ export default function Routines() {
 
   return (
     <Screen title="Routines" action={<Button size="sm" onClick={create}>+ New</Button>}>
+      {list && list.length > 0 && <WeeklyPlan routines={list} />}
       {!list ? <Spinner /> : !list.length ? (
         <Empty title="No routines" body="Build a routine to start workouts faster."><Button onClick={create}>Create routine</Button></Empty>
       ) : list.map((r) => {

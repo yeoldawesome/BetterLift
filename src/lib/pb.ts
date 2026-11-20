@@ -31,6 +31,8 @@ export interface User extends RecordModel {
   push_off: string[] | null
   /** Has seen the "turn on notifications" popup. */
   push_asked: boolean
+  /** Weekly plan: { cycle: routine ids and 'rest' }, repeating. */
+  plan: { cycle: string[] } | null
 }
 export type ReviewStatus = '' | 'pending' | 'approved' | 'rejected'
 export interface Exercise extends RecordModel {

@@ -41,6 +41,8 @@ export const BarcodeIcon = (p: P) => <svg {...base(p)}><path d="M4 7V5.5A1.5 1.5
 export const FlameIcon = (p: P) => <svg {...base(p)}><path d="M12 21c-3.6 0-6.5-2.6-6.5-6.2 0-2.6 1.4-4.4 2.8-6 .3 1.6 1.2 2.7 2.2 3.2-.3-3.4 1.4-6.3 3.9-8 .2 2.5 1.5 4.2 2.9 5.6 1.2 1.3 1.9 3 1.9 5.2 0 3.6-3.1 6.2-7.2 6.2z" /></svg>
 export const SparkIcon = (p: P) => <svg {...base(p)}><path d="M12 3.5l1.8 4.9 4.9 1.8-4.9 1.8L12 16.9l-1.8-4.9-4.9-1.8 4.9-1.8zM18.5 15.5l.8 2.2 2.2.8-2.2.8-.8 2.2-.8-2.2-2.2-.8 2.2-.8z" /></svg>
 export const BoltIcon = (p: P) => <svg {...base(p)}><path d="M13 3L5 13.5h6L10.5 21 19 10.5h-6z" /></svg>
+export const BookIcon = (p: P) => <svg {...base(p)}><path d="M4.5 5.5A1.5 1.5 0 016 4h4.5a1.5 1.5 0 011.5 1.5V20a1.5 1.5 0 00-1.5-1.5H6A1.5 1.5 0 014.5 17zM19.5 5.5A1.5 1.5 0 0018 4h-4.5A1.5 1.5 0 0012 5.5V20a1.5 1.5 0 011.5-1.5H18a1.5 1.5 0 001.5-1.5z" /></svg>
+export const BedIcon = (p: P) => <svg {...base(p)}><path d="M3.5 18.5V6M3.5 14h17v4.5M20.5 14v-2.5a3 3 0 00-3-3H11v5.5" /><circle cx="7.3" cy="10.8" r="1.8" /></svg>
 
 // ---- Replacements for emoji (same 24px line style) ----
 export const MuscleIcon = (p: P) => <svg {...base(p)}><path d="M4.5 15.5c0-3.2 1.6-5.6 3.4-7.6l1.8-2.3c.6-.8 1.8-.9 2.5-.2.6.6.6 1.6.1 2.3l-1.3 1.7c1.4-.4 2.9-.1 4 .8 1.5-1.4 3.9-1.2 5 .5 1.1 1.6.5 3.9-1.3 4.9-2.3 1.3-5.3 2.4-8.4 2.4H7a2.5 2.5 0 01-2.5-2.5z" /><path d="M10.5 13.5c1.2-.9 2.7-1 4-.3" /></svg>

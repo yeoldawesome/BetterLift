@@ -5,6 +5,7 @@ import { estimateMeal, mealIn, parseMacros, parseWeight } from '../../lib/foodPa
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
 import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
+import { itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
 import { fmtK, MacroLine, MealChips, NumField, Stepper } from './bits'
 
@@ -18,8 +19,10 @@ const total = (ms: Macros[]) => ms.reduce((t, m) => ({ kcal: t.kcal + m.kcal, p:
 type QuickPrefill = { name?: string; macros?: Macros; barcode?: string; source?: Source }
 
 /** Full-screen "log food" sheet: describe it, search, scan a barcode, or type macros. */
-export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onAdded }: {
-  day: string; meal: Meal; tab?: Tab; onClose: () => void; onAdded: (logs: FoodLog[]) => void
+export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onAdded, collect, title = 'Log food' }: {
+  day: string; meal: Meal; tab?: Tab; onClose: () => void; onAdded?: (logs: FoodLog[]) => void
+  /** Building a saved meal or editing a logged one: hand the picked foods back instead of logging them. */
+  collect?: (drafts: Draft[]) => void; title?: string
 }) {
   const [tab, setTab] = useState<Tab>(tab0)
   const [meal, setMeal] = useState<Meal>(meal0)
@@ -30,14 +33,16 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
   const [quick, setQuick] = useState<QuickPrefill>({})
   const [toast, setToast] = useState('')
   const [scanKey, setScanKey] = useState(0)
+  const [saved, setSaved] = useState<SavedMeal[]>([])
 
+  useEffect(() => { if (!collect) loadSaved().then(setSaved).catch(() => {}) }, [collect])
   useEffect(() => { recentFoods().then((ls) => setRecent(ls.map(foodFromLog))).catch(() => {}) }, [])
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2500); return () => clearTimeout(t) }, [toast])
 
   /** Saves; Describe/Quick close the sheet, Search/Scan stay open so you can add more. */
   const save = async (drafts: Draft[], close: boolean) => {
-    const logs = await addLogs(drafts, day)
-    onAdded(logs)
+    if (collect) collect(drafts)
+    else onAdded?.(await addLogs(drafts, day))
     if (close) return onClose()
     setPicked(null)
     if (tab === 'scan') setScanKey((k) => k + 1)
@@ -46,9 +51,25 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
   const go = (t: Tab) => { setPicked(null); setTab(t) }
 
   return (
-    <Sheet title="Log food" subtitle={dayLabel(day)} onClose={onClose}>
+    <Sheet title={title} subtitle={collect ? undefined : dayLabel(day)} onClose={onClose}>
       <div className="space-y-3 pb-6">
-        <MealChips value={meal} onChange={(m) => { setMeal(m); setMealTouched(true) }} />
+        {!collect && <MealChips value={meal} onChange={(m) => { setMeal(m); setMealTouched(true) }} />}
+        {!collect && !picked && saved.length > 0 && (
+          <div>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">My meals</p>
+            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+              {saved.map((sm) => (
+                <button key={sm.id} onClick={async () => {
+                  try { onAdded?.(await logSaved(sm, meal, day)); setToast(`Added ${sm.name} · ${fmtK(itemsTotal(sm.items ?? []).kcal)} kcal`) } catch (e) { setToast(errMsg(e)) }
+                }} className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-surface py-1.5 pl-2 pr-3 text-sm font-semibold active:scale-[0.98]">
+                  <span className="grid size-6 place-items-center rounded-full bg-accent/15 text-accent"><PlusIcon width={14} height={14} /></span>
+                  <span className="max-w-[10rem] truncate">{sm.name}</span>
+                  <span className="num text-xs text-muted">{fmtK(itemsTotal(sm.items ?? []).kcal)}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
         {!picked && (
           <div className="grid grid-cols-4 gap-1.5">
             {TABS.map(([t, label, Icon]) => (

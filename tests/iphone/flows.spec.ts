@@ -46,7 +46,7 @@ test.describe('Real taps on an iPhone', () => {
 
   test('feed shows body graphs in each lifter\'s own color', async ({ app }) => {
     const s = seed()
-    await app.goto('/#/feed')
+    await app.goto('/#/feed?tab=feed')
     const card = app.locator('.space-y-3.p-3').filter({ hasText: s.friend.workoutName })
     await expect(card).toBeVisible()
     const accent = await card.locator('svg[aria-label="front muscles"]').first().evaluate((svg) => getComputedStyle(svg.parentElement!.parentElement!).getPropertyValue('--color-accent').trim())
@@ -55,7 +55,7 @@ test.describe('Real taps on an iPhone', () => {
 
   test('react with an emoji and take it back', async ({ app }) => {
     const s = seed()
-    await app.goto('/#/feed')
+    await app.goto('/#/feed?tab=feed')
     const card = app.locator('.space-y-3.p-3').filter({ hasText: s.friend.workoutName })
     await card.getByRole('button', { name: 'React', exact: true }).tap()
     await app.getByTitle('fire').tap()
@@ -69,7 +69,7 @@ test.describe('Real taps on an iPhone', () => {
     const s = seed()
     const name = `Pump ${test.info().project.name.replace(/\W/g, '')}`.slice(0, 24)
     app.on('dialog', (d) => d.accept())
-    await app.goto('/#/feed')
+    await app.goto('/#/feed?tab=feed')
     const card = app.locator('.space-y-3.p-3').filter({ hasText: s.friend.workoutName })
     await card.getByRole('button', { name: 'React', exact: true }).tap()
     await app.getByRole('button', { name: 'Custom reaction' }).tap()
@@ -96,7 +96,7 @@ test.describe('Real taps on an iPhone', () => {
   })
 
   test('switching tabs opens each page at the top', async ({ app }) => {
-    await app.goto('/#/feed')
+    await app.goto('/#/feed?tab=feed')
     await expect(app.getByRole('heading', { name: liftName() })).toBeVisible()
     await main(app).evaluate((m) => { m.scrollTop = m.scrollHeight })
     await tab(app, 'Profile')
