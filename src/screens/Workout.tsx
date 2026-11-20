@@ -208,10 +208,15 @@ function ActiveWorkout() {
   }
 
   return (
-    <section className="mx-auto max-w-lg px-safe pb-28 pt-4">
-      <div className="mb-4 flex items-center justify-between gap-3">
+    <section className="mx-auto max-w-lg px-safe pb-28">
+      {/*
+        Sticky, and always below the status bar: on iPhone, taps in the status-bar strip go to iOS (scroll to top), so a
+        Finish button that had scrolled up under it would ignore taps. preventDefault on pointer-down keeps a focused set
+        box from blurring first (closing the keyboard shifts the layout and the tap would miss).
+      */}
+      <div className="sticky top-0 z-30 -mx-4 mb-4 mt-[calc(-1*env(safe-area-inset-top))] flex items-center justify-between gap-3 bg-canvas/90 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-xl" data-workout-header>
         <div className="flex items-center gap-2 text-sm font-bold text-accent"><TimerIcon width={18} height={18} /><Elapsed since={a.startedAt} /></div>
-        <Button size="sm" onClick={() => setFinishing(true)}>Finish</Button>
+        <Button size="sm" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setFinishing(true) }}>Finish</Button>
       </div>
       <input value={a.name} onChange={(e) => update((w) => ({ ...w, name: e.target.value }))} className="mb-4 w-full bg-transparent text-3xl font-extrabold tracking-tight outline-none" />
       <div className="space-y-3">
