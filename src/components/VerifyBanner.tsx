@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { errMsg, pb, type User } from '../lib/pb'
-import { CloseIcon } from './icons'
+import { CloseIcon, MailIcon } from './icons'
 
 /** Shown until the account's email is verified. Hiding it lasts until the app is reopened. */
 let hidden = false
@@ -24,7 +24,7 @@ export function VerifyBanner({ user }: { user: User }) {
   return (
     <div className="mx-auto flex w-full max-w-lg items-start gap-3 px-safe pb-2">
       <div className="flex flex-1 items-start gap-3 rounded-xl border border-accent/40 bg-surface p-3 text-sm">
-        <span className="text-lg leading-none">✉️</span>
+        <MailIcon width={20} height={20} className="shrink-0 text-accent" aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="font-bold">Verify your email</p>
           <p className="text-muted">{msg || <>Tap the link we sent to <span className="break-all">{user.email}</span>.</>}</p>

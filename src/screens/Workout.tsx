@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
-import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
+import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, FlameIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
 import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
@@ -73,7 +73,7 @@ export function StreakCard({ s }: { s: Streak }) {
   return (
     <div className={`rounded-2xl border ${tone}`}>
       <button onClick={() => setOpen((o) => !o)} aria-expanded={open} className="flex w-full items-center gap-3 p-3 text-left">
-        <span className={`text-3xl ${s.days ? '' : 'grayscale opacity-50'}`}>🔥</span>
+        <FlameIcon width={32} height={32} className={`shrink-0 ${s.days ? 'text-orange-500' : 'text-faint'}`} fill="currentColor" fillOpacity={s.days ? 0.2 : 0} aria-hidden />
         <div className="min-w-0 flex-1">
           <p className="num text-xl font-black leading-tight">{s.days ? `${s.days} day streak` : 'No streak yet'}</p>
           <p className={`text-xs font-semibold ${s.atRisk ? 'text-amber-300' : 'text-muted'}`}>{streakText(s)}</p>

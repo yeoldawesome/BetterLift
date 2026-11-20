@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { BarcodeIcon, BackIcon, BoltIcon, CloseIcon, PlusIcon, SearchIcon, SparkIcon } from '../icons'
+import { BarcodeIcon, BackIcon, BoltIcon, CheckIcon, CloseIcon, PlusIcon, SearchIcon, SparkIcon } from '../icons'
 import { Button, ErrorText, Input, Sheet, Spinner } from '../ui'
 import { estimateMeal, mealIn, parseMacros, parseWeight } from '../../lib/foodParse'
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
@@ -59,7 +59,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
             ))}
           </div>
         )}
-        {toast && <p className="rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent">✓ {toast}</p>}
+        {toast && <p className="flex items-center gap-1.5 rounded-xl bg-accent/15 px-3 py-2 text-sm font-bold text-accent"><CheckIcon width={16} height={16} className="shrink-0" aria-hidden />{toast}</p>}
 
         {picked ? (
           <FoodDetail food={picked.food} source={picked.source} meal={meal} onBack={() => setPicked(null)} onAdd={(d) => save([d], false)} />

@@ -187,17 +187,17 @@ onRecordAfterCreateSuccess((e) => {
 onRecordAfterCreateSuccess((e) => {
   e.next()
   const lib = require(`${__hooks}/lib.js`)
-  const EMOJI = { fire: "🔥", muscle: "💪", clap: "👏", rocket: "🚀", trophy: "🏆" }
+  const NAMES = { fire: "fire", muscle: "a flex", clap: "a high five", rocket: "a rocket", trophy: "a trophy" }
   const by = e.record.getString("user"), wid = e.record.getString("workout")
-  // Built-ins show their emoji; custom reactions show their name in quotes.
-  let label = EMOJI[e.record.getString("emoji")] || ""
+  // Built-ins are named in words (no emoji); custom reactions show their name in quotes.
+  let label = NAMES[e.record.getString("emoji")] || ""
   if (e.record.getString("emoji") === "custom") {
     try { label = `“${e.app.findRecordById("custom_reactions", e.record.getString("custom")).getString("name")}”` } catch (_) {}
   }
   try {
     const w = e.app.findRecordById("workouts", wid)
     lib.notify(e.app, { user: w.getString("user"), actor: by, type: "reaction", target: wid,
-      text: `${lib.uname(e.app, by)} reacted ${label} to “${w.getString("name")}”` })
+      text: `${lib.uname(e.app, by)} reacted ${label ? `with ${label} ` : ""}to “${w.getString("name")}”` })
   } catch (_) {}
 }, "reactions")
 
@@ -221,7 +221,7 @@ onRecordAfterCreateSuccess((e) => {
   e.next()
   const lib = require(`${__hooks}/lib.js`)
   const from = e.record.getString("from")
-  lib.notify(e.app, { user: e.record.getString("to"), actor: from, type: "nudge", target: e.record.id, text: `${lib.uname(e.app, from)} wants you back in the gym 💪` })
+  lib.notify(e.app, { user: e.record.getString("to"), actor: from, type: "nudge", target: e.record.id, text: `${lib.uname(e.app, from)} wants you back in the gym` })
 }, "nudges")
 
 // Exercise review outcome → tell the submitter.
@@ -234,7 +234,7 @@ onRecordAfterUpdateSuccess((e) => {
   const note = e.record.getString("review_note")
   lib.notify(e.app, {
     user: who, type: now === "approved" ? "exercise_approved" : "exercise_rejected", target: e.record.id,
-    text: now === "approved" ? `“${e.record.getString("name")}” was approved and is now an official exercise 🎉` : `“${e.record.getString("name")}” wasn't approved${note ? `: ${note}` : ""}`,
+    text: now === "approved" ? `“${e.record.getString("name")}” was approved and is now an official exercise` : `“${e.record.getString("name")}” wasn't approved${note ? `: ${note}` : ""}`,
   })
 }, "exercises")
 

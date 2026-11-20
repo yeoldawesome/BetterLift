@@ -135,7 +135,7 @@ function ReviewTab() {
   if (!items) return <Spinner />
   return (
     <>
-      {!items.length && <Card className="py-8 text-center text-sm text-muted">No exercises waiting for review. 🎉</Card>}
+      {!items.length && <Card className="py-8 text-center text-sm text-muted">No exercises waiting for review.</Card>}
       {items.map((e) => (
         <Card key={e.id} onClick={() => setOpen(e)} className="cursor-pointer active:bg-surface-2">
           <div className="flex items-start justify-between gap-3">

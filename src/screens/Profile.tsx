@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellIcon, ChevronIcon, DownIcon, PlusIcon, SettingsIcon } from '../components/icons'
+import { BellIcon, CalendarIcon, ChevronIcon, CommentIcon, DownIcon, ExercisesIcon, FriendsIcon, HistoryIcon, ImportIcon, PaletteIcon, PlusIcon, RoutinesIcon, SettingsIcon, SmileIcon, StatsIcon, TrendIcon, TrophyIcon } from '../components/icons'
 import { Avatar, Card, ErrorText, Stat } from '../components/ui'
 import { resizeImage } from '../lib/image'
 import { useNotifications } from '../lib/notifications'
@@ -14,7 +14,7 @@ import { invalidateStats } from '../lib/statsData'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
 import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
 
-type Tile = { to: string; label: string; icon: string; badge?: number; dot?: boolean }
+type Tile = { to: string; label: string; icon: typeof StatsIcon; badge?: number; dot?: boolean }
 type WRow = Pick<Workout, 'id' | 'started_at' | 'duration_s' | 'volume_kg'>
 
 export default function Profile() {
@@ -55,17 +55,17 @@ export default function Profile() {
 
   const notes = useNotifications()
   const tiles: Tile[] = [
-    { to: '/routines', label: 'Routines', icon: '📋' },
-    { to: '/exercises', label: 'Exercises', icon: '🏋️', dot: notes.has('exercises') },
-    { to: '/stats', label: 'Stats', icon: '📊' },
-    { to: '/history', label: 'History', icon: '🗓️' },
-    { to: '/reactions', label: 'Reactions', icon: '😄' },
-    { to: '/friends', label: 'Friends', icon: '👥', badge: pending, dot: notes.has('friends') },
-    { to: '/import', label: 'Import / Export', icon: '📥' },
-    { to: '/themes', label: 'Themes', icon: '🎨' },
-    { to: '/feedback', label: 'Feedback', icon: '💬', dot: notes.has('feedback') },
-    { to: '/settings', label: 'Settings', icon: '⚙️', dot: nutritionNew(user) },
-    ...(user.is_moderator ? [{ to: '/review', label: 'Review', icon: '🏆', badge: toReview }] : []),
+    { to: '/routines', label: 'Routines', icon: RoutinesIcon },
+    { to: '/exercises', label: 'Exercises', icon: ExercisesIcon, dot: notes.has('exercises') },
+    { to: '/stats', label: 'Stats', icon: StatsIcon },
+    { to: '/history', label: 'History', icon: HistoryIcon },
+    { to: '/reactions', label: 'Reactions', icon: SmileIcon },
+    { to: '/friends', label: 'Friends', icon: FriendsIcon, badge: pending, dot: notes.has('friends') },
+    { to: '/import', label: 'Import / Export', icon: ImportIcon },
+    { to: '/themes', label: 'Themes', icon: PaletteIcon },
+    { to: '/feedback', label: 'Feedback', icon: CommentIcon, dot: notes.has('feedback') },
+    { to: '/settings', label: 'Settings', icon: SettingsIcon, dot: nutritionNew(user) },
+    ...(user.is_moderator ? [{ to: '/review', label: 'Review', icon: TrophyIcon, badge: toReview }] : []),
   ]
 
   // Stop this phone's pushes first (needs the login), then wipe on-device caches.
@@ -106,9 +106,9 @@ export default function Profile() {
         <Link to="/stats"><Stat value={prs} label="PRs" /></Link>
       </Card>
       <div className="grid grid-cols-5 gap-y-4 py-2">
-        {tiles.map(({ to, label, icon, badge, dot }) => (
+        {tiles.map(({ to, label, icon: Icon, badge, dot }) => (
           <Link key={to} to={to} className="relative flex flex-col items-center gap-1 active:opacity-70">
-            <span className="text-[34px] leading-none">{icon}</span>
+            <span className="grid size-12 place-items-center rounded-2xl bg-surface-2 text-accent"><Icon width={26} height={26} /></span>
             <span className="w-full truncate text-center text-[11px] font-bold">{label}</span>
             {!!badge && <span className="num absolute right-1 -top-1 min-w-4 rounded-full bg-red-600 px-1 text-center text-[10px] font-bold leading-4 text-white">{badge}</span>}
             {dot && !badge && <span className="absolute right-3 top-0 size-2 rounded-full bg-danger" aria-label="New" />}
@@ -149,7 +149,7 @@ function Memories({ ws }: { ws: WRow[] }) {
   return (
     <Link to="/calendar" className="block space-y-3 rounded-2xl border border-line bg-surface p-4 active:opacity-80">
       <div className="flex items-center justify-between">
-        <h2 className="flex items-center gap-2 text-lg font-extrabold"><span className="text-2xl">📅</span>Memories</h2>
+        <h2 className="flex items-center gap-2 text-lg font-extrabold"><CalendarIcon width={24} height={24} className="text-accent" />Memories</h2>
         <span className="flex items-center text-sm font-bold text-accent">Calendar<ChevronIcon width={16} height={16} /></span>
       </div>
       <div className="grid grid-cols-7 gap-1.5 text-center">
@@ -209,7 +209,7 @@ function TotalCard({ ws, unit }: { ws: WRow[]; unit: Unit }) {
   return (
     <Card className="space-y-3">
       <div className="relative flex items-center justify-between gap-2">
-        <h2 className="flex min-w-0 items-center gap-2 text-lg font-extrabold"><span className="text-2xl">📈</span><span className="num truncate">Total {fmt(sum)}</span></h2>
+        <h2 className="flex min-w-0 items-center gap-2 text-lg font-extrabold"><TrendIcon width={24} height={24} className="shrink-0 text-accent" /><span className="num truncate">Total {fmt(sum)}</span></h2>
         <button onClick={() => setOpen((v) => !v)} className="flex shrink-0 items-center gap-0.5 rounded-lg bg-surface-2 px-2.5 py-1 text-sm font-bold text-accent">{range}<DownIcon width={14} height={14} /></button>
         {open && (
           <>

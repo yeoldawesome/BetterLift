@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { BellIcon, CloseIcon } from '../components/icons'
+import { BellIcon, CheckIcon, CloseIcon, FlameIcon } from '../components/icons'
 import { useNotifications } from '../lib/notifications'
 import { WorkoutCard } from '../components/WorkoutCard'
 import { Avatar, Button, Card, Empty, Screen, Segmented, Spinner } from '../components/ui'
@@ -127,7 +127,7 @@ function FriendsTab() {
   const remind = async (u: User) => {
     setMsg('')
     try {
-      await pb.collection('nudges').create({ from: me(), to: u.id, message: 'Time to get back in the gym! 💪' })
+      await pb.collection('nudges').create({ from: me(), to: u.id, message: 'Time to get back in the gym!' })
       setRows((rs) => rs?.map((r) => (r.user.id === u.id ? { ...r, nudged: true } : r)) ?? null)
       setMsg(`Reminder sent to @${u.username}`)
     } catch (e) { setMsg(errMsg(e)) }
@@ -148,7 +148,7 @@ function FriendsTab() {
                 <div className="min-w-0">
                   <p className="truncate font-bold">{u.name || u.username}</p>
                   <p className={`text-xs font-semibold ${lost ? 'text-danger' : s?.atRisk ? 'text-amber-300' : 'text-muted'}`}>
-                    {lost ? (s?.best ? `Streak lost · best ${s.best} days` : 'No streak yet') : s?.atRisk ? `🔥 ${s.days} days · last day!` : `🔥 ${s?.days} day streak`}
+                    {lost ? (s?.best ? `Streak lost · best ${s.best} days` : 'No streak yet') : <span className="inline-flex items-center gap-1"><FlameIcon width={13} height={13} className="text-orange-500" aria-hidden />{s?.atRisk ? `${s.days} days · last day!` : `${s?.days} day streak`}</span>}
                   </p>
                 </div>
               </Link>
@@ -156,7 +156,7 @@ function FriendsTab() {
                 <Link to={`/compare/${u.id}`} className="grid h-9 place-items-center rounded-xl bg-surface-2 px-3 text-xs font-bold">Compare</Link>
                 {(lost || s?.atRisk) && (
                   <button disabled={nudged} onClick={() => remind(u)} className="h-9 rounded-xl bg-accent px-3 text-xs font-bold text-accent-ink disabled:bg-surface-2 disabled:text-muted">
-                    {nudged ? 'Sent ✓' : 'Remind 💪'}
+                    {nudged ? <span className="inline-flex items-center gap-1">Sent<CheckIcon width={14} height={14} aria-hidden /></span> : 'Remind'}
                   </button>
                 )}
               </div>
@@ -182,7 +182,7 @@ function NudgeBanner() {
       {nudges.map((n) => (
         <div key={n.id} className="flex items-center gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-3">
           <Avatar user={n.expand?.from} size={36} />
-          <p className="min-w-0 flex-1 text-sm"><span className="font-bold">@{n.expand?.from?.username}</span> {n.message || 'wants you back in the gym 💪'}
+          <p className="min-w-0 flex-1 text-sm"><span className="font-bold">@{n.expand?.from?.username}</span> {n.message || 'wants you back in the gym'}
             <span className="block text-xs text-muted">{timeAgo(n.created)}</span></p>
           <Link to="/workout" onClick={() => dismiss(n)} className="rounded-xl bg-accent px-3 py-2 text-xs font-bold text-accent-ink">Let’s go</Link>
           <button onClick={() => dismiss(n)} className="p-1 text-faint" aria-label="Dismiss"><CloseIcon width={16} height={16} /></button>

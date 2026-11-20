@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { MultiChart, type Series } from '../components/MultiChart'
 import { Spinner } from '../components/ui'
+import { CalendarIcon, DnaIcon, ForecastIcon, MuscleIcon, RocketIcon, ScaleIcon, StatsIcon, TargetIcon, TimerIcon, TrendIcon, TrophyIcon } from '../components/icons'
 import { loadBody, type BodyMetric } from '../lib/body'
 import { label } from '../lib/exercises'
 import { fromUnit, toUnit } from '../lib/format'
@@ -18,11 +19,11 @@ const sign = (n: number) => (n > 0 ? '+' : '')
 
 const PERIODS: [number, string, string][] = [[30, '30D', 'the last 30 days'], [90, '90D', 'the last 90 days'], [180, '6M', 'the last 6 months'], [365, '1Y', 'the last year'], [0, 'All', 'all time']]
 
-function Card({ title, sub, children }: { title: string; sub?: string; children: ReactNode }) {
+function Card({ title, icon: Icon, sub, children }: { title: string; icon?: typeof StatsIcon; sub?: string; children: ReactNode }) {
   return (
     <section className="space-y-3 rounded-2xl border border-line bg-surface p-4">
       <div>
-        <h2 className="font-extrabold">{title}</h2>
+        <h2 className="flex items-center gap-2 font-extrabold">{Icon && <Icon width={20} height={20} className="shrink-0 text-accent" aria-hidden />}{title}</h2>
         {sub && <p className="text-xs text-muted">{sub}</p>}
       </div>
       {children}
@@ -30,10 +31,10 @@ function Card({ title, sub, children }: { title: string; sub?: string; children:
   )
 }
 
-function Callout({ icon, value, text }: { icon: string; value: string; text: string }) {
+function Callout({ icon: Icon, value, text }: { icon: typeof StatsIcon; value: string; text: string }) {
   return (
     <div className="flex items-center gap-3 rounded-xl bg-surface-2 p-3">
-      <span className="text-xl">{icon}</span>
+      <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-surface text-accent"><Icon width={22} height={22} aria-hidden /></span>
       <div className="min-w-0">
         <p className="num font-black leading-snug">{value}</p>
         <p className="text-xs text-muted">{text}</p>
@@ -200,7 +201,7 @@ export function InsightsView({ user }: { user: User }) {
       </div>
       {!hasSets && <p className="rounded-xl bg-surface-2 px-3 py-2 text-sm text-muted">No weighted sets in {period}. Try a longer period.</p>}
 
-      <Card title="🔮 PR predictions" sub={`Based on your est. 1RM trend over ${days ? period : 'the last few months'}. Tap a lift to see the projection and set a goal.`}>
+      <Card icon={ForecastIcon} title="PR predictions" sub={`Based on your est. 1RM trend over ${days ? period : 'the last few months'}. Tap a lift to see the projection and set a goal.`}>
         {preds.length ? (
           <>
             {(showAll ? preds : preds.slice(0, 5)).map((p) => (
@@ -219,18 +220,18 @@ export function InsightsView({ user }: { user: User }) {
 
       <BodyCard bs={bs} unit={unit} metric={metric} setMetric={setMetric} stand={stand} bwKg={bwKg} sex={sex} hasBody={!!lastBody} period={period} />
 
-      <Card title="📊 How you compare" sub={`Approximate standards for ${sex === 'female' ? 'women' : 'men'} at your bodyweight (${n0(toUnit(bwKg, unit))} ${unit})${user.sex ? '' : ' — set your sex in your profile for accurate standards'}.`}>
+      <Card icon={StatsIcon} title="How you compare" sub={`Approximate standards for ${sex === 'female' ? 'women' : 'men'} at your bodyweight (${n0(toUnit(bwKg, unit))} ${unit})${user.sex ? '' : ' — set your sex in your profile for accurate standards'}.`}>
         {!bwKg ? <p className="text-sm text-muted">Add your bodyweight in your profile (or import scale data) to compare your lifts.</p>
           : stand.length ? stand.map((s) => <StandingRow key={s.lift} s={s} unit={unit} from={from} />)
             : <p className="text-sm text-muted">Log a squat, bench, deadlift, overhead press or barbell row{days ? ` in ${period}` : ''} to see where you stand.</p>}
 
         <div className="grid gap-2 sm:grid-cols-2">
-          <Callout icon="📅" value={`${freq} / week`} text={`Workouts per week over ${period}. Most lifters who progress well train 3–4×. ${freq < 2.5 ? 'More frequent sessions could speed things up.' : freq > 5.5 ? "That's a lot — make sure you recover." : "You're right in that range."}`} />
-          {lastBody?.body_fat_pct ? (() => { const b = bodyFatBand(lastBody.body_fat_pct, sex); return <Callout icon="🧬" value={`${r1(lastBody.body_fat_pct)}% · ${b.name}`} text={`Body fat. Typical ${sex === 'female' ? 'women: 25–31%' : 'men: 18–24%'}.`} /> })() : null}
+          <Callout icon={CalendarIcon} value={`${freq} / week`} text={`Workouts per week over ${period}. Most lifters who progress well train 3–4×. ${freq < 2.5 ? 'More frequent sessions could speed things up.' : freq > 5.5 ? "That's a lot — make sure you recover." : "You're right in that range."}`} />
+          {lastBody?.body_fat_pct ? (() => { const b = bodyFatBand(lastBody.body_fat_pct, sex); return <Callout icon={DnaIcon} value={`${r1(lastBody.body_fat_pct)}% · ${b.name}`} text={`Body fat. Typical ${sex === 'female' ? 'women: 25–31%' : 'men: 18–24%'}.`} /> })() : null}
           {(() => {
             const ffm = lastBody?.fat_free_kg || (lastBody?.body_fat_pct ? lastBody.weight_kg * (1 - lastBody.body_fat_pct / 100) : 0)
             const v = ffmi(ffm, user.height_cm)
-            return v ? <Callout icon="💪" value={`${v} FFMI · ${ffmiBand(v, sex)}`} text={`Muscle for your height. Untrained average ≈ ${sex === 'female' ? 15 : 19}; ${sex === 'female' ? '21' : '25'}+ is rare without drugs.`} /> : null
+            return v ? <Callout icon={MuscleIcon} value={`${v} FFMI · ${ffmiBand(v, sex)}`} text={`Muscle for your height. Untrained average ≈ ${sex === 'female' ? 15 : 19}; ${sex === 'female' ? '21' : '25'}+ is rare without drugs.`} /> : null
           })()}
         </div>
 
@@ -265,21 +266,21 @@ function ImprovementCard({ imp, unit, period, allTime }: { imp: ReturnType<typeo
   const labels = useMemo(() => months.map((m) => m.label), [months])
   const series = useMemo<Series[]>(() => [{ label: 'Strength gained', data: months.map((m) => m.gainPct), bar: true, suffix: '%' }], [months])
   return (
-    <Card title="📈 When you improved most" sub="Average % your est. 1RM went up (from PRs) for each lift you trained that month.">
+    <Card icon={TrendIcon} title="When you improved most" sub="Average % your est. 1RM went up (from PRs) for each lift you trained that month.">
       <MultiChart className="h-44" labels={labels} series={series} highlight={hi >= 0 ? hi : undefined} />
       <div className="grid gap-2 sm:grid-cols-2">
         {imp.bestMonth && imp.bestMonth.gainPct > 0 && (
-          <Callout icon="🏆" value={new Date(imp.bestMonth.t).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
+          <Callout icon={TrophyIcon} value={new Date(imp.bestMonth.t).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })}
             text={`Best month: ${imp.bestMonth.prs} PRs on ${imp.bestMonth.names.size} lift${imp.bestMonth.names.size === 1 ? '' : 's'}, +${imp.bestMonth.gainPct}% per lift on average`} />
         )}
         {imp.bestStretch && months.length > 4 && (
-          <Callout icon="🚀" value={`${imp.bestStretch.from.label} – ${imp.bestStretch.to.label}`} text={`Best 3-month run: +${imp.bestStretch.gainPct}% per lift`} />
+          <Callout icon={RocketIcon} value={`${imp.bestStretch.from.label} – ${imp.bestStretch.to.label}`} text={`Best 3-month run: +${imp.bestStretch.gainPct}% per lift`} />
         )}
         {imp.earlyPace !== null && imp.recentPace !== null && (
-          <Callout icon="⏳" value={`${imp.earlyPace}% → ${imp.recentPace}% / mo`}
+          <Callout icon={TimerIcon} value={`${imp.earlyPace}% → ${imp.recentPace}% / mo`}
             text={imp.recentPace < imp.earlyPace * 0.5 ? 'First 6 months vs. now. Slowing down is normal as you get stronger.' : 'First 6 months vs. now. You are keeping your pace up!'} />
         )}
-        {imp.byMuscle[0]?.gainPct > 0 && <Callout icon="🎯" value={label(imp.byMuscle[0].muscle)} text={`Your fastest-progressing muscle group (+${imp.byMuscle[0].gainPct}% per lift, ${period})`} />}
+        {imp.byMuscle[0]?.gainPct > 0 && <Callout icon={TargetIcon} value={label(imp.byMuscle[0].muscle)} text={`Your fastest-progressing muscle group (+${imp.byMuscle[0].gainPct}% per lift, ${period})`} />}
       </div>
       {imp.recent.length > 0 && (
         <div className="space-y-1">
@@ -325,7 +326,7 @@ function BodyCard({ bs, unit, metric, setMetric, stand, bwKg, sex, hasBody, peri
   const total = big3.every(Boolean) ? big3.reduce((t, s) => t + s!.e1rm, 0) : 0
 
   return (
-    <Card title="⚖️ Body & strength" sub="How your physique has moved alongside your lifts. Strength index = your lifts' recent est. 1RMs as a % of their all-time bests.">
+    <Card icon={ScaleIcon} title="Body & strength" sub="How your physique has moved alongside your lifts. Strength index = your lifts' recent est. 1RMs as a % of their all-time bests.">
       {!bs.corr.length ? (
         <p className="text-sm text-muted">{hasBody
           ? `Need at least 6 weeks of scale readings alongside your lifts in ${period} — try a longer period.`

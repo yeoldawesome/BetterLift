@@ -7,7 +7,7 @@ import { errMsg, me, pb, type Exercise, type Kind } from '../lib/pb'
 import { ExerciseInfo } from './ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { Button, Card, Chips, ErrorText, Input, Select, Sheet, Spinner, Toggle } from './ui'
-import { InfoIcon, SearchIcon, TrashIcon } from './icons'
+import { InfoIcon, LinkIcon, SearchIcon, TrashIcon } from './icons'
 import { ask, tell } from './Dialog'
 
 type Show = 'all' | 'most' | 'recent'
@@ -134,7 +134,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
       <Button variant="ghost" onClick={() => setForm({})}>+ Create custom exercise</Button>
       {!onPick && dupes.length > 0 && (
         <button onClick={() => setMerging(true)} className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-3 text-left">
-          <span className="text-2xl">🔗</span>
+          <LinkIcon width={24} height={24} className="shrink-0 text-accent" aria-hidden />
           <span className="min-w-0 flex-1"><span className="block font-bold">{dupes.length} exercise{dupes.length === 1 ? '' : 's'} look like official ones</span>
             <span className="block text-sm text-muted">e.g. “{dupes[0].from.name}” is “{dupes[0].to.name}”. Merge them so your history lives in one place.</span></span>
           <span className="font-bold text-accent">Review</span>

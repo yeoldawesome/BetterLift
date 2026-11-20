@@ -51,14 +51,14 @@ export function prLine(ex: Exercise, best: Best | null, reps: number, unit: Unit
   if (!best) return null
   if (!best.any) return { text: 'First time logging this — every set is a PR', hit: false }
   if (ex.kind === 'weight') {
-    if (liveE1rmKg > best.e1rm + 0.01) return { text: 'New PR! 🏆', hit: true }
+    if (liveE1rmKg > best.e1rm + 0.01) return { text: 'New PR!', hit: true }
     if (!best.e1rm) return null
     const w = weightToPr(best.e1rm, reps, unit)
     const alt = altW > 0 && Math.abs(altW - w) > 0.01 ? repsToPr(best.e1rm, fromUnit(altW, unit)) : null
     return { text: `Do ${reps} reps at ${w} ${unit} to PR${alt ? `  ·  or ${alt} reps at ${altW}` : ''}`, hit: false }
   }
-  if (ex.kind === 'bodyweight' || ex.kind === 'assisted') return liveReps > best.maxReps ? { text: 'New rep PR! 🏆', hit: true } : { text: `Do ${best.maxReps + 1} reps in one set to PR`, hit: false }
+  if (ex.kind === 'bodyweight' || ex.kind === 'assisted') return liveReps > best.maxReps ? { text: 'New rep PR!', hit: true } : { text: `Do ${best.maxReps + 1} reps in one set to PR`, hit: false }
   if (ex.kind === 'duration' && isCardio(ex)) return null // sports/conditioning: no "hold longer" PR
-  if (ex.kind === 'duration') return liveSec > best.maxSec ? { text: 'New PR! 🏆', hit: true } : { text: `Hold for ${best.maxSec + 1}s to PR`, hit: false }
+  if (ex.kind === 'duration') return liveSec > best.maxSec ? { text: 'New PR!', hit: true } : { text: `Hold for ${best.maxSec + 1}s to PR`, hit: false }
   return null
 }

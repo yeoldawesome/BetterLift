@@ -1,7 +1,7 @@
 // Stats page layout modeled on LiftoffVisualizer by JacobG122503 (github.com/JacobG122503/LiftoffVisualizer), used with permission.
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CloseIcon, InfoIcon, SearchIcon } from '../components/icons'
+import { BikeIcon, BoltIcon, BurstIcon, CalendarIcon, CloseIcon, DownIcon, FlameIcon, HistoryIcon, InfoIcon, MoonIcon, MuscleIcon, PlateIcon, PuzzleIcon, RepeatIcon, RulerIcon, ScaleIcon, SearchIcon, SleepIcon, SproutIcon, StarIcon, StatsIcon, SunriseIcon, TagIcon, TimerIcon, TrendIcon, WorkoutIcon } from '../components/icons'
 import { ExerciseInfo } from '../components/ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { LineChart } from '../components/LineChart'
@@ -226,41 +226,41 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
 
 function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw: number; height: number }) {
   const b = bmi(bw, height)
-  const items: [string, string, string, string?][] = [
-    ['🔥', `${snap.longestStreak}`, 'Longest Streak (days)'],
-    ['😴', `${snap.longestBreak}`, 'Longest Break (days)'],
-    ['⭐', snap.favorite, 'Favorite Exercise'],
-    ['📈', snap.mostImproved, `Most Improved (+${n0(snap.mostImprovedGain)} ${unit})`],
-    ['📅', snap.activeWeekday, 'Day you train most often'],
-    ['🗓️', snap.peakMonth, 'Your most active month'],
-    ['📊', `${snap.perWeek}`, 'Avg Workouts / Week'],
-    ['💪', n0(snap.totalReps), 'Total Reps All Time'],
-    ['🏋️', snap.heaviest ? `${n0(snap.heaviest)} ${unit}` : '-', `Heaviest Lift${snap.heaviestExercise !== '-' ? ` (${snap.heaviestExercise})` : ''}`],
-    ['⚡', `${snap.maxSetsInSession}`, 'Most Sets in One Day', day(snap.maxSetsDate)],
-    ['🔄', `${snap.maxRepsInSession}`, `Most Reps — ${snap.maxRepsExercise}`, day(snap.maxRepsDate)],
-    ['💥', `${n0(snap.maxVolumeInSession)} ${unit}`, 'Best Volume in One Day', day(snap.maxVolumeDate)],
-    ['🧩', `${snap.maxExercisesInSession}`, 'Most Exercises in One Day', day(snap.maxExercisesDate)],
-    ['🌱', snap.firstExercise, 'First Exercise Ever Logged'],
-    ['📅', snap.consistentMonth, 'Most Consistent Month'],
-    ['⏱️', snap.avgDurationMin ? `${snap.avgDurationMin.toFixed(1)} min` : '-', 'Avg Workout Duration'],
-    ['🌅', clock(snap.earliest), 'Earliest Workout Time', snap.earliest ? `on ${day(snap.earliest)}` : ''],
-    ['🌙', clock(snap.latest), 'Latest Workout Time', snap.latest ? `on ${day(snap.latest)}` : ''],
-    ['🏷️', snap.favoriteWorkoutName, 'Most Frequent Workout Name'],
-    ['🏋️‍♂️', snap.mostUsedWeight ? `${n0(snap.mostUsedWeight)} ${unit}` : '-', 'Most Used Weight'],
-    ['🚴', snap.totalDistance ? `${snap.totalDistance.toFixed(1)} ${distLabel(unit)}` : '-', 'Total Distance'],
-    ['⚖️', bw ? `${fmtW(bw, unit)} ${unit}` : '-', 'Current Bodyweight'],
-    ['📏', b ? b.toFixed(1) : '-', 'BMI'],
+  const items: [typeof StatsIcon, string, string, string?][] = [
+    [FlameIcon, `${snap.longestStreak}`, 'Longest Streak (days)'],
+    [SleepIcon, `${snap.longestBreak}`, 'Longest Break (days)'],
+    [StarIcon, snap.favorite, 'Favorite Exercise'],
+    [TrendIcon, snap.mostImproved, `Most Improved (+${n0(snap.mostImprovedGain)} ${unit})`],
+    [CalendarIcon, snap.activeWeekday, 'Day you train most often'],
+    [HistoryIcon, snap.peakMonth, 'Your most active month'],
+    [StatsIcon, `${snap.perWeek}`, 'Avg Workouts / Week'],
+    [MuscleIcon, n0(snap.totalReps), 'Total Reps All Time'],
+    [WorkoutIcon, snap.heaviest ? `${n0(snap.heaviest)} ${unit}` : '-', `Heaviest Lift${snap.heaviestExercise !== '-' ? ` (${snap.heaviestExercise})` : ''}`],
+    [BoltIcon, `${snap.maxSetsInSession}`, 'Most Sets in One Day', day(snap.maxSetsDate)],
+    [RepeatIcon, `${snap.maxRepsInSession}`, `Most Reps — ${snap.maxRepsExercise}`, day(snap.maxRepsDate)],
+    [BurstIcon, `${n0(snap.maxVolumeInSession)} ${unit}`, 'Best Volume in One Day', day(snap.maxVolumeDate)],
+    [PuzzleIcon, `${snap.maxExercisesInSession}`, 'Most Exercises in One Day', day(snap.maxExercisesDate)],
+    [SproutIcon, snap.firstExercise, 'First Exercise Ever Logged'],
+    [CalendarIcon, snap.consistentMonth, 'Most Consistent Month'],
+    [TimerIcon, snap.avgDurationMin ? `${snap.avgDurationMin.toFixed(1)} min` : '-', 'Avg Workout Duration'],
+    [SunriseIcon, clock(snap.earliest), 'Earliest Workout Time', snap.earliest ? `on ${day(snap.earliest)}` : ''],
+    [MoonIcon, clock(snap.latest), 'Latest Workout Time', snap.latest ? `on ${day(snap.latest)}` : ''],
+    [TagIcon, snap.favoriteWorkoutName, 'Most Frequent Workout Name'],
+    [PlateIcon, snap.mostUsedWeight ? `${n0(snap.mostUsedWeight)} ${unit}` : '-', 'Most Used Weight'],
+    [BikeIcon, snap.totalDistance ? `${snap.totalDistance.toFixed(1)} ${distLabel(unit)}` : '-', 'Total Distance'],
+    [ScaleIcon, bw ? `${fmtW(bw, unit)} ${unit}` : '-', 'Current Bodyweight'],
+    [RulerIcon, b ? b.toFixed(1) : '-', 'BMI'],
   ]
   const size = (v: string) => (v.length > 20 ? 'text-xs' : v.length > 14 ? 'text-sm' : v.length > 10 ? 'text-base' : 'text-xl')
   return (
     <details className="group rounded-2xl border border-line bg-surface">
       <summary className="flex cursor-pointer list-none items-center justify-between p-4 font-extrabold">
-        More Stats <span className="text-muted transition group-open:rotate-180">▾</span>
+        More Stats <DownIcon width={18} height={18} className="text-muted transition group-open:rotate-180" />
       </summary>
       <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
-        {items.map(([icon, value, lbl, date], i) => (
+        {items.map(([Icon, value, lbl, date], i) => (
           <div key={i} className="flex flex-col items-center rounded-xl bg-surface-2 p-3 text-center">
-            <span className="text-xl">{icon}</span>
+            <Icon width={22} height={22} className="text-accent" aria-hidden />
             <span className={`num mt-1 w-full truncate font-black ${size(value)}`} title={value}>{value || '-'}</span>
             <span className="mt-0.5 text-[11px] font-semibold text-muted">{lbl}</span>
             {date && <span className="mt-0.5 text-[10px] text-faint">{date.startsWith('on ') ? date : `set on ${date}`}</span>}

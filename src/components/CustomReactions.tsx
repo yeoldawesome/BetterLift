@@ -1,15 +1,23 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { customUrl, EMOJI, emojiChar, loadCustomReactions, prepareReactionImage } from '../lib/reactions'
+import { customUrl, EMOJI, isBuiltin, loadCustomReactions, prepareReactionImage } from '../lib/reactions'
 import { errMsg, me, pb, type CustomReaction, type Reaction } from '../lib/pb'
-import { PlusIcon, TrashIcon } from './icons'
+import { ClapIcon, FlameIcon, HelpIcon, MuscleIcon, PlusIcon, RocketIcon, TrashIcon, TrophyIcon } from './icons'
 import { BottomSheet, Button, ErrorText, Input } from './ui'
 import { ask } from './Dialog'
 
-/** Draws one reaction: a built-in emoji, or a custom image. */
+/** Built-in reactions: each its own icon and color (a light fill makes them read at small sizes). */
+const BUILTIN: Record<string, [typeof FlameIcon, string]> = {
+  fire: [FlameIcon, 'text-orange-500'], muscle: [MuscleIcon, 'text-rose-400'], clap: [ClapIcon, 'text-amber-400'],
+  rocket: [RocketIcon, 'text-sky-400'], trophy: [TrophyIcon, 'text-yellow-500'],
+}
+
+/** Draws one reaction: a built-in icon, or a custom image. */
 export function Glyph({ k, custom, size = 22 }: { k: string; custom?: CustomReaction; size?: number }) {
-  const e = emojiChar(k)
-  if (e) return <span style={{ fontSize: size, lineHeight: 1 }}>{e}</span>
-  if (!custom) return <span style={{ fontSize: size * 0.8, lineHeight: 1 }}>❔</span>
+  if (isBuiltin(k)) {
+    const [Icon, color] = BUILTIN[k]
+    return <Icon width={size} height={size} className={color} fill="currentColor" fillOpacity={0.18} aria-hidden />
+  }
+  if (!custom) return <HelpIcon width={size * 0.85} height={size * 0.85} className="text-faint" aria-hidden />
   return <img src={customUrl(custom)} alt={custom.name} title={custom.name} width={size} height={size} className="object-contain" style={{ width: size, height: size }} loading="lazy" />
 }
 
@@ -32,7 +40,7 @@ export function ReactionPicker({ mine, onPick, onClose, className = '' }: { mine
     <>
       <div className="fixed inset-0 z-40" onClick={onClose} />
       <div className={`z-50 w-[min(18.5rem,calc(100vw-4.5rem))] space-y-1.5 rounded-3xl border border-line bg-surface p-2 shadow-2xl ${className}`}>
-        <div className="flex justify-between">{EMOJI.map(([k, e]) => cell(k, <span className="text-xl">{e}</span>, k))}</div>
+        <div className="flex justify-between">{EMOJI.map(([k, name]) => cell(k, <Glyph k={k} size={24} />, name))}</div>
         {lists && (lists.mine.length > 0 || lists.friends.length > 0) && (
           <div className="max-h-44 overflow-y-auto border-t border-line pt-1.5">
             {[['Yours', lists.mine], ['Friends', lists.friends]].map(([label, list]) => (list as CustomReaction[]).length > 0 && (

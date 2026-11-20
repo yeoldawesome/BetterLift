@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useParams } from 'react-router-dom'
-import { LockIcon, SearchIcon } from '../components/icons'
+import { LockIcon, SearchIcon, TrophyIcon } from '../components/icons'
 import { Avatar, Card, Chips, ErrorText, Input, Screen, Spinner } from '../components/ui'
 import { label, loadExercises } from '../lib/exercises'
 import { epley, fmtW } from '../lib/format'
@@ -101,10 +101,10 @@ export default function Compare() {
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div className={`rounded-xl p-2 text-center ${win === 'me' ? 'bg-accent/15 ring-1 ring-accent' : 'bg-surface-2'}`}>
-                    <p className="text-[10px] font-bold uppercase text-muted">You{win === 'me' ? ' 🏆' : ''}</p>{cell(r.ex, r.mine)}
+                    <p className="flex items-center gap-1 text-[10px] font-bold uppercase text-muted">You{win === 'me' && <TrophyIcon width={12} height={12} className="text-yellow-500" aria-label="winner" />}</p>{cell(r.ex, r.mine)}
                   </div>
                   <div className={`rounded-xl p-2 text-center ${win === 'them' ? 'bg-accent/15 ring-1 ring-accent' : 'bg-surface-2'}`}>
-                    <p className="truncate text-[10px] font-bold uppercase text-muted">@{friend.username}{win === 'them' ? ' 🏆' : ''}</p>{cell(r.ex, r.theirs)}
+                    <p className="flex min-w-0 items-center gap-1 text-[10px] font-bold uppercase text-muted"><span className="truncate">@{friend.username}</span>{win === 'them' && <TrophyIcon width={12} height={12} className="shrink-0 text-yellow-500" aria-label="winner" />}</p>{cell(r.ex, r.theirs)}
                   </div>
                 </div>
               </Card>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
+import { CheckCircleIcon } from '../components/icons'
 import { Button, Spinner } from '../components/ui'
 import { errMsg, pb } from '../lib/pb'
 
@@ -27,7 +28,8 @@ export default function VerifyEmail() {
         <img src="/icon.svg" alt="" className="mx-auto size-16 rounded-2xl" />
         {state === 'busy' ? <Spinner /> : state === 'done' ? (
           <>
-            <h1 className="text-2xl font-black">Email verified ✅</h1>
+            <CheckCircleIcon width={44} height={44} className="mx-auto text-accent" aria-hidden />
+            <h1 className="text-2xl font-black">Email verified</h1>
             <p className="text-muted">Thanks! Your account is all set.</p>
           </>
         ) : (

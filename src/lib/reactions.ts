@@ -1,12 +1,12 @@
 import { anyOf, friendIds, me, pb, type CustomReaction, type Emoji, type Reaction } from './pb'
 
-/** Built-in reactions, in picker order. */
-export const EMOJI: [Exclude<Emoji, 'custom'>, string][] = [['fire', '🔥'], ['muscle', '💪'], ['clap', '👏'], ['rocket', '🚀'], ['trophy', '🏆']]
-const EMOJI_CHAR = new Map<string, string>(EMOJI)
+/** Built-in reactions, in picker order: [key, name]. Drawn as icons by <Glyph> (components/CustomReactions). */
+export const EMOJI: [Exclude<Emoji, 'custom'>, string][] = [['fire', 'Fire'], ['muscle', 'Strong'], ['clap', 'High five'], ['rocket', 'Rocket'], ['trophy', 'Trophy']]
+const BUILTIN = new Set<string>(EMOJI.map(([k]) => k))
 
 /** One key per distinct reaction: the emoji name, or "c:<id>" for a custom one. */
 export const keyOf = (r: Pick<Reaction, 'emoji' | 'custom'>) => (r.emoji === 'custom' ? `c:${r.custom}` : r.emoji)
-export const emojiChar = (k: string) => EMOJI_CHAR.get(k)
+export const isBuiltin = (k: string) => BUILTIN.has(k)
 
 export const customUrl = (c: CustomReaction, thumb = true) => pb.files.getURL(c, c.image, thumb && !c.image.endsWith('.gif') ? { thumb: '96x96f' } : {})
 

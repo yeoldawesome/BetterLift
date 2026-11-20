@@ -6,7 +6,7 @@ import { EMOJI, keyOf, toggleReaction } from '../lib/reactions'
 import { customsOf, Glyph, ReactionPicker } from './CustomReactions'
 import type { Intensity } from '../lib/muscles'
 import { BodyMap } from './BodyMap'
-import { CommentIcon, LockIcon, PlusIcon } from './icons'
+import { CommentIcon, LockIcon, PlusIcon, StarIcon } from './icons'
 import { Avatar, Card } from './ui'
 
 export { EMOJI, toggleReaction } from '../lib/reactions'
@@ -76,7 +76,7 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
         <div className="grid grid-cols-3 gap-2 text-center">
           <div><p className="text-xs font-semibold text-muted">Duration</p><p className="num text-lg font-black">{fmtDur(w.duration_s)}</p></div>
           <div><p className="text-xs font-semibold text-muted">Volume {unit}</p><p className="num text-lg font-black">{fmtVol(w.volume_kg, unit)}</p></div>
-          <div><p className="text-xs font-semibold text-muted">Record</p><p className="num text-lg font-black">⭐ {w.pr_count}</p></div>
+          <div><p className="text-xs font-semibold text-muted">Record</p><p className="num flex items-center justify-center gap-1 text-lg font-black"><StarIcon width={18} height={18} className="text-yellow-500" fill="currentColor" fillOpacity={0.25} aria-hidden />{w.pr_count}</p></div>
         </div>
       </Link>
       {/* Body map panel: reactions gather bottom-left, react + comment buttons float on the right. */}

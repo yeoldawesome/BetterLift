@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { LineChart } from '../components/LineChart'
 import { Spinner } from '../components/ui'
+import { ScaleIcon } from '../components/icons'
 import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, type BodyKey, type BodyMetric } from '../lib/body'
 import { toUnit } from '../lib/format'
 import { errMsg, me, pb, useUnit, type User } from '../lib/pb'
@@ -109,7 +110,7 @@ export function PhysiqueView({ user }: { user: User }) {
 
       {!rows.length ? (
         <div className="rounded-2xl border border-line bg-surface p-6 text-center">
-          <p className="text-4xl">⚖️</p>
+          <ScaleIcon width={40} height={40} className="mx-auto text-faint" aria-hidden />
           <p className="mt-2 font-bold">No body data yet</p>
           {self && <p className="mt-1 text-sm text-muted">In the RENPHO app go to Me → Export Data, then import the CSV here. Re-importing skips readings you already have.</p>}
         </div>

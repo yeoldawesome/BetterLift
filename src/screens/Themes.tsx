@@ -94,7 +94,7 @@ export default function Themes() {
       </div>
 
       <ErrorText>{err}</ErrorText>
-      <Button onClick={save} disabled={!dirty && saved}>{saved && !dirty ? 'Theme saved ✓' : dirty ? 'Apply theme' : 'Theme applied'}</Button>
+      <Button onClick={save} disabled={!dirty && saved}>{saved && !dirty ? 'Theme saved' : dirty ? 'Apply theme' : 'Theme applied'}</Button>
       {(t.base !== 'midnight' || t.accent !== '#a3e635') && (
         <Button variant="ghost" onClick={() => pick({ base: 'midnight', accent: '#a3e635' })}>Reset to default</Button>
       )}

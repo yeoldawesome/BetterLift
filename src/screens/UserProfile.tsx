@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { LockIcon } from '../components/icons'
+import { FlameIcon, LockIcon } from '../components/icons'
 import { Avatar, Button, Card, ErrorText, Screen, Spinner, Stat } from '../components/ui'
 import { fmtDate, fmtDur, fmtVol } from '../lib/format'
 import { errMsg, me, pb, useUnit, type Friendship, type User, type Workout } from '../lib/pb'
@@ -57,7 +57,7 @@ export default function UserProfile() {
           <p className="text-sm text-muted">@{user.username}</p>
         </div>
         {friends && streak && streak.days > 0 && (
-          <div className="text-center"><p className="num text-2xl font-black">🔥{streak.days}</p><p className="text-[10px] font-semibold uppercase text-muted">day streak</p></div>
+          <div className="text-center"><p className="num flex items-center justify-center gap-0.5 text-2xl font-black"><FlameIcon width={22} height={22} className="text-orange-500" fill="currentColor" fillOpacity={0.2} aria-hidden />{streak.days}</p><p className="text-[10px] font-semibold uppercase text-muted">day streak</p></div>
         )}
       </Card>
       <ErrorText>{err}</ErrorText>

@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { CheckCircleIcon, CommentIcon, FlameIcon, MailIcon, MuscleIcon, ReplyIcon, UserCheckIcon, UserPlusIcon, XCircleIcon } from '../components/icons'
 import { Avatar, Card, Empty, Screen, Spinner } from '../components/ui'
 import { timeAgo } from '../lib/format'
 import { notifLink, useNotifications } from '../lib/notifications'
 import { me, pb, type Notification, type NotificationType } from '../lib/pb'
 import { useRealtime } from '../lib/useRealtime'
 
-const ICON: Record<NotificationType, string> = {
-  comment: '💬', reply: '↩️', reaction: '🔥', friend_request: '👋', friend_accept: '🤝', nudge: '💪',
-  exercise_approved: '✅', exercise_rejected: '❌', feedback_reply: '📨',
+const ICON: Record<NotificationType, typeof CommentIcon> = {
+  comment: CommentIcon, reply: ReplyIcon, reaction: FlameIcon, friend_request: UserPlusIcon, friend_accept: UserCheckIcon, nudge: MuscleIcon,
+  exercise_approved: CheckCircleIcon, exercise_rejected: XCircleIcon, feedback_reply: MailIcon,
+}
+const TypeIcon = ({ type, size }: { type: NotificationType; size: number }) => {
+  const Icon = ICON[type]
+  return <Icon width={size} height={size} className={type === 'exercise_rejected' ? 'text-danger' : 'text-accent'} aria-hidden />
 }
 
 /** Every notification (newest first). Tapping one marks it read and opens what it's about. */
@@ -40,8 +45,8 @@ export default function Notifications() {
             <button key={n.id} onClick={() => open(n)}
               className={`flex w-full items-center gap-3 border-b border-line px-4 py-3 text-left last:border-0 active:bg-surface-2 ${n.read ? '' : 'bg-accent/10'}`}>
               <div className="relative shrink-0">
-                {n.expand?.actor ? <Avatar user={n.expand.actor} size={42} /> : <div className="grid size-[42px] place-items-center rounded-full bg-surface-2 text-xl">{ICON[n.type]}</div>}
-                {n.expand?.actor && <span className="absolute -bottom-1 -right-1 text-sm">{ICON[n.type]}</span>}
+                {n.expand?.actor ? <Avatar user={n.expand.actor} size={42} /> : <div className="grid size-[42px] place-items-center rounded-full bg-surface-2"><TypeIcon type={n.type} size={22} /></div>}
+                {n.expand?.actor && <span className="absolute -bottom-1 -right-1 grid size-5 place-items-center rounded-full bg-surface ring-2 ring-canvas"><TypeIcon type={n.type} size={13} /></span>}
               </div>
               <div className="min-w-0 flex-1">
                 <p className={`text-sm ${n.read ? 'text-muted' : 'font-semibold'}`}>{n.text}</p>
