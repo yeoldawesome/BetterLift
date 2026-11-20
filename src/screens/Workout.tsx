@@ -380,6 +380,9 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const [infoOpen, setInfoOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [typeFor, setTypeFor] = useState<number | null>(null)
+  // Swiped-away set, kept for a few seconds so it can be put back.
+  const [undo, setUndo] = useState<{ i: number; set: ASet } | null>(null)
+  useEffect(() => { if (!undo) return; const t = setTimeout(() => setUndo(null), 5000); return () => clearTimeout(t) }, [undo])
   const labels = setLabels(x.sets.map((s) => s.type))
   const menu: [string, () => void, boolean?][] = [
     ['Reorder Exercises', onReorder],
@@ -455,7 +458,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         {/* Each set is one row: swipe it left or right to delete. */}
         {x.sets.map((s, i) => {
           const p = x.prev[i]
-          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} onDelete={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) }))}>{[
+          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} onDelete={() => { setUndo({ i, set: x.sets[i] }); setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) })) }}>{[
             <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num h-10 rounded-lg font-bold active:bg-surface-2 ${labels[i].color || 'text-muted'}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
             // Tap the previous-session value to copy it into this set (doesn't check it off).
             p ? (
@@ -499,6 +502,15 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
             </button>
           )}
         </BottomSheet>
+      )}
+      {undo && (
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40 mx-auto flex max-w-lg px-safe">
+          <div className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface-2 p-2 pl-4 shadow-2xl">
+            <span className="min-w-0 flex-1 truncate text-sm">Deleted set {undo.i + 1} of <span className="font-bold">{x.ex.name}</span></span>
+            <button onClick={() => { const u = undo; setUndo(null); setEx(x.key, (e) => ({ ...e, sets: [...e.sets.slice(0, u.i), u.set, ...e.sets.slice(u.i)] })) }}
+              className="h-9 shrink-0 rounded-xl px-3 text-sm font-bold text-accent">Undo</button>
+          </div>
+        </div>
       )}
       {infoOpen && <ExerciseInfo ex={x.ex} initialTab="stats" onClose={() => setInfoOpen(false)} />}
       {restOpen && (

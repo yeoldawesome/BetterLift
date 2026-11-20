@@ -86,10 +86,39 @@ onRecordUpdateRequest((e) => {
 }, "exercises")
 
 // The friends list exists only for API rules: never send it to clients, and don't let them filter on it.
+// Other people only see the public parts of a profile: friends also get body stats (for shared Stats/Insights),
+// everything else (settings, theme, units…) is only sent to the account owner.
 onRecordEnrich((e) => {
   e.record.hide("friends")
+  const info = e.requestInfo
+  const viewer = info && info.auth ? info.auth.id : ""
+  const superuser = info && info.auth && info.auth.isSuperuser()
+  if (!superuser && viewer !== e.record.id) {
+    e.record.hide("unit", "theme", "tab_bar", "post_visibility", "update_routine", "save_as_routine",
+      "default_rest_s", "default_rest_after_s", "nutrition_on", "nutrition_seen")
+    let friend = false
+    if (viewer) for (const id of e.record.getStringSlice("friends")) if (id === viewer) { friend = true; break }
+    if (!friend) e.record.hide("bodyweight_kg", "height_cm")
+  }
   e.next()
 }, "users")
+
+// Find people to add as friends without exposing the whole user list: 3+ characters, 10 results max,
+// public fields only, verified accounts only (rate limited in migration 1731800032).
+routerAdd("GET", "/api/betterlift/user-search", (e) => {
+  const me = e.auth.id
+  const q = String(e.requestInfo().query.q || "").trim().toLowerCase().replace(/[%\\]/g, "").slice(0, 40)
+  if (q.length < 3) return e.json(200, { items: [] })
+  const recs = e.app.findRecordsByFilter("users",
+    "id != {:me} && verified = true && (username ~ {:prefix} || name ~ {:q})", "username", 10, 0,
+    { me, prefix: q + "%", q })
+  return e.json(200, {
+    items: recs.map((r) => ({
+      id: r.id, collectionId: r.collection().id, collectionName: "users",
+      username: r.getString("username"), name: r.getString("name"), avatar: r.getString("avatar"),
+    })),
+  })
+}, $apis.requireAuth("users"))
 onRecordsListRequest((e) => {
   if (!e.hasSuperuserAuth()) {
     const q = e.requestInfo().query || {}

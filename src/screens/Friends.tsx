@@ -21,9 +21,10 @@ export default function Friends() {
 
   useEffect(() => {
     const s = q.trim().toLowerCase()
-    if (s.length < 2) return setResults([])
+    if (s.length < 3) return setResults([])
     const t = setTimeout(() => {
-      pb.collection('users').getList<User>(1, 20, { filter: pb.filter('(username ~ {:q} || name ~ {:q}) && id != {:me}', { q: s, me: uid }) })
+      // Server-side search (the users list itself is limited to you and your friends).
+      pb.send<{ items: User[] }>('/api/betterlift/user-search', { query: { q: s } })
         .then((r) => setResults(r.items)).catch(() => {})
     }, 250)
     return () => clearTimeout(t)
@@ -68,7 +69,7 @@ export default function Friends() {
               })}
             </Card>
           )}
-          {q.trim().length >= 2 && !results.length && <p className="text-sm text-muted">No users found.</p>}
+          {q.trim().length >= 3 && !results.length && <p className="text-sm text-muted">No users found.</p>}
         </>
       ) : (
         <>
