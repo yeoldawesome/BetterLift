@@ -10,7 +10,7 @@ import { PhysiqueView } from './Physique'
 import { InsightsView } from './Insights'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
-import { MAP_MUSCLES, muscleSetCounts } from '../lib/muscles'
+import { MAP_MUSCLES, cardioIntensity, muscleSetCounts } from '../lib/muscles'
 import { Empty, Input, Screen, Spinner } from '../components/ui'
 import { label } from '../lib/exercises'
 import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
@@ -248,7 +248,7 @@ type MuscleRange = '7d' | 'lastweek' | 'all'
 /** Which muscles you trained in a period: body graph + radar "skills" chart of weighted sets per muscle group. */
 function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
   const [range, setRange] = useState<MuscleRange>('7d')
-  const { counts, sets, label: rangeLabel } = useMemo(() => {
+  const { counts, cardio, sets, label: rangeLabel } = useMemo(() => {
     const now = new Date()
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     let from = 0, to = Infinity, lbl = 'All time'
@@ -261,10 +261,10 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
       lbl = `${new Date(from).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(to - 86400000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
     }
     const inRangeRows = rows.filter((r) => { const t = new Date(r.set.performed_at).getTime(); return t >= from && t < to })
-    return { counts: muscleSetCounts(inRangeRows), sets: inRangeRows.length, label: lbl }
+    return { counts: muscleSetCounts(inRangeRows), cardio: inRangeRows.filter((r) => r.ex?.muscle === 'cardio').length, sets: inRangeRows.length, label: lbl }
   }, [rows, range])
   const max = Math.max(0, ...Object.values(counts))
-  const intensity = Object.fromEntries(MAP_MUSCLES.map((m) => [m, max ? counts[m] / max : 0]))
+  const intensity = { ...Object.fromEntries(MAP_MUSCLES.map((m) => [m, max ? counts[m] / max : 0])), cardio: cardioIntensity(cardio) }
   const ranked = MAP_MUSCLES.filter((m) => counts[m] > 0).sort((a, b) => counts[b] - counts[a])
   const untrained = MAP_MUSCLES.filter((m) => !counts[m])
   return (

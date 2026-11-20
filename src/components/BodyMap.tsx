@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { useId, type CSSProperties } from 'react'
 import type { Intensity, MapMuscle } from '../lib/muscles'
 
 type Sex = 'male' | 'female'
@@ -106,7 +106,7 @@ function smooth(pts: Pt[]) {
   return d + 'Z'
 }
 
-type Built = { outline: string; parts: { m: MapMuscle | null; d: string }[] }
+type Built = { outline: string; heart: string | null; parts: { m: MapMuscle | null; d: string }[] }
 const cache = new Map<string, Built>()
 
 function build(sex: Sex, view: View): Built {
@@ -119,7 +119,7 @@ function build(sex: Sex, view: View): Built {
   const outline = smooth(warp([...OUTLINE, ...flip(OUTLINE.slice(1, -1)).reverse()]))
   const parts = (view === 'front' ? FRONT : BACK).flatMap((p) =>
     (p.mirror ? [p.pts, flip(p.pts)] : [p.pts]).map((pts) => ({ m: p.m, d: smooth(warp(pts)) })))
-  const out = { outline, parts }
+  const out = { outline, heart: view === 'front' ? smooth(warp(HEART)) : null, parts }
   cache.set(key, out)
   return out
 }
@@ -132,26 +132,48 @@ function fill(v: number) {
   return `color-mix(in oklab, var(--color-accent) ${Math.round(30 + 70 * Math.min(1, v))}%, ${REST})`
 }
 
+/*
+ * The heart: an anatomical silhouette drawn under the chest, slightly to the figure's left (viewer's right), with the
+ * broad base up and the apex pointing down and out. It's layered over the upper abs and under the pecs; the pecs are
+ * a little see-through over it (a faint clipped copy), so it shows behind them and its tip pokes out below.
+ * Same fill as a muscle: resting grey, accent when cardio was done.
+ */
+const HEART: Pt[] = [
+  [59.5, 52.9], [62.1, 51.7], [64.8, 52.1], [67.7, 54.0], [70.0, 57.2], [70.9, 61.1], [70.2, 65.1], [68.1, 68.1], [65.7, 69.3], [63.1, 68.3], [60.5, 65.8], [58.6, 62.4], [57.9, 58.5], [58.2, 55.2],
+]
+
 function Figure({ sex, view, intensity }: { sex: Sex; view: View; intensity: Intensity }) {
-  const { outline, parts } = build(sex, view)
+  const { outline, heart, parts } = build(sex, view)
+  const clip = `chest${useId().replace(/:/g, '')}`
   return (
     <svg viewBox="15 0 90 226" className="h-full w-auto" role="img" aria-label={`${view} muscles`}>
       <path d={outline} fill="var(--color-surface-2)" stroke="var(--color-faint)" strokeWidth={0.7} strokeLinejoin="round" />
-      {parts.map((p, i) => (
-        <path
-          key={i}
-          d={p.d}
-          fill={p.m ? fill(intensity[p.m] ?? 0) : 'none'}
-          stroke={p.m ? 'var(--color-surface-2)' : REST}
-          strokeWidth={p.m ? 0.45 : 0.7}
-          strokeLinejoin="round"
-        />
-      ))}
+      {/* Layers: everything else, then the heart, then the chest on top of it. */}
+      {[parts.filter((p) => p.m !== 'chest'), heart, parts.filter((p) => p.m === 'chest')].flatMap((layer) =>
+        typeof layer === 'string' ? [<path key="heart" d={layer} fill={fill(intensity.cardio ?? 0)} stroke="var(--color-surface-2)" strokeWidth={0.45} strokeLinejoin="round" />]
+          : (layer ?? []).map((p) => (
+            <path
+              key={p.d}
+              d={p.d}
+              fill={p.m ? fill(intensity[p.m] ?? 0) : 'none'}
+              stroke={p.m ? 'var(--color-surface-2)' : REST}
+              strokeWidth={p.m ? 0.45 : 0.7}
+              strokeLinejoin="round"
+            />
+          )))}
+      {/* The chest is a little see-through over the heart: a faint copy of the heart, only where the pecs cover it. */}
+      {heart && (
+        <>
+          <clipPath id={clip}>{parts.filter((p) => p.m === 'chest').map((p) => <path key={p.d} d={p.d} />)}</clipPath>
+          <path d={heart} clipPath={`url(#${clip})`} fill={(intensity.cardio ?? 0) > 0 ? fill(intensity.cardio ?? 0) : 'var(--color-surface-2)'}
+            fillOpacity={(intensity.cardio ?? 0) > 0 ? 0.45 : 0.4} stroke="var(--color-surface-2)" strokeWidth={0.45} strokeOpacity={0.6} />
+        </>
+      )}
     </svg>
   )
 }
 
-/** Front + back muscle map. Worked muscles take the theme accent, stronger = more work. */
+/** Front + back muscle map. Worked muscles take the theme accent, stronger = more work; cardio lights up the heart. */
 export function BodyMap({ sex, intensity, className = 'h-28', labels, accent }: { sex?: string; intensity: Intensity; className?: string; labels?: boolean; accent?: string }) {
   const s: Sex = sex === 'female' ? 'female' : 'male'
   // A workout's own accent (the lifter's color when they logged it) overrides the viewer's theme for this graph only.

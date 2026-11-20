@@ -3,7 +3,11 @@ import type { Exercise } from './pb'
 /** Muscle groups drawn on the body graph. */
 export const MAP_MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'core'] as const
 export type MapMuscle = (typeof MAP_MUSCLES)[number]
-export type Intensity = Partial<Record<MapMuscle, number>>
+/** Per-muscle 0..1, plus `cardio` for the heart drawn behind the chest (not a muscle group, so not in MAP_MUSCLES). */
+export type Intensity = Partial<Record<MapMuscle | 'cardio', number>>
+
+/** Heart strength from a number of cardio sets: any cardio shows clearly, more fills it in. */
+export const cardioIntensity = (sets: number) => (sets > 0 ? Math.min(1, 0.6 + 0.2 * (sets - 1)) : 0)
 
 const isMap = (m: string): m is MapMuscle => (MAP_MUSCLES as readonly string[]).includes(m)
 
@@ -14,16 +18,18 @@ const isMap = (m: string): m is MapMuscle => (MAP_MUSCLES as readonly string[]).
 export function intensityFromSets(sets: { ex?: Pick<Exercise, 'muscle' | 'secondary'> }[]): Intensity {
   const raw: Record<string, number> = {}
   const add = (m: string, v: number) => { if (isMap(m)) raw[m] = (raw[m] ?? 0) + v }
+  let cardio = 0
   for (const { ex } of sets) {
     if (!ex) continue
     if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => add(m, 0.4))
-    else if (ex.muscle === 'cardio') ['quads', 'hamstrings', 'calves', 'glutes'].forEach((m) => add(m, 0.5))
+    else if (ex.muscle === 'cardio') { cardio++; ['quads', 'hamstrings', 'calves', 'glutes'].forEach((m) => add(m, 0.5)) }
     else add(ex.muscle, 1)
     for (const s of ex.secondary ?? []) add(s, 0.5)
   }
   const max = Math.max(0, ...Object.values(raw))
   const out: Intensity = {}
   if (max > 0) for (const [m, v] of Object.entries(raw)) out[m as MapMuscle] = v / max
+  if (cardio) out.cardio = cardioIntensity(cardio)
   return out
 }
 
@@ -44,7 +50,7 @@ export function muscleSetCounts(sets: { ex?: Pick<Exercise, 'muscle' | 'secondar
 export function intensityForExercise(ex: Pick<Exercise, 'muscle' | 'secondary'>): Intensity {
   const out: Intensity = {}
   if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => { out[m] = 0.6 })
-  else if (ex.muscle === 'cardio') (['quads', 'hamstrings', 'calves', 'glutes'] as const).forEach((m) => { out[m] = 0.6 })
+  else if (ex.muscle === 'cardio') { out.cardio = 1; (['quads', 'hamstrings', 'calves', 'glutes'] as const).forEach((m) => { out[m] = 0.6 }) }
   else if (isMap(ex.muscle)) out[ex.muscle] = 1
   for (const s of ex.secondary ?? []) if (isMap(s) && !out[s]) out[s] = 0.45
   return out
