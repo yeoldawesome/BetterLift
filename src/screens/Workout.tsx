@@ -394,6 +394,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   useEffect(() => { if (!undo) return; const t = setTimeout(() => setUndo(null), 5000); return () => clearTimeout(t) }, [undo])
   const labels = setLabels(x.sets.map((s) => s.type))
   const menu: [string, () => void, boolean?][] = [
+    [`Edit Rest (${restLabel(x.rest)}${(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''})`, () => setRestOpen(true)],
     ['Reorder Exercises', onReorder],
     [x.note !== undefined ? 'Remove Exercise Note' : 'Add Exercise Note', () => setEx(x.key, (e) => ({ ...e, note: e.note !== undefined ? undefined : '' }))],
     [x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset],
@@ -446,9 +447,6 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
             </>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
-          <button onClick={() => setRestOpen(true)} className="flex h-8 items-center gap-1 rounded-lg bg-surface-2 px-2 text-xs font-bold text-muted">
-            <TimerIcon width={14} height={14} /><span className="num">{restLabel(x.rest)}{(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''}</span>
-          </button>
           <button onClick={() => setCollapsed((c) => !c)} className="grid size-9 place-items-center rounded-lg text-accent active:bg-surface-2" aria-label={collapsed ? `Expand ${x.ex.name}` : `Collapse ${x.ex.name}`} aria-expanded={!collapsed}>
             <UpIcon width={22} height={22} strokeWidth={2.5} className={`transition-transform ${collapsed ? 'rotate-180' : ''}`} />
           </button>
