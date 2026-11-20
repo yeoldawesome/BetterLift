@@ -61,7 +61,7 @@ function WeekFeed() {
     const workouts = await pb.collection('workouts').getFullList<Workout>({ filter: pb.filter('started_at >= {:d}', { d: since }), sort: '-started_at', expand: 'user', batch: 200 })
     const f = anyOf('workout', workouts.map((w) => w.id))
     const [sets, reactions, comments] = await Promise.all([
-      workouts.length ? pb.collection('workout_sets').getFullList<WSet>({ filter: f, expand: 'exercise', fields: 'workout,position,expand.exercise.name,expand.exercise.muscle,expand.exercise.secondary', batch: 1000 }) : [],
+      workouts.length ? pb.collection('workout_sets').getFullList<WSet>({ filter: f, expand: 'exercise', fields: 'workout,position,expand.exercise.name,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.kind', batch: 1000 }) : [],
       workouts.length ? pb.collection('reactions').getFullList<Reaction>({ filter: f, expand: 'custom' }) : [],
       workouts.length ? pb.collection('comments').getFullList<Comment>({ filter: f, fields: 'id,workout' }) : [],
     ])

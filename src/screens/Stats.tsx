@@ -10,7 +10,7 @@ import { PhysiqueView } from './Physique'
 import { InsightsView } from './Insights'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
-import { MAP_MUSCLES, cardioIntensity, muscleSetCounts } from '../lib/muscles'
+import { MAP_MUSCLES, cardioIntensity, isCardioEx, muscleSetCounts } from '../lib/muscles'
 import { Empty, Input, Screen, Spinner } from '../components/ui'
 import { label } from '../lib/exercises'
 import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
@@ -261,12 +261,15 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
       lbl = `${new Date(from).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} – ${new Date(to - 86400000).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`
     }
     const inRangeRows = rows.filter((r) => { const t = new Date(r.set.performed_at).getTime(); return t >= from && t < to })
-    return { counts: muscleSetCounts(inRangeRows), cardio: inRangeRows.filter((r) => r.ex?.muscle === 'cardio').length, sets: inRangeRows.length, label: lbl }
+    return { counts: muscleSetCounts(inRangeRows), cardio: inRangeRows.filter((r) => r.ex && isCardioEx(r.ex)).length, sets: inRangeRows.length, label: lbl }
   }, [rows, range])
   const max = Math.max(0, ...Object.values(counts))
   const intensity = { ...Object.fromEntries(MAP_MUSCLES.map((m) => [m, max ? counts[m] / max : 0])), cardio: cardioIntensity(cardio) }
-  const ranked = MAP_MUSCLES.filter((m) => counts[m] > 0).sort((a, b) => counts[b] - counts[a])
-  const untrained = MAP_MUSCLES.filter((m) => !counts[m])
+  // Cardio sits alongside the muscle groups here (sets of cardio), shown as the heart on the body graph.
+  const all: Record<string, number> = { ...counts, cardio }
+  const groups = [...MAP_MUSCLES, 'cardio'] as const
+  const ranked = groups.filter((m) => all[m] > 0).sort((a, b) => all[b] - all[a])
+  const untrained = groups.filter((m) => !all[m])
   return (
     <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
       <div className="flex items-baseline justify-between gap-2">
@@ -282,17 +285,17 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
         <>
           <div className="grid items-center gap-2 sm:grid-cols-2">
             <div className="flex justify-center"><BodyMap sex={sex} intensity={intensity} className="h-52" labels /></div>
-            <RadarChart className="h-64" labels={MAP_MUSCLES.map((m) => label(m))} values={MAP_MUSCLES.map((m) => Math.round(counts[m] * 10) / 10)} />
+            <RadarChart className="h-64" labels={groups.map((m) => label(m))} values={groups.map((m) => Math.round(all[m] * 10) / 10)} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {ranked.slice(0, 4).map((m, i) => (
-              <span key={m} className={`rounded-full px-2.5 py-1 text-xs font-bold ${i === 0 ? 'bg-accent text-accent-ink' : 'bg-accent/15 text-accent'}`}>{label(m)} · {Math.round(counts[m] * 10) / 10}</span>
+              <span key={m} className={`rounded-full px-2.5 py-1 text-xs font-bold ${i === 0 ? 'bg-accent text-accent-ink' : 'bg-accent/15 text-accent'}`}>{label(m)} · {Math.round(all[m] * 10) / 10}</span>
             ))}
           </div>
-          {untrained.length > 0 && untrained.length < MAP_MUSCLES.length && (
+          {untrained.length > 0 && untrained.length < groups.length && (
             <p className="text-xs text-muted">Not trained: {untrained.map((m) => label(m)).join(', ')}</p>
           )}
-          <p className="text-[11px] text-faint">Sets per muscle group — secondary muscles count as half a set.</p>
+          <p className="text-[11px] text-faint">Sets per muscle group — secondary muscles count as half a set. Cardio lights up the heart.</p>
         </>
       )}
     </div>
