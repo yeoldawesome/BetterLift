@@ -20,6 +20,8 @@ export const UpIcon = (p: P) => <svg {...base(p)}><path d="M6 15l6-6 6 6" /></sv
 export const DownIcon = (p: P) => <svg {...base(p)}><path d="M6 9l6 6 6-6" /></svg>
 export const TrophyIcon = (p: P) => <svg {...base(p)}><path d="M8 4h8v5a4 4 0 01-8 0zM8 6H4.5a3 3 0 003.5 4M16 6h3.5a3 3 0 01-3.5 4M12 13v4M8.5 20h7M10 17h4" /></svg>
 export const SearchIcon = (p: P) => <svg {...base(p)}><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
+export const SendIcon = (p: P) => <svg {...base(p)}><path d="M12 19.5V5M6 10.5L12 4.5l6 6" /></svg>
+export const ChatIcon = (p: P) => <svg {...base(p)}><path d="M4.5 18.5l1.2-3.4A7.5 7.5 0 1112 19.5a7.6 7.6 0 01-3.6-.9z" /></svg>
 export const CommentIcon = (p: P) => <svg {...base(p)}><path d="M5 18.5V6.5A2.5 2.5 0 017.5 4h9A2.5 2.5 0 0119 6.5v7a2.5 2.5 0 01-2.5 2.5H9z" /></svg>
 export const StatsIcon = (p: P) => <svg {...base(p)}><path d="M4 20h16M7 16v-4M12 16V7M17 16v-7" /></svg>
 export const LockIcon = (p: P) => <svg {...base(p)}><rect x="5" y="10.5" width="14" height="10" rx="2.5" /><path d="M8.5 10.5V8a3.5 3.5 0 017 0v2.5" /></svg>

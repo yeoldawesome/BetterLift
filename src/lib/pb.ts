@@ -72,6 +72,7 @@ export interface Feedback extends RecordModel {
 }
 export type NotificationType = 'comment' | 'reply' | 'reaction' | 'friend_request' | 'friend_accept' | 'nudge' | 'exercise_approved' | 'exercise_rejected' | 'feedback_reply'
 export interface Notification extends RecordModel { user: string; actor: string; type: NotificationType; text: string; target: string; read: boolean; expand?: { actor?: User } }
+export interface Message extends RecordModel { from: string; to: string; body: string; read: boolean; expand?: { from?: User; to?: User } }
 export interface Nudge extends RecordModel { from: string; to: string; message: string; seen: boolean; expand?: { from?: User; to?: User } }
 
 export const DEFAULT_REST = 90

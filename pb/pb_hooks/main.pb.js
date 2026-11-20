@@ -335,6 +335,31 @@ onRecordAfterCreateSuccess((e) => {
   require(`${__hooks}/lib.js`).push(e.app, e.record)
 }, "notifications")
 
+// ---- Private messages (rules in migration 1731800033) ----
+
+// Tidy the text; new messages always start unread.
+onRecordCreateRequest((e) => {
+  const body = e.record.getString("body").replace(/\r\n?/g, "\n").replace(/\n{4,}/g, "\n\n\n").trim()
+  if (!body) throw new BadRequestError("Write a message first.")
+  e.record.set("body", body)
+  e.record.set("read", false)
+  e.next()
+}, "messages")
+
+// Push each message to the recipient. One notification per conversation (same tag), so a burst of messages
+// replaces itself instead of stacking up.
+onRecordAfterCreateSuccess((e) => {
+  e.next()
+  const lib = require(`${__hooks}/lib.js`)
+  const from = e.record.getString("from"), text = e.record.getString("body")
+  lib.sendPush(e.app, e.record.getString("to"), {
+    title: lib.uname(e.app, from),
+    body: text.length > 140 ? text.slice(0, 137) + "…" : text,
+    path: "/messages/" + from,
+    tag: "msg-" + from,
+  })
+}, "messages")
+
 // The app needs the server's public VAPID key to subscribe. Empty until push is configured.
 routerAdd("GET", "/api/betterlift/push-key", (e) => e.json(200, { key: $os.getenv("VAPID_PUBLIC_KEY") || "" }))
 

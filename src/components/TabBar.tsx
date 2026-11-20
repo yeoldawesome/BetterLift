@@ -6,11 +6,13 @@ import { ProfileIcon } from './icons'
 
 /** Bottom bar: the user's chosen tabs (Settings → Bottom bar), with Profile always last. */
 export default function TabBar() {
-  const { count } = useNotifications()
+  const { count: notes, messageCount } = useNotifications()
   const user = useUser()
   const tabs = [...userTabs(user).map((id) => TAB_DEFS[id]), { to: '/profile', label: 'Profile', Icon: ProfileIcon }]
   // The unread badge sits on Alerts when it's in the bar, otherwise on Profile.
   const badgeOn = tabs.some((t) => t.to === '/notifications') ? '/notifications' : '/profile'
+  // Unread messages count on Profile (where Friends > Messages lives); with Alerts in the bar, Profile gets a dot instead.
+  const count = badgeOn === '/profile' ? notes + messageCount : notes
   return (
     <nav className="fixed inset-x-0 bottom-0 z-50 border-t border-line bg-canvas/90 pb-safe backdrop-blur-xl">
       <ul className="mx-auto flex max-w-lg">
@@ -25,7 +27,7 @@ export default function TabBar() {
               <span className="relative">
                 <Icon />
                 {/* "New: Nutrition" hint until the user taps it in Settings. */}
-                {to === '/profile' && nutritionNew(user) && !(badgeOn === '/profile' && count > 0) && (
+                {to === '/profile' && (nutritionNew(user) || (badgeOn !== '/profile' && messageCount > 0)) && !(badgeOn === '/profile' && count > 0) && (
                   <span aria-label="New in Settings" className="absolute -right-1 -top-0.5 size-2.5 rounded-full bg-danger ring-2 ring-canvas" />
                 )}
                 {to === badgeOn && count > 0 && (

@@ -58,29 +58,34 @@ function notifPath(type, target) {
 }
 
 /**
- * Send a new notification to the user's devices as a push (with their unread count for the app-icon badge).
+ * Send a push to all of a user's devices, with their unread count (notifications + messages) for the app-icon badge.
  * The pb/push sidecar does the Web Push encryption and answers right away, so this never slows the request down.
  * Does nothing until push is configured (PUSH_URL / PUSH_SECRET in /etc/betterlift/push.env).
  */
-function push(app, n) {
+function sendPush(app, user, msg) {
   const url = $os.getenv("PUSH_URL"), secret = $os.getenv("PUSH_SECRET")
   if (!url || !secret) return
   try {
-    const user = n.getString("user")
     const subs = app.findRecordsByFilter("push_subscriptions", "user = {:u}", "", 20, 0, { u: user })
     if (!subs.length) return
     const unread = app.countRecords("notifications", $dbx.hashExp({ user: user, read: false }))
+      + app.countRecords("messages", $dbx.hashExp({ to: user, read: false }))
     $http.send({
       url: url + "/send", method: "POST", timeout: 3,
       headers: { "content-type": "application/json", "x-push-secret": secret },
       body: JSON.stringify({
         subscriptions: subs.map((s) => ({ endpoint: s.getString("endpoint"), keys: { p256dh: s.getString("p256dh"), auth: s.getString("auth") } })),
-        payload: { title: "Better Lift", body: n.getString("text"), path: notifPath(n.getString("type"), n.getString("target")), badge: unread, tag: n.id },
+        payload: { title: msg.title || "Better Lift", body: msg.body, path: msg.path, badge: unread, tag: msg.tag },
       }),
     })
   } catch (err) { app.logger().error("push failed", "error", String(err)) }
 }
 
+/** Push a new in-app notification to the user's devices. */
+function push(app, n) {
+  sendPush(app, n.getString("user"), { body: n.getString("text"), path: notifPath(n.getString("type"), n.getString("target")), tag: n.id })
+}
+
 const uname = (app, id) => { try { return "@" + app.findRecordById("users", id).getString("username") } catch (_) { return "Someone" } }
 
-module.exports = { epley, areFriends, syncFriends, notify, uname, push }
+module.exports = { epley, areFriends, syncFriends, notify, uname, push, sendPush }

@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
-import { FlameIcon, LockIcon } from '../components/icons'
+import { ChatIcon, FlameIcon, LockIcon } from '../components/icons'
 import { Avatar, Button, Card, ErrorText, Screen, Spinner, Stat } from '../components/ui'
 import { fmtDate, fmtDur, fmtVol } from '../lib/format'
 import { errMsg, me, pb, useUnit, type Friendship, type User, type Workout } from '../lib/pb'
@@ -70,7 +70,10 @@ export default function UserProfile() {
         </Card>
       ) : (
         <>
-          <Link to={`/compare/${user.id}`} className="flex h-12 items-center justify-center rounded-2xl bg-accent font-bold text-accent-ink">Compare lifts with @{user.username}</Link>
+          <div className="flex gap-2">
+            <Link to={`/messages/${user.id}`} className="flex h-12 flex-1 items-center justify-center gap-2 rounded-2xl bg-accent font-bold text-accent-ink"><ChatIcon width={20} height={20} />Message</Link>
+            <Link to={`/compare/${user.id}`} className="flex h-12 flex-1 items-center justify-center rounded-2xl bg-surface-2 font-bold text-ink">Compare lifts</Link>
+          </div>
           <Card className="grid grid-cols-3 gap-2">
             <Stat value={total} label="Workouts" />
             <Stat value={streak?.days ?? 0} label="Streak days" />

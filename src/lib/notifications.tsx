@@ -1,5 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { me, pb, useUser, type Notification, type NotificationType } from './pb'
+import { me, pb, useUser, type Message, type Notification, type NotificationType } from './pb'
 import { refreshPush, setBadge } from './push'
 import { useRealtime } from './useRealtime'
 
@@ -27,12 +27,15 @@ export function notifLink(n: Notification) {
 interface Ctx {
   unread: Notification[]
   count: number
+  /** Unread private messages, by sender id. */
+  messages: Record<string, number>
+  messageCount: number
   has: (c: NotifCategory) => boolean
   clear: (c: NotifCategory) => void
   markRead: (ids: string[]) => void
   markAll: () => void
 }
-const C = createContext<Ctx>({ unread: [], count: 0, has: () => false, clear: () => {}, markRead: () => {}, markAll: () => {} })
+const C = createContext<Ctx>({ unread: [], count: 0, messages: {}, messageCount: 0, has: () => false, clear: () => {}, markRead: () => {}, markAll: () => {} })
 export const useNotifications = () => useContext(C)
 
 /** Unread notifications for the signed-in user, kept live via realtime. */
@@ -47,9 +50,22 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   }, [])
   useEffect(load, [user?.id, load])
   useEffect(() => { if (user?.id) refreshPush() }, [user?.id])
-  // Home-screen icon badge = unread count (also set by pushes while the app is closed).
-  useEffect(() => { setBadge(user ? unread.length : 0) }, [user, unread.length])
   useRealtime(user ? ['notifications'] : [], load)
+
+  // Unread messages: just who sent them, kept live.
+  const [msgs, setMsgs] = useState<Record<string, number>>({})
+  const loadMsgs = useCallback(() => {
+    if (!pb.authStore.isValid) return setMsgs({})
+    pb.collection('messages').getFullList<Message>({ filter: pb.filter('to = {:u} && read = false', { u: me() }), fields: 'id,from' })
+      .then((ms) => { const by: Record<string, number> = {}; ms.forEach((m) => { by[m.from] = (by[m.from] ?? 0) + 1 }); setMsgs(by) })
+      .catch(() => {})
+  }, [])
+  useEffect(loadMsgs, [user?.id, loadMsgs])
+  useRealtime(user ? ['messages'] : [], loadMsgs)
+  const messageCount = Object.values(msgs).reduce((a, b) => a + b, 0)
+
+  // Home-screen icon badge = unread notifications + messages (also set by pushes while the app is closed).
+  useEffect(() => { setBadge(user ? unread.length + messageCount : 0) }, [user, unread.length, messageCount])
 
   const markRead = useCallback((ids: string[]) => {
     if (!ids.length) return
@@ -62,11 +78,13 @@ export function NotificationsProvider({ children }: { children: ReactNode }) {
   const value = useMemo<Ctx>(() => ({
     unread,
     count: unread.length,
+    messages: msgs,
+    messageCount,
     has: (c) => unread.some((n) => CATEGORY[n.type] === c),
     clear: (c) => markRead(unread.filter((n) => CATEGORY[n.type] === c).map((n) => n.id)),
     markRead,
     markAll: () => markRead(unread.map((n) => n.id)),
-  }), [unread, markRead])
+  }), [unread, markRead, msgs, messageCount])
 
   return <C.Provider value={value}>{children}</C.Provider>
 }

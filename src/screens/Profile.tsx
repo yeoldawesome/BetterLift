@@ -67,7 +67,7 @@ export default function Profile() {
     { to: '/stats', label: 'Stats', icon: StatsIcon },
     { to: '/history', label: 'History', icon: HistoryIcon },
     { to: '/reactions', label: 'Reactions', icon: SmileIcon },
-    { to: '/friends', label: 'Friends', icon: FriendsIcon, badge: pending, dot: notes.has('friends') },
+    { to: notes.messageCount && !pending ? '/friends?tab=messages' : '/friends', label: 'Friends', icon: FriendsIcon, badge: pending + notes.messageCount, dot: notes.has('friends') },
     { to: '/import', label: 'Import / Export', icon: ImportIcon },
     { to: '/themes', label: 'Themes', icon: PaletteIcon },
     { to: '/feedback', label: 'Feedback', icon: CommentIcon, dot: notes.has('feedback') },

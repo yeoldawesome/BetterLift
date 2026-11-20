@@ -1,15 +1,19 @@
-import { useClearOnVisit } from '../lib/notifications'
+import { useClearOnVisit, useNotifications } from '../lib/notifications'
 import { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { Avatar, Button, Card, ErrorText, Input, Screen, Segmented } from '../components/ui'
-import { errMsg, me, pb, type Friendship, type User } from '../lib/pb'
+import { errMsg, me, pb, type Friendship, type Message, type User } from '../lib/pb'
+import { ChatIcon } from '../components/icons'
 import { useRealtime } from '../lib/useRealtime'
 import { ask } from '../components/Dialog'
 
 export default function Friends() {
   useClearOnVisit('friends')
   const uid = me()
-  const [tab, setTab] = useState<'friends' | 'find'>('friends')
+  const [params, setParams] = useSearchParams()
+  const tab = (['friends', 'messages', 'find'].includes(params.get('tab') ?? '') ? params.get('tab') : 'friends') as 'friends' | 'messages' | 'find'
+  const setTab = (t: typeof tab) => setParams(t === 'friends' ? {} : { tab: t }, { replace: true })
+  const { messages: unreadFrom, messageCount } = useNotifications()
   const [links, setLinks] = useState<Friendship[]>([])
   const [q, setQ] = useState('')
   const [results, setResults] = useState<User[]>([])
@@ -53,9 +57,9 @@ export default function Friends() {
 
   return (
     <Screen title="Friends" back>
-      <Segmented value={tab} onChange={setTab} options={[['friends', `Friends (${friends.length})`], ['find', 'Find people']]} />
+      <Segmented value={tab} onChange={setTab} options={[['friends', `Friends (${friends.length})`], ['messages', messageCount ? `Messages (${messageCount})` : 'Messages'], ['find', 'Find people']]} />
       <ErrorText>{err}</ErrorText>
-      {tab === 'find' ? (
+      {tab === 'messages' ? <Conversations /> : tab === 'find' ? (
         <>
           <Input placeholder="Search by username" autoCapitalize="none" value={q} onChange={(e) => setQ(e.target.value)} autoFocus />
           {results.length > 0 && (
@@ -85,10 +89,70 @@ export default function Friends() {
             <Card className="p-0">{outgoing.map((f) => row(other(f), <Button size="sm" variant="ghost" onClick={() => remove(f)}>Cancel</Button>))}</Card>
           </>}
           {friends.length > 0 ? (
-            <Card className="p-0">{friends.map((f) => row(other(f), <Button size="sm" variant="ghost" onClick={() => remove(f, `Remove @${other(f)?.username}?`)}>Remove</Button>))}</Card>
+            <Card className="p-0">{friends.map((f) => {
+              const u = other(f), n = u ? unreadFrom[u.id] ?? 0 : 0
+              return row(u, <>
+                <Link to={`/messages/${u?.id}`} aria-label={`Message @${u?.username}${n ? `, ${n} unread` : ''}`}
+                  className="relative grid size-9 place-items-center rounded-2xl bg-accent text-accent-ink active:scale-95">
+                  <ChatIcon width={18} height={18} />
+                  {n > 0 && <span className="num absolute -right-1.5 -top-1.5 grid h-4 min-w-4 place-items-center rounded-full bg-danger px-1 text-[10px] font-bold leading-none text-white ring-2 ring-surface">{n > 9 ? '9+' : n}</span>}
+                </Link>
+                <Button size="sm" variant="ghost" onClick={() => remove(f, `Remove @${u?.username}?`)}>Remove</Button>
+              </>)
+            })}</Card>
           ) : !incoming.length && <p className="text-sm text-muted">No friends yet. Use “Find people” to add some.</p>}
         </>
       )}
     </Screen>
+  )
+}
+
+/** Everyone you've messaged, newest conversation first, with the last message and unread count. */
+function Conversations() {
+  const uid = me()
+  const { messages: unreadFrom } = useNotifications()
+  const [rows, setRows] = useState<{ user: User; last: Message }[] | null>(null)
+  const [err, setErr] = useState('')
+
+  const load = useCallback(() => {
+    pb.collection('messages').getList<Message>(1, 300, { filter: pb.filter('from = {:u} || to = {:u}', { u: uid }), sort: '-created', expand: 'from,to' })
+      .then((r) => {
+        const seen = new Map<string, { user: User; last: Message }>()
+        for (const m of r.items) {
+          const u = m.from === uid ? m.expand?.to : m.expand?.from
+          if (u && !seen.has(u.id)) seen.set(u.id, { user: u, last: m })
+        }
+        setRows([...seen.values()])
+      })
+      .catch((e) => { setErr(errMsg(e)); setRows([]) })
+  }, [uid])
+  useEffect(load, [load])
+  useRealtime(['messages'], load)
+
+  if (!rows) return null
+  if (!rows.length) return <><ErrorText>{err}</ErrorText><p className="text-sm text-muted">No messages yet. Tap the chat button next to a friend to start one.</p></>
+  return (
+    <Card className="p-0">
+      {rows.map(({ user: u, last }) => {
+        const n = unreadFrom[u.id] ?? 0
+        const d = new Date(last.created)
+        const when = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+        return (
+          <Link key={u.id} to={`/messages/${u.id}`} className="flex items-center gap-3 border-b border-line px-4 py-3 last:border-0 active:bg-surface-2">
+            <Avatar user={u} size={44} />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className={`truncate ${n ? 'font-extrabold' : 'font-bold'}`}>{u.name || u.username}</p>
+                <span className={`shrink-0 text-xs ${n ? 'font-bold text-accent' : 'text-faint'}`}>{when}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <p className={`min-w-0 flex-1 truncate text-sm ${n ? 'font-semibold text-ink' : 'text-muted'}`}>{last.from === uid ? 'You: ' : ''}{last.body}</p>
+                {n > 0 && <span className="num grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-accent px-1.5 text-[11px] font-bold text-accent-ink">{n > 9 ? '9+' : n}</span>}
+              </div>
+            </div>
+          </Link>
+        )
+      })}
+    </Card>
   )
 }

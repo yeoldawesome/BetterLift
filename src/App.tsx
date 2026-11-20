@@ -39,6 +39,7 @@ const Admin = lazy(() => import('./screens/Admin'))
 const Feedback = lazy(() => import('./screens/Feedback'))
 const WorkoutEdit = lazy(() => import('./screens/WorkoutEdit'))
 const Notifications = lazy(() => import('./screens/Notifications'))
+const Chat = lazy(() => import('./screens/Chat'))
 const Nutrition = lazy(() => import('./screens/Nutrition'))
 const NutritionCalendar = lazy(() => import('./screens/NutritionCalendar'))
 const NutritionGoals = lazy(() => import('./screens/NutritionGoals'))
@@ -111,6 +112,7 @@ export default function App() {
           <Route path="/compare/:id" element={<Compare />} />
           <Route path="/feedback" element={<Feedback />} />
           <Route path="/notifications" element={<Notifications />} />
+          <Route path="/messages/:id" element={<Chat />} />
           <Route path="/w/:id/edit" element={<WorkoutEdit />} />
           <Route path="/history" element={<History />} />
           <Route path="/calendar" element={<Calendar />} />
