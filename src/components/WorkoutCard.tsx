@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { fmtDur, fmtVol, timeAgo } from '../lib/format'
-import { me, useUnit, type Reaction, type User, type Workout } from '../lib/pb'
+import { me, useUnit, type CustomReaction, type Reaction, type User, type Workout } from '../lib/pb'
 import { EMOJI, keyOf, toggleReaction } from '../lib/reactions'
 import { customsOf, Glyph, ReactionPicker } from './CustomReactions'
 import type { Intensity } from '../lib/muscles'
@@ -48,6 +48,51 @@ export function Reactions({ workoutId, reactions, onChange }: { workoutId: strin
   )
 }
 
+/** Pointer handlers that fire `onHold` after the finger stays down (and still) for ~400ms. */
+function useLongPress(onHold: () => void, ms = 400) {
+  const timer = useRef<ReturnType<typeof setTimeout>>(undefined)
+  const start = useRef<{ x: number; y: number } | null>(null)
+  const cancel = () => { clearTimeout(timer.current); start.current = null }
+  return {
+    onPointerDown: (e: React.PointerEvent) => {
+      start.current = { x: e.clientX, y: e.clientY }
+      clearTimeout(timer.current)
+      timer.current = setTimeout(() => { start.current = null; navigator.vibrate?.(10); onHold() }, ms)
+    },
+    // A finger that drifts is scrolling the feed, not holding.
+    onPointerMove: (e: React.PointerEvent) => {
+      const s = start.current
+      if (s && Math.hypot(e.clientX - s.x, e.clientY - s.y) > 10) cancel()
+    },
+    onPointerUp: cancel,
+    onPointerLeave: cancel,
+    onPointerCancel: cancel,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault(),
+  }
+}
+
+/** Full-screen close-up of a post's reactions: each one big, with its name and count. Tap anywhere to close. */
+function ReactionsView({ counts, customs, onClose }: {
+  counts: { k: string; n: number; mine?: Reaction }[]; customs: Map<string, CustomReaction>; onClose: () => void
+}) {
+  const nameOf = (k: string) => customs.get(k)?.name ?? EMOJI.find(([e]) => e === k)?.[1] ?? 'Reaction'
+  return (
+    <div className="fixed inset-0 z-50 grid select-none place-items-center bg-black/70 p-4 backdrop-blur-sm [-webkit-touch-callout:none]" onClick={onClose} onContextMenu={(e) => e.preventDefault()}>
+      <div className="max-h-[80vh] w-full max-w-sm overflow-y-auto rounded-3xl border border-line bg-surface p-4 shadow-2xl">
+        <div className="grid grid-cols-2 gap-3">
+          {counts.map((t) => (
+            <div key={t.k} className={`flex flex-col items-center gap-1 rounded-2xl p-3 ${t.mine ? 'bg-accent/15 ring-2 ring-accent' : 'bg-surface-2'}`}>
+              <Glyph k={t.k} custom={customs.get(t.k)} size={t.k.startsWith('c:') ? 112 : 80} />
+              <p className="w-full truncate text-center text-sm font-bold">{nameOf(t.k)}</p>
+              <p className="num text-xs font-semibold text-muted">{t.n}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
   w: Workout; intensity: Intensity; reactions: Reaction[]; comments: number; onChange: () => void
 }) {
@@ -62,6 +107,10 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
     setPicking(false)
     toggleReaction(w.id, k, counts.get(k)?.mine).then(onChange).catch(() => {})
   }
+  // Tap the cluster to react; press and hold it to see every reaction up close.
+  const [viewing, setViewing] = useState(false)
+  const held = useRef(false)
+  const hold = useLongPress(() => { held.current = true; setPicking(false); setViewing(true) })
   return (
     <Card className="space-y-3 p-3">
       <Link to={`/w/${w.id}`} className="block space-y-3 px-1">
@@ -83,13 +132,15 @@ export function WorkoutCard({ w, intensity, reactions, comments, onChange }: {
       <div className="relative rounded-2xl border border-line bg-surface-2/60">
         <Link to={`/w/${w.id}`} className="flex justify-center py-4"><BodyMap sex={u?.sex} intensity={intensity} accent={w.accent} className="h-56" /></Link>
         {used.length > 0 && (
-          <button onClick={() => setPicking((v) => !v)} className="absolute bottom-3 left-3 flex items-center" aria-label={`${reactions.length} reactions`}>
+          <button {...hold} onClick={() => { if (held.current) { held.current = false; return } setPicking((v) => !v) }}
+            className="absolute bottom-3 left-3 flex select-none items-center [-webkit-touch-callout:none]" aria-label={`${reactions.length} reactions (press and hold to view)`}>
             {used.map((x, i) => (
-              <span key={x.k} className={`grid size-9 place-items-center overflow-hidden rounded-full border-2 border-surface bg-surface-2 ${i ? '-ml-3' : ''}`} style={{ zIndex: used.length - i }}><Glyph k={x.k} custom={customs.get(x.k)} size={x.k.startsWith('c:') ? 26 : 18} /></span>
+              <span key={x.k} className={`pointer-events-none grid size-12 place-items-center overflow-hidden rounded-full border-2 border-surface bg-surface-2 ${i ? '-ml-4' : ''}`} style={{ zIndex: used.length - i }}><Glyph k={x.k} custom={customs.get(x.k)} size={x.k.startsWith('c:') ? 36 : 26} /></span>
             ))}
-            <span className="num ml-1.5 text-sm font-bold text-muted">{reactions.length}</span>
+            <span className="num ml-2 text-base font-bold text-muted">{reactions.length}</span>
           </button>
         )}
+        {viewing && <ReactionsView counts={[...counts.values()].sort((a, b) => b.n - a.n)} customs={customs} onClose={() => setViewing(false)} />}
         <div className="absolute bottom-3 right-3 flex flex-col items-center gap-3">
           <Link to={`/w/${w.id}`} className="relative grid size-12 place-items-center rounded-full bg-accent text-accent-ink shadow-lg" aria-label={`${comments} comments`}>
             <CommentIcon width={24} height={24} />
