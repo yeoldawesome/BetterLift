@@ -44,6 +44,7 @@ export default function VerifyGate({ user }: { user: User }) {
         <MailIcon width={44} height={44} className="mx-auto text-accent" aria-hidden />
         <h1 className="text-2xl font-black">Verify your email</h1>
         <p className="text-muted">We sent a link to <span className="break-all font-bold text-ink">{user.email}</span>. Tap it to finish setting up your account.</p>
+        <p className="text-sm text-muted">Verify within 24 hours, or this account is deleted and you'll need to sign up again.</p>
         <Button onClick={check} disabled={!!busy}>{busy === 'check' ? 'Checking…' : "I've verified"}</Button>
         <Button variant="ghost" onClick={resend} disabled={!!busy}>{busy === 'send' ? 'Sending…' : 'Resend email'}</Button>
         {msg && <p className="text-sm font-semibold text-accent">{msg}</p>}

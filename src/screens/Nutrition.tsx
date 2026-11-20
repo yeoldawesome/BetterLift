@@ -180,7 +180,7 @@ export default function Nutrition() {
               <button onClick={() => open('describe', meal)} className="grid size-8 place-items-center rounded-full bg-accent/15 text-accent" aria-label={`Add to ${label}`}><PlusIcon width={18} height={18} /></button>
             </header>
             {items.length > 0 ? (
-              // One-column grid so each entry can be a SwipeRow: swipe right to delete, tap to edit.
+              // One-column grid so each entry can be a SwipeRow: swipe sideways to delete, tap to edit.
               <div className="grid grid-cols-1 px-4 pb-2">
                 {items.map((l, i) => (
                   <SwipeRow key={l.id} label={`Delete ${l.name}`} onDelete={() => swipeDelete(l)}>

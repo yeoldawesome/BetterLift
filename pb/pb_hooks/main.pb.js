@@ -339,3 +339,15 @@ onRecordAfterCreateSuccess((e) => {
   if (e.record.getBool("verified") || !e.app.settings().smtp.enabled) return
   try { $mails.sendRecordVerification(e.app, e.record) } catch (err) { e.app.logger().error("verification email failed", "error", String(err)) }
 }, "users")
+
+// Accounts that never verify their email are deleted 24 hours after signup (the link also expires then), so
+// abandoned or mistyped signups don't stick around. Skipped while SMTP is off: nobody could verify, so nothing is removed.
+cronAdd("delete-unverified-users", "15 * * * *", () => {
+  if (!$app.settings().smtp.enabled) return
+  const cutoff = new Date(Date.now() - 24 * 3600 * 1000).toISOString().replace("T", " ")
+  const stale = $app.findRecordsByFilter("users", "verified = false && created < {:c}", "created", 500, 0, { c: cutoff })
+  for (const u of stale) {
+    try { $app.delete(u) } catch (err) { $app.logger().error("couldn't delete unverified user", "id", u.id, "error", String(err)) }
+  }
+  if (stale.length) $app.logger().info("deleted unverified users", "count", stale.length)
+})

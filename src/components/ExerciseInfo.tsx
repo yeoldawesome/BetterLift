@@ -1,5 +1,5 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { altNames, defaultLogTip, label, type Usage } from '../lib/exercises'
 import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo, toDist } from '../lib/format'
 import { fmtMinutes, fmtPace } from '../lib/stats'
@@ -35,6 +35,9 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
   const uid = userId ?? me()
   const [tab, setTab] = useState<Tab>(initialTab)
   const [sets, setSets] = useState<WSet[] | null>(null)
+  const nav = useNavigate()
+  // Tapping a chart point: open that workout with the set highlighted.
+  const openSet = (s: WSet) => { onClose(); nav(`/w/${s.workout}?set=${s.id}`) }
 
   useEffect(() => {
     pb.collection('workout_sets').getFullList<WSet>({
@@ -77,7 +80,7 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
 
         {tab === 'stats' && (!sets ? <Spinner /> : !sessions.length ? (
           <p className="py-10 text-center text-sm text-muted">{isSelf ? 'Log this exercise to see your stats.' : 'No lifts to show — they may keep their lift stats private.'}</p>
-        ) : <StatsTab ex={ex} unit={unit} sessions={sessions} strongest={strongest} own={uid === me()} />)}
+        ) : <StatsTab ex={ex} unit={unit} sessions={sessions} strongest={strongest} own={uid === me()} onOpenSet={openSet} />)}
 
         {tab === 'history' && (!sets ? <Spinner /> : !sessions.length ? (
           <p className="py-10 text-center text-sm text-muted">No sessions yet.</p>
@@ -147,7 +150,7 @@ function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Us
   )
 }
 
-function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: Unit; sessions: Session[]; strongest: WSet | null; own: boolean }) {
+function StatsTab({ ex, unit, sessions, strongest, own, onOpenSet }: { ex: Exercise; unit: Unit; sessions: Session[]; strongest: WSet | null; own: boolean; onOpenSet: (s: WSet) => void }) {
   const k = ex.kind
   const viewer = useUser()
   const person = usePerson()
@@ -159,6 +162,10 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
   const cardioByTime = k === 'cardio' && !sessions.some((s) => s.dist > 0)
   const series = timed || cardioByTime ? sessions.map((s) => Math.round(secs(s) / 6) / 10) : k === 'duration' ? sessions.map((s) => s.maxSec) : k === 'cardio' ? sessions.map((s) => Math.round(toDist(s.dist, unit) * 100) / 100)
     : weighted ? sessions.map((s) => Number(fmtW(s.bestW, unit))) : sessions.map((s) => s.maxReps)
+  // The set each chart point stands for (same rule as the value plotted).
+  const score = (x: WSet) => timed || cardioByTime || k === 'duration' ? x.seconds : k === 'cardio' ? x.distance_km * 1e5 + x.seconds
+    : weighted ? epley(x.weight_kg, x.reps) * 1e3 + x.weight_kg : x.reps
+  const topSet = (s: Session) => s.sets.reduce((b, x) => (score(x) > score(b) ? x : b))
   const seriesLabel = timed || cardioByTime ? 'Time per session' : k === 'duration' ? 'Best hold' : k === 'cardio' ? `Distance per session (${dist})`
     : k === 'bodyweight' && weighted ? `Added weight, best set (+${unit})` : weighted ? `Best set each session (${unit})` : 'Best set (reps)'
   // Axis title + value format (time always in minutes/hours, never seconds).
@@ -217,6 +224,7 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
           <p className="mb-1 text-xs font-bold text-muted">{seriesLabel}</p>
           <Suspense fallback={<div className="h-48" />}>
           <LineChart className="h-48" yTitle={yAxis.yTitle} yFormat={yAxis.yFormat} labels={sessions.map((s) => s.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={series} trend={trendLine(series)}
+            onPoint={(i) => onOpenSet(topSet(sessions[i]))}
             extras={weighted ? sessions.map((s) => `${fmtW(s.bestW, unit)} ${unit} × ${s.bestR} reps · est. 1RM ${fmtW(s.bestE1, unit)}`) : undefined} />
           </Suspense>
         </div>
@@ -226,6 +234,7 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
           <p className="mb-1 text-xs font-bold text-muted">Effort per session (RPE 1–10)</p>
           <Suspense fallback={<div className="h-40" />}>
           <LineChart className="h-40" labels={effortSessions.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={effortSeries} trend={trendLine(effortSeries)}
+            onPoint={(i) => onOpenSet(effortSessions[i].sets.find((y) => (y.rpe ?? 0) > 0) ?? effortSessions[i].sets[0])}
             extras={effortSeries.map((v) => rpeLabel(Math.round(v)))} />
           </Suspense>
         </div>

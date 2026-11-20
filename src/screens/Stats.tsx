@@ -1,6 +1,7 @@
 // Stats page layout modeled on LiftoffVisualizer by JacobG122503 (github.com/JacobG122503/LiftoffVisualizer), used with permission.
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
+import { useSwipeDismiss } from '../lib/swipe'
 import { BikeIcon, BoltIcon, BurstIcon, CalendarIcon, CloseIcon, DownIcon, FlameIcon, HistoryIcon, InfoIcon, MoonIcon, MuscleIcon, PlateIcon, PuzzleIcon, RepeatIcon, RulerIcon, ScaleIcon, SearchIcon, SleepIcon, SproutIcon, StarIcon, StatsIcon, SunriseIcon, TagIcon, TimerIcon, TrendIcon, WorkoutIcon } from '../components/icons'
 import { ExerciseInfo } from '../components/ExerciseInfo'
 import { searchExercises } from '../lib/search'
@@ -71,6 +72,8 @@ function series(data: DaySummary[], kind: StatKind, metric: Metric, days: number
     dir,
     labels: d.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
     extras: extras.some(Boolean) ? extras : undefined,
+    /** Where each chart point came from (same order as the points). */
+    links: d.map((x) => (x.workoutId ? `/w/${x.workoutId}${x.setId ? `?set=${x.setId}` : ''}` : '')),
   }
 }
 
@@ -211,9 +214,14 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
   const [metric, setMetric] = useState(() => effectiveMetric(kind, metric0, data))
   const [days, setDays] = useState(days0)
   const s = useMemo(() => series(data, kind, metric, days, unit), [data, kind, metric, days, unit])
+  const nav = useNavigate()
+  const card = useRef<HTMLDivElement>(null)
+  const backdrop = useRef<HTMLDivElement>(null)
+  useSwipeDismiss(card, onClose, { axes: ['x', 'y'], fade: backdrop }) // swipe right or down to close
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/70 p-3" onClick={onClose}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-2xl space-y-3 rounded-3xl border border-line bg-surface p-4">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" onClick={onClose}>
+      <div ref={backdrop} className="absolute inset-0 bg-black/70" />
+      <div ref={card} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-2xl space-y-3 rounded-3xl border border-line bg-surface p-4">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-xl font-extrabold"><span className="min-w-0">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
@@ -226,7 +234,8 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
         {options.length > 1 && <Pills value={s.m} options={options} onChange={setMetric} />}
         <p className="text-xs font-bold text-muted">{metricLabel(s.m, unit, distLabel(unit))}</p>
         {s.d.length
-          ? <LineChart className="h-[50vh] max-h-96" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat} />
+          ? <LineChart className="h-[50vh] max-h-96" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat}
+              onPoint={(i) => { if (s.links[i]) { onClose(); nav(s.links[i]) } }} />
           : <div className="grid h-60 place-items-center text-sm text-muted">No sessions in this period</div>}
         <CardStats d={s.d} kind={kind} unit={unit} />
       </div>
@@ -374,7 +383,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
   const snap = useMemo(() => {
     if (!rows) return null
     const recs: FlatSet[] = rows.map(({ set: s, ex, workoutName, durationS }) => ({
-      date: new Date(s.performed_at), workoutId: s.workout, durationS, workoutName,
+      date: new Date(s.performed_at), workoutId: s.workout, setId: s.id, durationS, workoutName,
       exercise: ex.name, muscle: ex.muscle, kind: (ex.kind === 'duration' && isCardio(ex) ? 'timed' : ex.kind) as StatKind,
       weight: toUnit(s.weight_kg, unit), reps: s.reps, distance: toDist(s.distance_km, unit), seconds: s.seconds, bw,
     }))

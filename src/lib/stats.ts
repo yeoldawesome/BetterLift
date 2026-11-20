@@ -9,7 +9,7 @@ import type { Kind } from './pb'
  */
 export type StatKind = Kind | 'timed'
 
-export interface FlatSet { date: Date; workoutId: string; durationS: number; workoutName: string; exercise: string; muscle: string; weight: number; reps: number; distance: number; seconds: number; kind: StatKind
+export interface FlatSet { date: Date; workoutId: string; setId?: string; durationS: number; workoutName: string; exercise: string; muscle: string; weight: number; reps: number; distance: number; seconds: number; kind: StatKind
   /** Viewer's bodyweight (display unit), so weighted pull-ups/dips can count bodyweight + added weight. */
   bw?: number }
 
@@ -17,6 +17,8 @@ export interface DaySummary {
   date: Date; maxWeight: number; minWeight: number; totalVolume: number; totalReps: number; maxReps: number; totalSets: number
   maxE1rm: number; bestWeight: number; bestReps: number; totalSeconds: number; maxSeconds: number; totalDistance: number
   maxDistance: number
+  /** The day's top set (and its workout), so tapping the chart point can open it. */
+  workoutId?: string; setId?: string
 }
 
 export interface Snapshot {
@@ -51,7 +53,10 @@ function summarize(sets: FlatSet[]): DaySummary[] {
     // Bodyweight: best set = most reps, ties go to the heavier one. Lifts: highest est. 1RM.
     const best = g[0].kind === 'bodyweight' ? maxBy(g, (r) => r.reps * 1000 + r.weight)! : maxBy(g, (r) => epley(load(r), r.reps))!
     const weighted = g.filter((r) => r.weight > 0)
+    // Cardio / holds have no est. 1RM: their top set is the longest one.
+    const top = g[0].kind === 'cardio' || g[0].kind === 'timed' || g[0].kind === 'duration' ? maxBy(g, (r) => r.distance * 1e5 + r.seconds)! : best
     return {
+      workoutId: top.workoutId, setId: top.setId,
       date: startOfDay(g[0].date),
       maxWeight: Math.max(...g.map((r) => r.weight)),
       minWeight: weighted.length ? Math.min(...weighted.map((r) => r.weight)) : 0,

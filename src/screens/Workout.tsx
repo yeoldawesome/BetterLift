@@ -452,7 +452,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         <span className="text-[11px] font-bold uppercase text-faint">Prev</span>
         {cols.map((c) => <span key={c} className="text-[11px] font-bold uppercase text-faint">{c}</span>)}
         <span />
-        {/* Each set is one row: swipe it right to delete. */}
+        {/* Each set is one row: swipe it left or right to delete. */}
         {x.sets.map((s, i) => {
           const p = x.prev[i]
           return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} onDelete={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) }))}>{[

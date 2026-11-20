@@ -1,14 +1,19 @@
-import { useEffect, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ButtonHTMLAttributes, type HTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { avatarUrl, type User } from '../lib/pb'
 import { BackIcon, ChevronIcon, CloseIcon } from './icons'
+import { useSwipeDismiss } from '../lib/swipe'
 
 export function Screen({ title, action, back, children }: { title: string; action?: ReactNode; back?: boolean; children: ReactNode }) {
   const nav = useNavigate()
+  // Opened straight from a link (nothing to go back to): Back goes home instead of leaving the app.
+  const goBack = () => ((window.history.state as { idx?: number } | null)?.idx ? nav(-1) : nav('/', { replace: true }))
+  const ref = useRef<HTMLElement>(null)
+  useSwipeDismiss(ref, goBack, { enabled: !!back })
   return (
-    <section className="mx-auto max-w-lg px-safe pt-4">
+    <section ref={ref} className="mx-auto max-w-lg px-safe pt-4">
       {back && (
-        <button onClick={() => nav(-1)} className="-ml-1 mb-2 flex items-center gap-1 text-sm font-semibold text-accent">
+        <button onClick={goBack} className="-ml-1 mb-2 flex items-center gap-1 text-sm font-semibold text-accent">
           <BackIcon width={20} height={20} /> Back
         </button>
       )}
@@ -21,8 +26,8 @@ export function Screen({ title, action, back, children }: { title: string; actio
   )
 }
 
-export function Card({ className = '', children, onClick }: { className?: string; children: ReactNode; onClick?: () => void }) {
-  return <div onClick={onClick} className={`rounded-2xl border border-line bg-surface p-4 ${className}`}>{children}</div>
+export function Card({ className = '', children, ...p }: HTMLAttributes<HTMLDivElement> & { 'data-group'?: boolean }) {
+  return <div {...p} className={`rounded-2xl border border-line bg-surface p-4 ${className}`}>{children}</div>
 }
 
 type BtnProps = ButtonHTMLAttributes<HTMLButtonElement> & { variant?: 'primary' | 'ghost' | 'danger'; size?: 'md' | 'sm' }
@@ -105,13 +110,15 @@ export function ListLink({ to, children, badge }: { to: string; children: ReactN
 
 /** Full-screen sheet. `back` shows a back arrow (for screens you return from) instead of an ✕ (for ones you dismiss). */
 export function Sheet({ title, subtitle, back, onClose, children }: { title: string; subtitle?: string; back?: boolean; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useSwipeDismiss(ref, onClose) // swipe right to close / go back
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [])
   return (
-    <div role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[60] flex flex-col bg-canvas pt-safe">
+    <div ref={ref} role="dialog" aria-modal="true" aria-label={title} className="fixed inset-0 z-[60] flex flex-col bg-canvas pt-safe shadow-2xl">
       <div className="mx-auto flex w-full max-w-lg items-center justify-between gap-3 px-safe py-3">
         {back && <button onClick={onClose} className="-ml-1 grid size-9 shrink-0 place-items-center rounded-full bg-surface-2" aria-label="Back"><BackIcon width={20} height={20} /></button>}
         <div className="min-w-0 flex-1">
@@ -127,14 +134,18 @@ export function Sheet({ title, subtitle, back, onClose, children }: { title: str
 
 /** Short sheet that slides up from the bottom over a dimmed backdrop (for pick-one menus). */
 export function BottomSheet({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const panel = useRef<HTMLDivElement>(null)
+  const backdrop = useRef<HTMLDivElement>(null)
+  useSwipeDismiss(panel, onClose, { axes: ['y'], fade: backdrop }) // pull down to close
   useEffect(() => {
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     return () => { document.body.style.overflow = prev }
   }, [])
   return (
-    <div className="fixed inset-0 z-[60] flex flex-col justify-end bg-black/60" onClick={onClose}>
-      <div role="dialog" aria-modal="true" aria-label={title} className="mx-auto w-full max-w-lg rounded-t-3xl border-t border-line bg-canvas pb-safe" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[60] flex flex-col justify-end" onClick={onClose}>
+      <div ref={backdrop} className="absolute inset-0 bg-black/60" />
+      <div ref={panel} role="dialog" aria-modal="true" aria-label={title} className="relative mx-auto w-full max-w-lg rounded-t-3xl border-t border-line bg-canvas pb-safe" onClick={(e) => e.stopPropagation()}>
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line" />
         <div className="relative px-safe py-3 text-center">
           <h2 className="text-lg font-extrabold">{title}</h2>
@@ -165,13 +176,17 @@ export function ConfirmSheet({ title, body, confirmLabel = 'Delete', typeToConfi
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const ready = !typeToConfirm || typed.trim().toUpperCase() === typeToConfirm.toUpperCase()
+  const panel = useRef<HTMLDivElement>(null)
+  const backdrop = useRef<HTMLDivElement>(null)
+  useSwipeDismiss(panel, onClose, { axes: ['y'], fade: backdrop, enabled: !busy })
   const go = async () => {
     setBusy(true); setErr('')
     try { await onConfirm(); onClose() } catch (e) { setErr((e as Error)?.message || 'Something went wrong'); setBusy(false) }
   }
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/60" onClick={() => !busy && onClose()}>
-      <div onClick={(e) => e.stopPropagation()} className="w-full max-w-lg space-y-3 rounded-t-3xl border-t border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+    <div className="fixed inset-0 z-[80] flex items-end justify-center" onClick={() => !busy && onClose()}>
+      <div ref={backdrop} className="absolute inset-0 bg-black/60" />
+      <div ref={panel} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-lg space-y-3 rounded-t-3xl border-t border-line bg-surface p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
         <h2 className="text-xl font-extrabold">{title}</h2>
         <div className="text-sm text-muted">{body}</div>
         {typeToConfirm && <Input placeholder={`Type ${typeToConfirm} to confirm`} autoCapitalize="characters" value={typed} onChange={(e) => setTyped(e.target.value)} autoFocus />}

@@ -88,7 +88,7 @@ export default function App() {
   return (
     <div className="flex h-full flex-col">
       {showBanner && <ActiveBanner />}
-      <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
+      <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-x-hidden overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
         <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<Navigate to={home} replace />} />

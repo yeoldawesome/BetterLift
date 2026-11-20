@@ -18,7 +18,7 @@ export default function VerifyEmail() {
       })
       .catch((x) => {
         const st = (x as { status?: number }).status
-        setState(st === 400 ? 'This link has expired or was already used. If the app still asks you to verify, tap Resend email there.' : errMsg(x))
+        setState(st === 400 ? 'This link has expired or was already used. If the app still asks you to verify, tap Resend email there. Accounts not verified within 24 hours are deleted, so you may need to sign up again.' : errMsg(x))
       })
   }, [token])
 

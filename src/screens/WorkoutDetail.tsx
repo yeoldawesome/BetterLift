@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ExerciseInfo } from '../components/ExerciseInfo'
 import { CloseIcon, GlobeIcon, InfoIcon, LockIcon, TrashIcon, TrophyIcon } from '../components/icons'
 import { Reactions } from '../components/WorkoutCard'
@@ -50,6 +50,24 @@ export default function WorkoutDetail() {
     loadSocial().catch(() => {})
   }, [id])
   useRealtime(['reactions', 'comments'], () => { loadSocial().catch(() => {}) }, filter)
+
+  // Opened from a stats chart point (?set=…): scroll to that exercise and flash it and the set.
+  const [params] = useSearchParams()
+  const hit = params.get('set')
+  const loaded = sets.some((s) => s.id === hit)
+  useEffect(() => {
+    if (!hit || !loaded) return
+    const row = document.querySelector<HTMLElement>(`[data-set="${CSS.escape(hit)}"]`)
+    const card = row?.closest<HTMLElement>('[data-group]')
+    if (!row || !card) return
+    card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    for (const [el, cls] of [[card, 'flash-card'], [row, 'flash-set']] as const) {
+      el.classList.remove(cls); void el.offsetWidth // restart if it's already flashing
+      el.classList.add(cls)
+    }
+    const t = setTimeout(() => { card.classList.remove('flash-card'); row.classList.remove('flash-set') }, 3200)
+    return () => clearTimeout(t)
+  }, [hit, loaded])
 
   const post = async (e: FormEvent) => {
     e.preventDefault()
@@ -127,7 +145,7 @@ export default function WorkoutDetail() {
         const labels = setLabels(g.sets.map((s) => s.set_type))
         const sup = g.sets[0].superset
         return (
-        <Card key={i} className={`relative space-y-1.5 ${sup ? 'mt-5 border-red-600/50' : ''}`}>
+        <Card key={i} data-group className={`relative space-y-1.5 ${sup ? 'mt-5 border-red-600/50' : ''}`}>
           {!!sup && <span className="absolute -top-3 right-4 rounded-lg bg-red-600 px-2 py-0.5 text-xs font-bold text-white">Superset</span>}
           <div className="flex items-center justify-between gap-2">
             <p className="font-extrabold text-accent">{g.name}</p>
@@ -139,7 +157,7 @@ export default function WorkoutDetail() {
           </div>
           {g.sets[0].note && <p className="whitespace-pre-wrap rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">{g.sets[0].note}</p>}
           {g.sets.map((s, j) => (
-            <div key={s.id} className="flex items-center justify-between text-sm">
+            <div key={s.id} data-set={s.id} className="-mx-2 flex items-center justify-between rounded-lg px-2 text-sm">
               <span className="num"><span className={`mr-3 inline-block w-3 font-bold ${labels[j].color || 'text-faint'}`}>{labels[j].text}</span>{setText_(s)}</span>
               {s.is_pr && <span className="flex items-center gap-1 text-xs font-bold text-accent"><TrophyIcon width={14} height={14} />PR</span>}
             </div>
