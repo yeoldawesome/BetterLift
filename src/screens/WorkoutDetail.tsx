@@ -57,15 +57,7 @@ export default function WorkoutDetail() {
   const loaded = sets.some((s) => s.id === hit)
   useEffect(() => {
     if (!hit || !loaded) return
-    const row = document.querySelector<HTMLElement>(`[data-set="${CSS.escape(hit)}"]`)
-    const card = row?.closest<HTMLElement>('[data-group]')
-    if (!row || !card) return
-    card.scrollIntoView({ behavior: 'smooth', block: 'center' })
-    for (const [el, cls] of [[card, 'flash-card'], [row, 'flash-set']] as const) {
-      el.classList.remove(cls); void el.offsetWidth // restart if it's already flashing
-      el.classList.add(cls)
-    }
-    const t = setTimeout(() => { card.classList.remove('flash-card'); row.classList.remove('flash-set') }, 3200)
+    const t = flashSet(hit)
     return () => clearTimeout(t)
   }, [hit, loaded])
 
@@ -92,6 +84,7 @@ export default function WorkoutDetail() {
     if (last && last.sets[0].position === s.position) last.sets.push(s)
     else groups.push({ name: s.expand?.exercise?.name ?? '?', ex: s.expand?.exercise, sets: [s] })
   }
+  const firstPr = sets.find((s) => s.is_pr)
   // Cardio effort, plus estimated burn on your own workouts (it depends on your body stats).
   const effortText = (s: WSet) => {
     const ex = s.expand?.exercise
@@ -125,7 +118,9 @@ export default function WorkoutDetail() {
       <Card className="grid grid-cols-3 gap-2">
         <Stat value={fmtDur(w.duration_s)} label="Time" />
         <Stat value={fmtVol(w.volume_kg, unit)} label={`Volume ${unit}`} />
-        <Stat value={w.pr_count} label="PRs" />
+        {firstPr
+          ? <button onClick={() => flashSet(firstPr.id)} aria-label="Jump to the first PR set"><Stat value={<span className="inline-flex items-center gap-1 text-yellow-500"><TrophyIcon width={18} height={18} />{w.pr_count}</span>} label="PRs" /></button>
+          : <Stat value={w.pr_count} label="PRs" />}
       </Card>
       {mine ? (
         <button onClick={() => {
@@ -157,9 +152,10 @@ export default function WorkoutDetail() {
           </div>
           {g.sets[0].note && <p className="whitespace-pre-wrap rounded-lg bg-surface-2 px-3 py-2 text-sm text-muted">{g.sets[0].note}</p>}
           {g.sets.map((s, j) => (
-            <div key={s.id} data-set={s.id} className="-mx-2 flex items-center justify-between rounded-lg px-2 text-sm">
-              <span className="num"><span className={`mr-3 inline-block w-3 font-bold ${labels[j].color || 'text-faint'}`}>{labels[j].text}</span>{setText_(s)}</span>
-              {s.is_pr && <span className="flex items-center gap-1 text-xs font-bold text-accent"><TrophyIcon width={14} height={14} />PR</span>}
+            // PR sets stand out: gold row, bold numbers, trophy badge.
+            <div key={s.id} data-set={s.id} className={`-mx-2 flex items-center justify-between rounded-lg px-2 text-sm ${s.is_pr ? 'bg-yellow-500/15 py-1.5 ring-1 ring-yellow-500/50' : ''}`}>
+              <span className={`num ${s.is_pr ? 'font-bold' : ''}`}><span className={`mr-3 inline-block w-3 font-bold ${labels[j].color || 'text-faint'}`}>{labels[j].text}</span>{setText_(s)}</span>
+              {s.is_pr && <span className="flex items-center gap-1 rounded-full bg-yellow-500 px-2 py-0.5 text-xs font-black text-black"><TrophyIcon width={13} height={13} />PR</span>}
             </div>
           ))}
         </Card>
@@ -199,6 +195,19 @@ export default function WorkoutDetail() {
 }
 
 /** Renders replies under their parent, at any depth. Indentation stops growing after 4 levels so deep threads stay readable on phones. */
+/** Scroll a set's exercise into view and flash the card and the set. Returns the timer that ends the flash. */
+function flashSet(id: string) {
+  const row = document.querySelector<HTMLElement>(`[data-set="${CSS.escape(id)}"]`)
+  const card = row?.closest<HTMLElement>('[data-group]')
+  if (!row || !card) return undefined
+  card.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  for (const [el, cls] of [[card, 'flash-card'], [row, 'flash-set']] as const) {
+    el.classList.remove(cls); void el.offsetWidth // restart if it's already flashing
+    el.classList.add(cls)
+  }
+  return setTimeout(() => { card.classList.remove('flash-card'); row.classList.remove('flash-set') }, 3200)
+}
+
 function CommentTree({ comments, parent, depth, canModerate, onReply, onDelete }: {
   comments: Comment[]; parent: string; depth: number; canModerate: boolean; onReply: (c: Comment) => void; onDelete: (c: Comment) => void
 }) {
