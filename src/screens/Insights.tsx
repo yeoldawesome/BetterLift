@@ -9,7 +9,7 @@ import {
   predict, standings, weeklyVolume, workoutsPerWeek, type BodyCorrKey, type Prediction,
 } from '../lib/insights'
 import { me, useUnit, type Unit, type User } from '../lib/pb'
-import { cachedStats, loadStatsRows, type StatRow } from '../lib/statsData'
+import { useStatsRows } from '../lib/statsData'
 
 const n0 = (n: number) => Math.round(n).toLocaleString()
 const r1 = (n: number) => Math.round(n * 10) / 10
@@ -138,7 +138,7 @@ function PredictionRow({ p, unit, goalKg, onGoal }: { p: Prediction; unit: Unit;
 export function InsightsView({ user }: { user: User }) {
   const unit = useUnit()
   const self = user.id === me() // a friend's insights are read-only (1RM goals live on your own device)
-  const [rows, setRows] = useState<StatRow[] | null>(() => cachedStats(user.id))
+  const rows = useStatsRows(user.id)
   const [body, setBody] = useState<BodyMetric[] | null>(null)
   const [goals, setGoals] = useState<Record<string, number>>(() => readGoals(user.id))
   const [showAll, setShowAll] = useState(false)
@@ -147,7 +147,6 @@ export function InsightsView({ user }: { user: User }) {
   const period = PERIODS.find(([d]) => d === days)![2]
 
   useEffect(() => {
-    loadStatsRows(user.id).then(setRows).catch(() => setRows((r) => r ?? []))
     loadBody(user.id).then(setBody).catch(() => setBody([]))
   }, [user.id])
 

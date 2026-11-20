@@ -8,16 +8,21 @@ import { myAccent } from './theme'
 
 const MAX_BATCH = 400
 
+/** Source ids of imported workouts plus the start second of every workout, so re-importing a BetterLift export doesn't duplicate. */
 export async function alreadyImported(): Promise<Set<string>> {
-  const prior = await pb.collection('workouts').getFullList<Workout>({ filter: pb.filter('user = {:u} && source_id != ""', { u: me() }), fields: 'source_id' })
-  return new Set(prior.map((w) => w.source_id))
+  const prior = await pb.collection('workouts').getFullList<Workout>({ filter: pb.filter('user = {:u}', { u: me() }), fields: 'source_id,started_at', batch: 1000 })
+  const out = new Set<string>()
+  for (const w of prior) { if (w.source_id) out.add(w.source_id); out.add(startKey(new Date(w.started_at))) }
+  return out
 }
+const startKey = (d: Date) => `t:${Math.floor(d.getTime() / 1000)}`
+export const isImported = (existing: Set<string>, w: ImpWorkout) => existing.has(w.sourceId) || existing.has(startKey(w.date))
 
 /** Idempotent: workouts whose source_id already exists are skipped (also enforced by a unique index). */
 export async function runImport(parsed: ImpResult, unit: Unit, onProgress: (done: number, total: number) => void) {
   const uid = me()
   const existing = await alreadyImported()
-  const fresh: ImpWorkout[] = parsed.workouts.filter((w) => !existing.has(w.sourceId))
+  const fresh: ImpWorkout[] = parsed.workouts.filter((w) => !isImported(existing, w))
 
   // Map exercise names to the library (custom ones win), creating customs for unknown names.
   const byKey = new Map<string, Exercise>()

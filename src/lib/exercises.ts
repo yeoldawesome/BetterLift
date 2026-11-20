@@ -1,4 +1,6 @@
 import type { RecordModel } from 'pocketbase'
+import { idbDel, idbGet, idbSet } from './idb'
+import { loadStatsRows, warmStats } from './statsData'
 import { me, pb, type Exercise, type Kind, type Override, type WSet } from './pb'
 
 export const MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'core', 'full_body', 'cardio']
@@ -16,14 +18,11 @@ export function defaultLogTip(kind: Kind, equipment = '') {
 
 /** How often and how recently the current user performed each exercise (for picker filters/sorting). */
 export type Usage = Map<string, { count: number; last: number }>
-export async function loadUsage(): Promise<Usage> {
-  const sets = await pb.collection('workout_sets').getFullList<{ exercise: string; workout: string; performed_at: string } & import('pocketbase').RecordModel>({
-    filter: pb.filter('user = {:u} && completed = true', { u: me() }), fields: 'exercise,workout,performed_at', batch: 1000,
-  })
+export function usageFrom(rows: { set: Pick<WSet, 'exercise' | 'workout' | 'performed_at'> }[]): Usage {
   // Count sessions (workouts), not sets, so a 5-set exercise doesn't outrank one done more often.
   const seen = new Set<string>()
   const out: Usage = new Map()
-  for (const s of sets) {
+  for (const { set: s } of rows) {
     const t = new Date(s.performed_at).getTime()
     const u = out.get(s.exercise) ?? { count: 0, last: 0 }
     if (!seen.has(s.exercise + s.workout)) { seen.add(s.exercise + s.workout); u.count++ }
@@ -32,31 +31,62 @@ export async function loadUsage(): Promise<Usage> {
   }
   return out
 }
+/** Shares the Stats data (and its on-device cache), so the picker and Stats page never download sets twice. */
+export async function loadUsage(force = false): Promise<Usage> {
+  return usageFrom(await loadStatsRows(me(), force))
+}
+/** Usage from data already on this device (instant), or null. */
+export async function cachedUsage(): Promise<Usage | null> {
+  const rows = await warmStats(me())
+  return rows ? usageFrom(rows) : null
+}
 
 export const label =(s: string) => s.replace('_', ' ').replace(/^./, (c) => c.toUpperCase())
 
 let cache: Promise<Exercise[]> | null = null
-export function loadExercises(force = false) {
+let latest: Promise<Exercise[]> | null = null
+const exKey = () => `exercises:${me()}`
+
+function fetchExercises() {
   // Moderators can also read others' pending submissions; keep those out of the library and pickers.
-  if (force || !cache) cache = Promise.all([
-    pb.collection('exercises').getFullList<Exercise>({ sort: 'name' }),
-    pb.collection('exercise_overrides').getFullList<Override>({ filter: pb.filter('user = {:u}', { u: me() }) }).catch(() => [] as Override[]),
+  return Promise.all([
+    pb.collection('exercises').getFullList<Exercise>({ sort: 'name', batch: 1000, requestKey: null }),
+    pb.collection('exercise_overrides').getFullList<Override>({ filter: pb.filter('user = {:u}', { u: me() }), requestKey: null }).catch(() => [] as Override[]),
   ])
     .then(([list, overrides]) => {
       // Personal edits replace the displayed details of an exercise for this user only (tracking type never changes).
       const byEx = new Map(overrides.map((o) => [o.exercise, o]))
-      return list.filter((e) => !e.owner || e.owner === me()).map((e) => {
+      const out = list.filter((e) => !e.owner || e.owner === me()).map((e) => {
         const o = byEx.get(e.id)
         if (!o) return e
         return { ...e, override: o.id, name: o.name || e.name, muscle: o.muscle || e.muscle, equipment: o.equipment || e.equipment,
           secondary: o.secondary?.length ? o.secondary : e.secondary, instructions: o.instructions || e.instructions, log_tip: o.log_tip || e.log_tip,
           rest_s: o.rest_s, rest_after_s: o.rest_after_s }
       }).sort((a, b) => a.name.localeCompare(b.name))
+      idbSet(exKey(), out)
+      return out
     })
-    .catch((e) => { cache = null; throw e })
+}
+
+/** The exercise library. Without `force`, the copy saved on this device is returned instantly while a fresh one loads. */
+export function loadExercises(force = false) {
+  if (force || !cache) {
+    const net = fetchExercises()
+    latest = net
+    net.then((l) => { if (latest === net) { cache = Promise.resolve(l); mem = l } }, () => {})
+    if (force) cache = net.catch((e) => { cache = null; throw e })
+    else cache = idbGet<Exercise[]>(exKey()).then((saved) => (saved?.length ? saved : net)).catch((e) => { cache = null; throw e })
+    cache.then((l) => { mem = l }, () => {})
+  }
   return cache
 }
-export const resetExercises = () => { cache = null }
+let mem: Exercise[] | null = null
+/** The library already in memory this session (synchronous), or null. */
+export const cachedExercises = () => (cache ? mem : null)
+/** The most recent server load of the library (resolves after loadExercises' instant on-device copy). */
+export const freshExercises = () => latest ?? loadExercises(true)
+/** Drop the library after an edit so the next load comes from the server (not the on-device copy). */
+export const resetExercises = () => { cache = null; latest = null; mem = null; idbDel(exKey()) }
 
 /** Order-insensitive name key so "Bench Press (Barbell)" matches "Barbell Bench Press". */
 export const nameKey = (s: string) =>

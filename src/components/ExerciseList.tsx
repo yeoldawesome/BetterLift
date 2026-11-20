@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, type Usage } from '../lib/exercises'
-import { invalidateStats } from '../lib/statsData'
+import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, usageFrom, type Usage } from '../lib/exercises'
+import { cachedStats, invalidateStats } from '../lib/statsData'
 import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
 import { errMsg, me, pb, type Exercise, type Kind } from '../lib/pb'
@@ -22,9 +22,10 @@ function status(e: Exercise) {
 }
 
 export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise[]) => void; multi?: boolean; openId?: string }) {
-  const [all, setAll] = useState<Exercise[] | null>(null)
-  const [usage, setUsage] = useState<Usage>(new Map())
-  const [usageLoaded, setUsageLoaded] = useState(false)
+  // Start from whatever is already in memory so the picker opens instantly.
+  const [all, setAll] = useState<Exercise[] | null>(cachedExercises)
+  const [usage, setUsage] = useState<Usage>(() => { const r = cachedStats(me()); return r ? usageFrom(r) : new Map() })
+  const [usageLoaded, setUsageLoaded] = useState(() => !!cachedStats(me()))
   const [personal, setPersonal] = useState<Exercise | null>(null)
   const [merging, setMerging] = useState(false)
   const dupes = useMemo(() => (all ? findDuplicates(all) : []), [all])
@@ -40,12 +41,19 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
 
   const reload = (force = false) => loadExercises(force).then(setAll).catch((e) => setErr(errMsg(e)))
   useEffect(() => {
-    reload()
-    loadUsage().then((u) => {
-      setUsage(u)
+    let live = true
+    // On-device copies render first; the server copies replace them when they arrive.
+    reload().then(() => freshExercises().then((l) => live && setAll(l)).catch(() => {}))
+    let fresh = false
+    const apply = (u: Usage) => {
+      if (!live) return
+      setUsage(u); setUsageLoaded(true)
       // Nothing logged yet (new account): "Most performed" would be empty, so show everything instead.
       if (!u.size && onPick) { setShow('all'); setSort('name') }
-    }).catch(() => {}).finally(() => setUsageLoaded(true))
+    }
+    cachedUsage().then((u) => { if (u && !fresh) apply(u) }).catch(() => {})
+    loadUsage().then((u) => { fresh = true; apply(u) }).catch(() => {}).finally(() => live && setUsageLoaded(true))
+    return () => { live = false }
   }, [])
 
   // Deep link (e.g. from a "wasn't approved" notification): open that exercise's form once the library loads.
@@ -165,7 +173,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
       )}
       {form && <ExerciseForm initial={form.ex} lib={all ?? []} name0={q} review0={form.review} onClose={() => setForm(null)} onSaved={(e) => { setForm(null); reload(true); if (!form.ex) setQ(e.name) }} />}
       {info && <ExerciseInfo ex={info} usage={usage} onClose={() => setInfo(null)} onEdit={() => { const e = info; setInfo(null); openEdit(e) }} />}
-      {merging && all && <MergeDuplicates lib={all} usage={usage} onClose={() => setMerging(false)} onDone={() => { setMerging(false); reload(true); loadUsage().then(setUsage).catch(() => {}) }} />}
+      {merging && all && <MergeDuplicates lib={all} usage={usage} onClose={() => setMerging(false)} onDone={() => { setMerging(false); reload(true); loadUsage(true).then(setUsage).catch(() => {}) }} />}
       {personal && <PersonalEditForm ex={personal} onClose={() => setPersonal(null)} onSaved={() => { setPersonal(null); reload(true) }} />}
     </div>
   )

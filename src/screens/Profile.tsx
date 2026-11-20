@@ -8,6 +8,8 @@ import { loadStreak, type Streak } from '../lib/streak'
 import { StreakCard } from './Workout'
 import { calendarLink } from './Calendar'
 import { resetExercises } from '../lib/exercises'
+import { idbClear } from '../lib/idb'
+import { invalidateStats } from '../lib/statsData'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
 import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
 
@@ -58,14 +60,14 @@ export default function Profile() {
     { to: '/history', label: 'History', icon: '🗓️' },
     { to: '/reactions', label: 'Reactions', icon: '😄' },
     { to: '/friends', label: 'Friends', icon: '👥', badge: pending, dot: notes.has('friends') },
-    { to: '/import', label: 'Import', icon: '📥' },
+    { to: '/import', label: 'Import / Export', icon: '📥' },
     { to: '/themes', label: 'Themes', icon: '🎨' },
     { to: '/feedback', label: 'Feedback', icon: '💬', dot: notes.has('feedback') },
     { to: '/settings', label: 'Settings', icon: '⚙️', dot: nutritionNew(user) },
     ...(user.is_moderator ? [{ to: '/review', label: 'Review', icon: '🏆', badge: toReview }] : []),
   ]
 
-  const logout = () => { pb.authStore.clear(); resetExercises() }
+  const logout = () => { resetExercises(); idbClear(); invalidateStats(); pb.authStore.clear() }
 
   return (
     <section className="mx-auto max-w-lg space-y-3 px-safe pb-4">

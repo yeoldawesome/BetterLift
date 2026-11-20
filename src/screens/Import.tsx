@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Button, Card, ErrorText, Screen, Segmented, Stat } from '../components/ui'
-import { alreadyImported, runImport } from '../lib/importer'
+import { alreadyImported, isImported, runImport } from '../lib/importer'
 import { importLiftoff, looksLikeLiftoff, type ImpResult } from '../lib/liftoff'
-import { errMsg, type Unit } from '../lib/pb'
+import { exportLiftoffCsv, downloadText, shareOrDownload } from '../lib/exporter'
+import { errMsg, useUnit, type Unit } from '../lib/pb'
 
 export default function Import() {
   const [parsed, setParsed] = useState<ImpResult | null>(null)
@@ -12,6 +13,19 @@ export default function Import() {
   const [progress, setProgress] = useState<{ done: number; total: number } | null>(null)
   const [result, setResult] = useState('')
   const [err, setErr] = useState('')
+  const userUnit = useUnit()
+  const [exUnit, setExUnit] = useState<Unit>(userUnit)
+  const [exp, setExp] = useState<{ csv: string; workouts: number; sets: number; name: string } | null>(null)
+  const [exporting, setExporting] = useState(false)
+  const [expErr, setExpErr] = useState('')
+  const buildExport = async () => {
+    setExpErr(''); setExp(null); setExporting(true)
+    try {
+      const r = await exportLiftoffCsv(exUnit)
+      const d = new Date()
+      setExp({ ...r, name: `betterlift_workout_data_${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}.csv` })
+    } catch (e) { setExpErr(errMsg(e)) } finally { setExporting(false) }
+  }
 
   const pick = async (f?: File) => {
     if (!f) return
@@ -25,7 +39,7 @@ export default function Import() {
     } catch (e) { setErr(errMsg(e)) }
   }
 
-  const fresh = parsed?.workouts.filter((w) => !existing.has(w.sourceId)).length ?? 0
+  const fresh = parsed?.workouts.filter((w) => !isImported(existing, w)).length ?? 0
   const totalSets = parsed?.workouts.reduce((t, w) => t + w.exercises.reduce((u, x) => u + x.sets.length, 0), 0) ?? 0
 
   const run = async () => {
@@ -40,7 +54,8 @@ export default function Import() {
   }
 
   return (
-    <Screen title="Import" back>
+    <Screen title="Import / Export" back>
+      <h2 className="text-lg font-extrabold">Import</h2>
       <p className="text-muted">In Liftoff, go to Settings → Export Workouts, save <span className="font-mono text-ink">liftoff_workout_data.csv</span>, then choose it here. Re-importing the same file never creates duplicates.</p>
       <label className="flex h-12 cursor-pointer items-center justify-center rounded-2xl bg-surface-2 font-bold">
         Choose CSV file
@@ -69,6 +84,26 @@ export default function Import() {
           )}
         </>
       )}
+      <h2 className="pt-4 text-lg font-extrabold">Export</h2>
+      <p className="text-muted">Download all your workouts as a Liftoff-format CSV (same format as the import above). Body / physique data is not included.</p>
+      <div>
+        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Export weights in</span>
+        <Segmented value={exUnit} onChange={(u) => { setExUnit(u); setExp(null) }} options={[['lb', 'Pounds (lb) / miles'], ['kg', 'Kilograms (kg) / km']]} />
+      </div>
+      {!exp ? (
+        <Button variant="ghost" onClick={buildExport} disabled={exporting}>{exporting ? 'Preparing…' : 'Export workouts'}</Button>
+      ) : (
+        <Card>
+          <p className="mb-3 text-sm font-bold">{exp.workouts} workouts · {exp.sets} sets ready</p>
+          {exp.workouts ? (
+            <div className="grid grid-cols-2 gap-2">
+              <Button onClick={() => shareOrDownload(exp.csv, exp.name)}>Save / Share</Button>
+              <Button variant="ghost" onClick={() => downloadText(exp.csv, exp.name)}>Download</Button>
+            </div>
+          ) : <p className="text-sm text-muted">Nothing to export yet.</p>}
+        </Card>
+      )}
+      <ErrorText>{expErr}</ErrorText>
       <p className="pt-4 text-center text-xs text-faint">Liftoff import adapted from LiftX by JacobG122503.</p>
     </Screen>
   )

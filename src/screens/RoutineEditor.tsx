@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ExercisePicker } from '../components/ExerciseList'
 import { DownIcon, TimerIcon, TrashIcon, UpIcon } from '../components/icons'
@@ -18,6 +18,12 @@ export default function RoutineEditor() {
   const [picking, setPicking] = useState(false)
   const [restFor, setRestFor] = useState<RoutineExercise | null>(null)
   const [err, setErr] = useState('')
+  const [saving, setSaving] = useState(false)
+  // Edits save on blur; the Save button waits for any in-flight writes before leaving.
+  const pending = useRef(new Set<Promise<unknown>>())
+  const failed = useRef(false)
+  const track = <T,>(p: Promise<T>) => { pending.current.add(p); p.finally(() => pending.current.delete(p)); return p }
+  const fail = (e: unknown) => { failed.current = true; setErr(errMsg(e)) }
 
   const loadItems = () => pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: pb.filter('routine = {:r}', { r: id }), sort: 'position,created', expand: 'exercise' }).then(setItems)
   useEffect(() => {
@@ -25,10 +31,10 @@ export default function RoutineEditor() {
     loadItems()
   }, [id])
 
-  const saveRoutine = (patch: Partial<Routine>) => pb.collection('routines').update(id!, patch).catch((e) => setErr(errMsg(e)))
+  const saveRoutine = (patch: Partial<Routine>) => track(pb.collection('routines').update(id!, patch).catch(fail))
   const saveItem = (it: RoutineExercise, patch: Partial<RoutineExercise>) => {
     setItems((xs) => xs.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))
-    pb.collection('routine_exercises').update(it.id, patch).catch((e) => setErr(errMsg(e)))
+    track(pb.collection('routine_exercises').update(it.id, patch).catch(fail))
   }
 
   const add = async (exs: Exercise[]) => {
@@ -48,6 +54,15 @@ export default function RoutineEditor() {
   }
 
   const remove = async (it: RoutineExercise) => { await pb.collection('routine_exercises').delete(it.id); loadItems() }
+
+  const saveAndClose = async () => {
+    setSaving(true); failed.current = false
+    ;(document.activeElement as HTMLElement | null)?.blur() // flush the field being edited
+    await new Promise((res) => setTimeout(res, 0))
+    await Promise.allSettled([...pending.current])
+    setSaving(false)
+    if (!failed.current) nav('/routines')
+  }
 
   const launch = async () => {
     if (active && !await ask({ title: 'You have a workout in progress', body: 'Starting this routine replaces it.', confirmLabel: 'Replace', danger: true })) return
@@ -97,7 +112,8 @@ export default function RoutineEditor() {
         </Card>
       ))}
       <Button variant="ghost" onClick={() => setPicking(true)}>+ Add exercises</Button>
-      {items.length > 0 && <Button onClick={launch}>Start this routine</Button>}
+      {items.length > 0 && <Button variant="ghost" onClick={launch}>Start this routine</Button>}
+      <Button onClick={saveAndClose} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
       {restFor && <RestPicker value={restFor.rest_s} title={`Rest · ${restFor.expand?.exercise?.name ?? ''}`} onSave={(v) => saveItem(restFor, { rest_s: v })} onClose={() => setRestFor(null)} />}
     </Screen>

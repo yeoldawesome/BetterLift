@@ -14,7 +14,7 @@ import { Empty, Input, Screen, Spinner } from '../components/ui'
 import { label } from '../lib/exercises'
 import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
 import { me, useUnit, useUser, type Exercise, type Kind, type Unit, type User } from '../lib/pb'
-import { cachedStats, loadStatsRows, type StatRow } from '../lib/statsData'
+import { useStatsRows, type StatRow } from '../lib/statsData'
 import { buildStats, effectiveMetric, metricLabel, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot } from '../lib/stats'
 
 const RANGES: [string, number][] = [['15D', 15], ['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
@@ -294,7 +294,7 @@ export default function Stats() {
 export function StatsView({ user, embedded }: { user: User; embedded?: boolean }) {
   const unit = useUnit()
   const self = user.id === me()
-  const [rows, setRows] = useState<StatRow[] | null>(() => cachedStats(user.id))
+  const rows = useStatsRows(user.id)
   const [muscle, setMuscle] = useState('All')
   const [q, setQ] = useState('')
   const [days, setDays] = useState(0)
@@ -302,12 +302,6 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
   const [sort, setSort] = useState('recent')
   const [open, setOpen] = useState<string | null>(null)
   const [shared, setShared] = useState('')
-
-  useEffect(() => {
-    // Show cached numbers instantly, then refresh in the background.
-    loadStatsRows(user.id).then(setRows).catch(() => setRows((r) => r ?? []))
-    if (cachedStats(user.id)) loadStatsRows(user.id, true).then(setRows).catch(() => {})
-  }, [user.id])
 
   const snap = useMemo(() => {
     if (!rows) return null
