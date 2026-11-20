@@ -1,9 +1,7 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
-import { ActiveBanner } from './components/ActiveBanner'
 import { RestBar } from './components/RestBar'
 import { PushWelcome } from './components/PushPrompt'
-import { useActive } from './lib/active'
 import { Spinner } from './components/ui'
 import TabBar from './components/TabBar'
 import VerifyGate from './screens/VerifyGate'
@@ -51,7 +49,6 @@ const PREFETCH = [() => import('./screens/Profile'), () => import('./screens/Rou
 export default function App() {
   const user = useUser()
   const loc = useLocation()
-  const { active } = useActive()
 
   // Every page shares one scrolling <main>, so reset it per page: new pages open at the top, Back returns where you were.
   const mainRef = useRef<HTMLElement>(null)
@@ -82,7 +79,6 @@ export default function App() {
   // New accounts can't use the app until their email is verified (pre-existing accounts were marked verified).
   if (!user.verified && user.email) return <VerifyGate user={user} />
   // Running-workout banner everywhere except the Workout tab (which already shows the timer).
-  const showBanner = !!active && loc.pathname !== '/workout'
 
   // The app opens on the first tab of the user's bottom bar.
   const home = TAB_DEFS[userTabs(user)[0]].to
@@ -90,8 +86,7 @@ export default function App() {
 
   return (
     <div className="flex h-full flex-col">
-      {showBanner && <ActiveBanner />}
-      <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-x-hidden overflow-y-auto pb-40 ${showBanner ? 'pt-2' : 'pt-safe'}`}>
+      <main ref={mainRef} onScroll={(e) => scrolls.current.set(loc.key, e.currentTarget.scrollTop)} className={`flex-1 overflow-x-hidden overflow-y-auto pb-40 pt-safe`}>
         <Suspense fallback={<Spinner />}>
         <Routes>
           <Route path="/" element={<Navigate to={home} replace />} />
