@@ -14,7 +14,7 @@ function preconnectApi(api: string | undefined): Plugin {
 export default defineConfig(({ mode }) => ({
   base: '/',
   plugins: [
-    preconnectApi(process.env.VITE_API_URL || loadEnv(mode, process.cwd(), 'VITE_').VITE_API_URL),
+    preconnectApi(loadEnv(mode, '.', 'VITE_').VITE_API_URL), // loadEnv also picks up VITE_* from the real environment (CI)
     react(),
     tailwindcss(),
     VitePWA({
