@@ -13,9 +13,10 @@ import { MAP_MUSCLES, muscleSetCounts } from '../lib/muscles'
 import { Empty, Input, Screen, Spinner } from '../components/ui'
 import { label } from '../lib/exercises'
 import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
-import { me, useUnit, useUser, type Exercise, type Kind, type Unit, type User } from '../lib/pb'
+import { isCardio } from '../lib/energy'
+import { me, useUnit, useUser, type Exercise, type Unit, type User } from '../lib/pb'
 import { useStatsRows, type StatRow } from '../lib/statsData'
-import { buildStats, effectiveMetric, metricLabel, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot } from '../lib/stats'
+import { buildStats, chartable, effectiveMetric, fmtMinutes, fmtPace, isWeighted, lowerIsBetter, metricLabel, metricOptions, paceOf, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot, type StatKind } from '../lib/stats'
 
 const RANGES: [string, number][] = [['15D', 15], ['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
 const METRICS: [Metric, string][] = [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
@@ -48,30 +49,91 @@ function Pills<T extends string | number>({ value, options, onChange, small }: {
 }
 
 /** Chart series + headline numbers for one exercise under a metric and range. */
-function series(data: DaySummary[], kind: Kind, metric: Metric, days: number, unit: Unit) {
-  const d = inRange(data, days)
-  const m = effectiveMetric(kind, metric, d)
-  const v = values(d, m)
+function series(data: DaySummary[], kind: StatKind, metric: Metric, days: number, unit: Unit) {
+  const all = inRange(data, days)
+  const m = effectiveMetric(kind, metric, data)
+  const d = chartable(all, m)
+  const v = values(all, m)
+  const raw = (d.length >= 2 ? trendDirection(v) : 'neutral') as Dir
+  // Pace: going down is the good direction, so show it as "up".
+  const dir: Dir = lowerIsBetter(m) ? (raw === 'up' ? 'down' : raw === 'down' ? 'up' : raw) : raw
+  const dist = distLabel(unit)
+  const tip = (x: DaySummary): string => {
+    if (kind === 'bodyweight') return `${x.bestWeight > 0 ? `+${n0(x.bestWeight)} ${unit} × ` : ''}${x.bestReps} reps${m === 'est1rm' ? ` (est. 1RM ${n0(x.maxE1rm)} ${unit})` : ''}`
+    if (kind === 'cardio') return [x.totalDistance > 0 && `${Math.round(x.totalDistance * 100) / 100} ${dist}`, x.totalSeconds > 0 && fmtMinutes(x.totalSeconds / 60), paceOf(x) > 0 && `${fmtPace(paceOf(x))} /${dist}`].filter(Boolean).join(' · ')
+    if (kind === 'weight' && (m === 'est1rm' || m === 'bestset')) return x.bestWeight > 0 ? `${n0(x.bestWeight)} ${unit} × ${x.bestReps} reps${m === 'bestset' ? ` (est. 1RM ${n0(x.maxE1rm)})` : ''}` : ''
+    return ''
+  }
+  const extras = d.map(tip)
   return {
-    d, m, v,
+    d: all, m, v, ...axis(m, unit),
     trend: v.length >= 2 ? trendLine(v) : undefined,
-    dir: (d.length >= 2 ? trendDirection(v) : 'neutral') as Dir,
+    dir,
     labels: d.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
-    extras: m === 'est1rm' || m === 'bestset' ? d.map((x) => (x.bestWeight > 0 ? `${n0(x.bestWeight)} ${unit} × ${x.bestReps} reps${m === 'bestset' ? ` (est. 1RM ${n0(x.maxE1rm)})` : ''}` : '')) : undefined,
+    extras: extras.some(Boolean) ? extras : undefined,
   }
 }
 
-function CardStats({ d, kind, unit }: { d: DaySummary[]; kind: Kind; unit: Unit }) {
+/** Value-axis title and formatting for a metric: time in minutes/hours, pace as m:ss, added weight with a +. */
+function axis(m: Metric, unit: Unit): { yTitle: string; yFormat?: (v: number) => string } {
+  const dist = distLabel(unit)
+  switch (m) {
+    case 'time': return { yTitle: 'Time', yFormat: (v) => fmtMinutes(v) }
+    case 'longest': return { yTitle: 'Longest session', yFormat: (v) => fmtMinutes(v) }
+    case 'maxtime': return { yTitle: 'Best hold', yFormat: (v) => (v >= 60 ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}` : `${Math.round(v)}s`) }
+    case 'pace': return { yTitle: `Pace (min / ${dist})`, yFormat: (v) => fmtPace(v) }
+    case 'distance': return { yTitle: `Distance (${dist})`, yFormat: (v) => `${Math.round(v * 100) / 100} ${dist}` }
+    case 'added': return { yTitle: `Added weight (${unit})`, yFormat: (v) => `+${n0(v)} ${unit}` }
+    case 'assist': return { yTitle: `Assistance (${unit})`, yFormat: (v) => `−${n0(Math.abs(v))} ${unit}` }
+    case 'maxreps': return { yTitle: 'Reps (best set)', yFormat: (v) => `${Math.round(v)} reps` }
+    case 'reps': return { yTitle: 'Total reps', yFormat: (v) => `${n0(v)} reps` }
+    case 'volume': return { yTitle: `Volume (${unit})`, yFormat: (v) => `${n0(v)} ${unit}` }
+    case 'est1rm': return { yTitle: `Est. 1RM (${unit})`, yFormat: (v) => `${n0(v)} ${unit}` }
+    case 'weight': return { yTitle: `Max weight (${unit})`, yFormat: (v) => `${n0(v)} ${unit}` }
+    case 'bestset': return { yTitle: `Best set (${unit})`, yFormat: (v) => `${n0(v)} ${unit}` }
+  }
+}
+
+function CardStats({ d, kind, unit }: { d: DaySummary[]; kind: StatKind; unit: Unit }) {
   if (!d.length) return null
-  const best = d.reduce((a, b) => (b.maxE1rm > a.maxE1rm ? b : a))
-  const cells: [string, string][] = kind === 'weight' || kind === 'assisted'
-    ? [[`${n0(Math.max(...d.map((x) => x.maxWeight)))} ${unit}`, 'Best Weight'], [`${n0(best.maxE1rm)} ${unit}`, 'Est. 1RM'],
-      [best.bestWeight > 0 ? `${n0(best.bestWeight)} × ${best.bestReps}` : '-', 'Best Set'], [`${d.length}`, 'Sessions']]
-    : kind === 'bodyweight'
-      ? [[`${Math.max(...d.map((x) => x.maxReps))}`, 'Best Set (reps)'], [n0(d.reduce((t, x) => t + x.totalReps, 0)), 'Total Reps'], [`${d.length}`, 'Sessions']]
-      : kind === 'duration'
-        ? [[`${Math.max(...d.map((x) => x.maxSeconds))}s`, 'Best Hold'], [`${Math.round(d.reduce((t, x) => t + x.totalSeconds, 0) / 60)}m`, 'Total Time'], [`${d.length}`, 'Sessions']]
-        : [[`${Math.round(d.reduce((t, x) => t + x.totalDistance, 0) * 10) / 10}`, `Total ${distLabel(unit)}`], [`${Math.round(d.reduce((t, x) => t + x.totalSeconds, 0) / 60)}m`, 'Total Time'], [`${d.length}`, 'Sessions']]
+  const sessions: [string, string] = [`${d.length}`, 'Sessions']
+  const totalMin = d.reduce((t, x) => t + x.totalSeconds, 0) / 60
+  const maxReps = Math.max(...d.map((x) => x.maxReps))
+  const totalReps: [string, string] = [n0(d.reduce((t, x) => t + x.totalReps, 0)), 'Total Reps']
+  let cells: [string, string][]
+  switch (kind) {
+    case 'weight': {
+      const best = d.reduce((a, b) => (b.maxE1rm > a.maxE1rm ? b : a))
+      cells = [[`${n0(Math.max(...d.map((x) => x.maxWeight)))} ${unit}`, 'Best Weight'], [`${n0(best.maxE1rm)} ${unit}`, 'Est. 1RM'],
+        [best.bestWeight > 0 ? `${n0(best.bestWeight)} × ${best.bestReps}` : '-', 'Best Set'], sessions]
+      break
+    }
+    case 'bodyweight':
+      cells = isWeighted(d)
+        ? [[`${maxReps}`, 'Best Set (reps)'], [`+${n0(Math.max(...d.map((x) => x.maxWeight)))} ${unit}`, 'Max Added'],
+          d.some((x) => x.maxE1rm > 0) ? [`${n0(Math.max(...d.map((x) => x.maxE1rm)))} ${unit}`, 'Est. 1RM'] : totalReps, sessions]
+        : [[`${maxReps}`, 'Best Set (reps)'], totalReps, sessions]
+      break
+    case 'assisted': {
+      const assisted = d.filter((x) => x.minWeight > 0)
+      cells = [[assisted.length ? `−${n0(Math.min(...assisted.map((x) => x.minWeight)))} ${unit}` : 'None', 'Least Help'], [`${maxReps}`, 'Best Set (reps)'], totalReps, sessions]
+      break
+    }
+    case 'duration':
+      cells = [[`${Math.max(...d.map((x) => x.maxSeconds))}s`, 'Best Hold'], [fmtMinutes(totalMin), 'Total Time'], sessions]
+      break
+    case 'timed':
+      cells = [[fmtMinutes(totalMin), 'Total Time'], [fmtMinutes(Math.max(...d.map((x) => x.maxSeconds)) / 60), 'Longest'], sessions]
+      break
+    case 'cardio': {
+      const paces = d.map(paceOf).filter((x) => x > 0)
+      const dist = d.reduce((t, x) => t + x.totalDistance, 0)
+      cells = dist > 0
+        ? [[`${Math.round(dist * 10) / 10}`, `Total ${distLabel(unit)}`], [fmtMinutes(totalMin), 'Total Time'], [paces.length ? fmtPace(Math.min(...paces)) : '-', `Best Pace /${distLabel(unit)}`], sessions]
+        : [[fmtMinutes(totalMin), 'Total Time'], [fmtMinutes(Math.max(...d.map((x) => x.maxSeconds)) / 60), 'Longest'], sessions]
+      break
+    }
+  }
   return (
     <div className={`grid gap-1 border-t border-line pt-2 ${cells.length === 4 ? 'grid-cols-4' : 'grid-cols-3'}`}>
       {cells.map(([v, l]) => (
@@ -109,12 +171,15 @@ function InfoButton({ name, onInfo }: { name: string; onInfo?: () => void }) {
 }
 
 function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit, onOpen, onInfo }: {
-  name: string; kind: Kind; muscle: string; data: DaySummary[]; globalMetric: Metric; globalDays: number; unit: Unit; onOpen: () => void; onInfo?: () => void
+  name: string; kind: StatKind; muscle: string; data: DaySummary[]; globalMetric: Metric; globalDays: number; unit: Unit; onOpen: () => void; onInfo?: () => void
 }) {
   // Each card can override range/metric; changing the global controls resets every card to match.
-  const [metric, setMetric] = useState(globalMetric)
+  // Cards only offer metrics that fit the exercise (cardio: distance/time/pace, pull-ups: reps/added weight...).
+  const options = useMemo(() => metricOptions(kind, data), [kind, data])
+  const [metric, setMetric] = useState(() => effectiveMetric(kind, globalMetric, data))
   const [days, setDays] = useState(globalDays)
-  useEffect(() => setMetric(globalMetric), [globalMetric])
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- only the global choice resets cards, not data refreshes
+  useEffect(() => setMetric(effectiveMetric(kind, globalMetric, data)), [globalMetric])
   useEffect(() => setDays(globalDays), [globalDays])
   const s = useMemo(() => series(data, kind, metric, days, unit), [data, kind, metric, days, unit])
   const empty = !s.d.length
@@ -128,11 +193,11 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
         <div className="pt-1.5"><Trend dir={s.dir} /></div>
       </div>
       <Pills small value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
-      <Pills small value={metric} options={METRICS} onChange={setMetric} />
+      {options.length > 1 && <Pills small value={s.m} options={options} onChange={setMetric} />}
       <div className="relative">
         {empty
           ? <div className="grid h-40 place-items-center text-sm text-muted">No sessions in this period</div>
-          : <LazyChart className="h-40" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} />}
+          : <LazyChart className="h-40" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat} />}
       </div>
       <CardStats d={s.d} kind={kind} unit={unit} />
     </div>
@@ -140,9 +205,10 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
 }
 
 function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, onInfo }: {
-  name: string; kind: Kind; muscle: string; data: DaySummary[]; metric0: Metric; days0: number; unit: Unit; onClose: () => void; onInfo?: () => void
+  name: string; kind: StatKind; muscle: string; data: DaySummary[]; metric0: Metric; days0: number; unit: Unit; onClose: () => void; onInfo?: () => void
 }) {
-  const [metric, setMetric] = useState(metric0)
+  const options = useMemo(() => metricOptions(kind, data), [kind, data])
+  const [metric, setMetric] = useState(() => effectiveMetric(kind, metric0, data))
   const [days, setDays] = useState(days0)
   const s = useMemo(() => series(data, kind, metric, days, unit), [data, kind, metric, days, unit])
   return (
@@ -157,10 +223,10 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
           <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
         </div>
         <Pills value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
-        <Pills value={metric} options={METRICS} onChange={setMetric} />
+        {options.length > 1 && <Pills value={s.m} options={options} onChange={setMetric} />}
         <p className="text-xs font-bold text-muted">{metricLabel(s.m, unit, distLabel(unit))}</p>
         {s.d.length
-          ? <LineChart className="h-[50vh] max-h-96" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} />
+          ? <LineChart className="h-[50vh] max-h-96" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat} />
           : <div className="grid h-60 place-items-center text-sm text-muted">No sessions in this period</div>}
         <CardStats d={s.d} kind={kind} unit={unit} />
       </div>
@@ -295,6 +361,8 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
   const unit = useUnit()
   const self = user.id === me()
   const rows = useStatsRows(user.id)
+  // Bodyweight in the display unit: weighted pull-ups/dips count bodyweight + added weight for est. 1RM.
+  const bw = toUnit(user.bodyweight_kg || 0, unit)
   const [muscle, setMuscle] = useState('All')
   const [q, setQ] = useState('')
   const [days, setDays] = useState(0)
@@ -307,11 +375,11 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
     if (!rows) return null
     const recs: FlatSet[] = rows.map(({ set: s, ex, workoutName, durationS }) => ({
       date: new Date(s.performed_at), workoutId: s.workout, durationS, workoutName,
-      exercise: ex.name, muscle: ex.muscle, kind: ex.kind,
-      weight: toUnit(s.weight_kg, unit), reps: s.reps, distance: toDist(s.distance_km, unit), seconds: s.seconds,
+      exercise: ex.name, muscle: ex.muscle, kind: (ex.kind === 'duration' && isCardio(ex) ? 'timed' : ex.kind) as StatKind,
+      weight: toUnit(s.weight_kg, unit), reps: s.reps, distance: toDist(s.distance_km, unit), seconds: s.seconds, bw,
     }))
     return buildStats(recs)
-  }, [rows, unit])
+  }, [rows, unit, bw])
 
   // Exercise records by name, so the ⓘ button can open the full info sheet.
   const exOf = useMemo(() => new Map((rows ?? []).map((r) => [r.ex.name, r.ex] as [string, Exercise])), [rows])

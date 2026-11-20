@@ -3,15 +3,24 @@
 import { epley } from './format'
 import type { Kind } from './pb'
 
-export interface FlatSet { date: Date; workoutId: string; durationS: number; workoutName: string; exercise: string; muscle: string; weight: number; reps: number; distance: number; seconds: number; kind: Kind }
+/**
+ * How the Stats page treats an exercise. Same as Kind, except timed cardio (basketball, jump rope: a 'duration'
+ * exercise with muscle 'cardio', entered in minutes) is split from holds like planks (also 'duration', in seconds).
+ */
+export type StatKind = Kind | 'timed'
+
+export interface FlatSet { date: Date; workoutId: string; durationS: number; workoutName: string; exercise: string; muscle: string; weight: number; reps: number; distance: number; seconds: number; kind: StatKind
+  /** Viewer's bodyweight (display unit), so weighted pull-ups/dips can count bodyweight + added weight. */
+  bw?: number }
 
 export interface DaySummary {
   date: Date; maxWeight: number; minWeight: number; totalVolume: number; totalReps: number; maxReps: number; totalSets: number
   maxE1rm: number; bestWeight: number; bestReps: number; totalSeconds: number; maxSeconds: number; totalDistance: number
+  maxDistance: number
 }
 
 export interface Snapshot {
-  records: FlatSet[]; names: string[]; summaries: Map<string, DaySummary[]>; kinds: Map<string, Kind>; muscles: Map<string, number>
+  records: FlatSet[]; names: string[]; summaries: Map<string, DaySummary[]>; kinds: Map<string, StatKind>; muscles: Map<string, number>
   totalWorkouts: number; totalVolume: number; totalSets: number; firstDate: Date | null
   longestStreak: number; longestBreak: number; favorite: string; mostImproved: string; mostImprovedGain: number
   activeWeekday: string; peakMonth: string; perWeek: number; maxSetsInSession: number; maxSetsDate: Date | null
@@ -34,9 +43,13 @@ function group<T>(xs: T[], key: (x: T) => string) {
 const maxBy = <T>(xs: T[], f: (x: T) => number) => xs.reduce<T | undefined>((b, x) => (b === undefined || f(x) > f(b) ? x : b), undefined)
 const sum = <T>(xs: T[], f: (x: T) => number) => xs.reduce((t, x) => t + f(x), 0)
 
+/** Load used for est. 1RM: the bar for lifts; bodyweight + added weight for weighted pull-ups, dips, etc. */
+const load = (r: FlatSet) => (r.kind === 'bodyweight' ? (r.bw || 0) + r.weight : r.weight)
+
 function summarize(sets: FlatSet[]): DaySummary[] {
   return [...group(sets, (r) => dayKey(r.date)).values()].map((g) => {
-    const best = maxBy(g, (r) => epley(r.weight, r.reps))!
+    // Bodyweight: best set = most reps, ties go to the heavier one. Lifts: highest est. 1RM.
+    const best = g[0].kind === 'bodyweight' ? maxBy(g, (r) => r.reps * 1000 + r.weight)! : maxBy(g, (r) => epley(load(r), r.reps))!
     const weighted = g.filter((r) => r.weight > 0)
     return {
       date: startOfDay(g[0].date),
@@ -46,10 +59,11 @@ function summarize(sets: FlatSet[]): DaySummary[] {
       totalReps: sum(g, (r) => r.reps),
       maxReps: Math.max(...g.map((r) => r.reps)),
       totalSets: g.length,
-      maxE1rm: Math.max(...g.map((r) => epley(r.weight, r.reps))),
+      // Bodyweight exercises need the lifter's bodyweight for a real 1RM; without it (hidden), leave it out.
+      maxE1rm: g[0].kind === 'bodyweight' && !g[0].bw ? 0 : Math.max(...g.map((r) => epley(load(r), r.reps))),
       bestWeight: best.weight, bestReps: best.reps,
       totalSeconds: sum(g, (r) => r.seconds), maxSeconds: Math.max(...g.map((r) => r.seconds)),
-      totalDistance: sum(g, (r) => r.distance),
+      totalDistance: sum(g, (r) => r.distance), maxDistance: Math.max(...g.map((r) => r.distance)),
     }
   }).sort((a, b) => a.date.getTime() - b.date.getTime())
 }
@@ -144,34 +158,81 @@ export function buildStats(records: FlatSet[]): Snapshot {
 }
 
 // ---- Chart metrics ----
-export type Metric = 'bestset' | 'est1rm' | 'weight' | 'volume' | 'reps' | 'maxreps' | 'assist' | 'time' | 'maxtime' | 'distance'
+export type Metric = 'bestset' | 'est1rm' | 'weight' | 'volume' | 'reps' | 'maxreps' | 'added' | 'assist' | 'time' | 'maxtime' | 'longest' | 'distance' | 'pace'
 
-export function effectiveMetric(kind: Kind, metric: Metric, data: DaySummary[]): Metric {
-  const totals = metric === 'volume' || metric === 'reps'
+/** Whether any session of a bodyweight exercise had added weight (weighted pull-ups, dips...). */
+export const isWeighted = (data: DaySummary[]) => data.some((d) => d.maxWeight > 0)
+
+/** The chart choices that make sense for each kind of exercise, in pill order. */
+export function metricOptions(kind: StatKind, data: DaySummary[]): [Metric, string][] {
   switch (kind) {
-    case 'weight': return metric
-    case 'assisted': return totals ? 'reps' : 'assist'
-    case 'bodyweight': return totals ? 'reps' : 'maxreps'
-    case 'duration': return totals ? 'time' : 'maxtime'
-    case 'cardio': return totals || !data.some((d) => d.totalDistance > 0) ? 'time' : 'distance'
+    case 'weight': return [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
+    case 'bodyweight': return isWeighted(data)
+      ? [['maxreps', 'Best Set'], ['added', 'Added Weight'], ...(data.some((d) => d.maxE1rm > 0) ? [['est1rm', 'Est. 1RM'] as [Metric, string]] : []), ['reps', 'Total Reps']]
+      : [['maxreps', 'Best Set'], ['reps', 'Total Reps']]
+    case 'assisted': return [['assist', 'Assistance'], ['maxreps', 'Best Set'], ['reps', 'Total Reps']]
+    case 'duration': return [['maxtime', 'Best Hold'], ['time', 'Total Time']]
+    case 'timed': return [['time', 'Time'], ['longest', 'Longest']]
+    case 'cardio': return data.some((d) => d.totalDistance > 0)
+      ? [['distance', 'Distance'], ['time', 'Time'], ['pace', 'Pace'], ['longest', 'Longest']]
+      : [['time', 'Time'], ['longest', 'Longest']]
   }
 }
+
+/** The metric a card shows: the chosen one if it fits this exercise, else the closest equivalent. */
+export function effectiveMetric(kind: StatKind, metric: Metric, data: DaySummary[]): Metric {
+  const options = metricOptions(kind, data).map(([m]) => m)
+  if (options.includes(metric)) return metric
+  const totals = metric === 'volume' || metric === 'reps' || metric === 'time'
+  switch (kind) {
+    case 'weight': return 'bestset'
+    case 'bodyweight': return totals ? 'reps' : metric === 'weight' && options.includes('added') ? 'added' : 'maxreps'
+    case 'assisted': return totals ? 'reps' : 'assist'
+    case 'duration': return totals ? 'time' : 'maxtime'
+    case 'timed': return 'time'
+    case 'cardio': return totals ? 'time' : options[0]
+  }
+}
+
+/** Pace in minutes per distance unit (0 when there's no distance). */
+export const paceOf = (d: DaySummary) => (d.totalDistance > 0 ? d.totalSeconds / 60 / d.totalDistance : 0)
+
+/** Sessions a metric can be charted for (pace needs a distance). */
+export const chartable = (data: DaySummary[], m: Metric) => (m === 'pace' ? data.filter((d) => d.totalDistance > 0 && d.totalSeconds > 0) : data)
 
 export function values(data: DaySummary[], m: Metric): number[] {
   const r1 = (n: number) => Math.round(n * 10) / 10
   const f: Record<Metric, (d: DaySummary) => number> = {
     bestset: (d) => r1(d.bestWeight),
     volume: (d) => Math.round(d.totalVolume), reps: (d) => d.totalReps, maxreps: (d) => d.maxReps, est1rm: (d) => r1(d.maxE1rm),
-    assist: (d) => -d.minWeight, time: (d) => r1(d.totalSeconds / 60), maxtime: (d) => d.maxSeconds,
-    distance: (d) => Math.round(d.totalDistance * 100) / 100, weight: (d) => d.maxWeight,
+    added: (d) => r1(d.maxWeight),
+    assist: (d) => -d.minWeight, time: (d) => r1(d.totalSeconds / 60), maxtime: (d) => d.maxSeconds, longest: (d) => r1(d.maxSeconds / 60),
+    distance: (d) => Math.round(d.totalDistance * 100) / 100, weight: (d) => d.maxWeight, pace: (d) => Math.round(paceOf(d) * 100) / 100,
   }
-  return data.map(f[m])
+  return chartable(data, m).map(f[m])
 }
+
+/** Metrics where a smaller number is the better result (the trend arrow flips). */
+export const lowerIsBetter = (m: Metric) => m === 'pace'
 
 export function metricLabel(m: Metric, unit: string, dist: string) {
   return { bestset: `Best set weight (${unit})`, volume: `Total volume (${unit})`, reps: 'Total reps', maxreps: 'Best set (reps)', est1rm: `Est. 1RM (${unit})`,
-    assist: `Assistance (−${unit}, higher = less help)`, time: 'Time (min)', maxtime: 'Best hold (sec)', distance: `Distance (${dist})`,
+    added: `Added weight (+${unit})`, assist: `Assistance (−${unit}, higher = less help)`, time: 'Time (min)', maxtime: 'Best hold (sec)',
+    longest: 'Longest session (min)', distance: `Distance (${dist})`, pace: `Pace (min / ${dist}, lower = faster)`,
     weight: `Max weight (${unit})` }[m]
+}
+
+/** "8:32" for 8.53 minutes. */
+export function fmtPace(min: number) {
+  if (!min || !isFinite(min)) return '-'
+  const total = Math.round(min * 60)
+  return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`
+}
+
+/** "45m", "1h 05m". */
+export function fmtMinutes(min: number) {
+  const m = Math.round(min)
+  return m >= 60 ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m` : `${m}m`
 }
 
 export function trendLine(v: number[]): number[] {

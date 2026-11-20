@@ -3,9 +3,12 @@ import { CategoryScale, Chart, Filler, LineController, LineElement, LinearScale,
 
 Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryScale, Tooltip, Filler)
 
-/** Line chart with optional dashed trend line and a per-point tooltip subtitle (e.g. "225 lb × 5"). */
-export function LineChart({ labels, values, trend, extras, className = 'h-56' }: {
-  labels: string[]; values: number[]; trend?: number[]; extras?: string[]; className?: string
+/**
+ * Line chart with optional dashed trend line and a per-point tooltip subtitle (e.g. "225 lb × 5").
+ * `yTitle` labels the value axis; `yFormat` formats axis ticks and tooltip values (e.g. minutes → "1h 30m").
+ */
+export function LineChart({ labels, values, trend, extras, className = 'h-56', yTitle, yFormat }: {
+  labels: string[]; values: number[]; trend?: number[]; extras?: string[]; className?: string; yTitle?: string; yFormat?: (v: number) => string
 }) {
   const ref = useRef<HTMLCanvasElement>(null)
   useEffect(() => {
@@ -26,18 +29,26 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56' }:
         responsive: true, maintainAspectRatio: false, animation: false,
         interaction: { mode: 'index', intersect: false },
         plugins: {
+          // Legend is registered globally by MultiChart; single-series charts don't want it.
+          legend: { display: false },
           tooltip: {
             filter: (i) => i.datasetIndex === 0,
-            callbacks: { afterLabel: (i) => (extras?.[i.dataIndex] ? extras[i.dataIndex] : '') },
+            callbacks: {
+              label: (i) => (yFormat ? yFormat(Number(i.raw)) : String(i.formattedValue)),
+              afterLabel: (i) => (extras?.[i.dataIndex] ? extras[i.dataIndex] : ''),
+            },
           },
         },
         scales: {
           x: { ticks: { color: muted, maxTicksLimit: 5, maxRotation: 0 }, grid: { display: false } },
-          y: { ticks: { color: muted, maxTicksLimit: 5 }, grid: { color: line } },
+          y: {
+            ticks: { color: muted, maxTicksLimit: 5, ...(yFormat ? { callback: (v) => yFormat(Number(v)) } : {}) }, grid: { color: line },
+            title: { display: !!yTitle, text: yTitle ?? '', color: muted, font: { size: 10, weight: 'bold' } },
+          },
         },
       },
     })
     return () => chart.destroy()
-  }, [labels, values, trend, extras])
+  }, [labels, values, trend, extras, yTitle, yFormat])
   return <div className={className}><canvas ref={ref} /></div>
 }

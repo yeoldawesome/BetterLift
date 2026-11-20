@@ -8,7 +8,12 @@ export const toDist = (km: number, u: Unit) => (u === 'lb' ? km / KM_MI : km)
 export const fromDist = (v: number, u: Unit) => (u === 'lb' ? v * KM_MI : v)
 export const distLabel = (u: Unit) => (u === 'lb' ? 'mi' : 'km')
 /** Seconds as minutes for cardio: "45 min", "12.5 min". */
-export const fmtMin = (sec: number) => { const m = sec / 60; return `${m >= 10 || Number.isInteger(m) ? Math.round(m) : Math.round(m * 10) / 10} min` }
+/** Seconds → "45 min", "7.5 min", or "1 h 30 min" from an hour up. */
+export const fmtMin = (sec: number) => {
+  const m = sec / 60
+  if (m >= 60) { const r = Math.round(m); return r % 60 ? `${Math.floor(r / 60)} h ${r % 60} min` : `${r / 60} h` }
+  return `${m >= 10 || Number.isInteger(m) ? Math.round(m) : Math.round(m * 10) / 10} min`
+}
 
 const r1 = (n: number) => Math.round(n * 10) / 10
 export const fmtW = (kg: number, u: Unit) => `${r1(toUnit(kg, u))}`

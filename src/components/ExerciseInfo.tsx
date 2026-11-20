@@ -1,7 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { altNames, defaultLogTip, label, type Usage } from '../lib/exercises'
-import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo } from '../lib/format'
+import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo, toDist } from '../lib/format'
+import { fmtMinutes, fmtPace } from '../lib/stats'
 import { estimateCardio, isCardio } from '../lib/energy'
 import { rpeLabel, usePerson } from './nutrition/CardioEffort'
 import { intensityForExercise } from '../lib/muscles'
@@ -152,9 +153,21 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
   const person = usePerson()
   const weighted = k === 'weight' || k === 'assisted' || (k === 'bodyweight' && sessions.some((s) => s.maxW > 0))
   const timed = k === 'duration' && isCardio(ex) // sports/conditioning: minutes per session, not longest hold
-  const series = timed ? sessions.map((s) => Math.round(s.sets.reduce((t, x) => t + x.seconds, 0) / 60)) : k === 'duration' ? sessions.map((s) => s.maxSec) : k === 'cardio' ? sessions.map((s) => Math.round(s.dist * 100) / 100)
+  const secs = (s: Session) => s.sets.reduce((t, x) => t + x.seconds, 0)
+  const dist = distLabel(unit)
+  // Cardio with no distance logged (bike with only time…) charts time instead.
+  const cardioByTime = k === 'cardio' && !sessions.some((s) => s.dist > 0)
+  const series = timed || cardioByTime ? sessions.map((s) => Math.round(secs(s) / 6) / 10) : k === 'duration' ? sessions.map((s) => s.maxSec) : k === 'cardio' ? sessions.map((s) => Math.round(toDist(s.dist, unit) * 100) / 100)
     : weighted ? sessions.map((s) => Number(fmtW(s.bestW, unit))) : sessions.map((s) => s.maxReps)
-  const seriesLabel = timed ? 'Minutes per session' : k === 'duration' ? 'Best hold (s)' : k === 'cardio' ? `Distance (km)` : weighted ? `Best set each session (${unit})` : 'Best set (reps)'
+  const seriesLabel = timed || cardioByTime ? 'Time per session' : k === 'duration' ? 'Best hold' : k === 'cardio' ? `Distance per session (${dist})`
+    : k === 'bodyweight' && weighted ? `Added weight, best set (+${unit})` : weighted ? `Best set each session (${unit})` : 'Best set (reps)'
+  // Axis title + value format (time always in minutes/hours, never seconds).
+  const yAxis: { yTitle: string; yFormat: (v: number) => string } = timed || cardioByTime ? { yTitle: 'Time', yFormat: (v) => fmtMinutes(v) }
+    : k === 'duration' ? { yTitle: 'Hold', yFormat: (v) => (v >= 60 ? `${Math.floor(v / 60)}:${String(Math.round(v % 60)).padStart(2, '0')}` : `${Math.round(v)}s`) }
+    : k === 'cardio' ? { yTitle: `Distance (${dist})`, yFormat: (v) => `${v} ${dist}` }
+    : k === 'bodyweight' && weighted ? { yTitle: `Added (${unit})`, yFormat: (v) => `+${v} ${unit}` }
+    : weighted ? { yTitle: `Weight (${unit})`, yFormat: (v) => `${v} ${unit}` } : { yTitle: 'Reps', yFormat: (v) => `${Math.round(v)} reps` }
+  const paces = sessions.filter((s) => s.dist > 0 && secs(s) > 0).map((s) => secs(s) / 60 / toDist(s.dist, unit))
   const allSets = sessions.flatMap((s) => s.sets)
   const tiles: [string, string][] = weighted
     ? [[`${fmtW(Math.max(...sessions.map((s) => s.bestE1)), unit)} ${unit}`, 'Best est. 1RM'], [`${fmtW(Math.max(...sessions.map((s) => s.maxW)), unit)} ${unit}`, 'Heaviest weight'],
@@ -165,7 +178,8 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
     : k === 'duration'
       ? [[`${Math.max(...sessions.map((s) => s.maxSec))}s`, 'Longest hold'], [`${sessions.length}`, 'Sessions'], [`${allSets.length}`, 'Total sets']]
       : k === 'cardio'
-        ? [[`${fmtDist(sessions.reduce((t, s) => t + s.dist, 0), unit)} ${distLabel(unit)}`, 'Total distance'], [`${sessions.length}`, 'Sessions']]
+        ? [[`${fmtDist(sessions.reduce((t, s) => t + s.dist, 0), unit)} ${dist}`, 'Total distance'], [fmtMinutes(allSets.reduce((t, x) => t + x.seconds, 0) / 60), 'Total time'],
+          ...(paces.length ? [[`${fmtPace(Math.min(...paces))} /${dist}`, 'Best pace'] as [string, string]] : []), [`${sessions.length}`, 'Sessions']]
         : [[`${Math.max(...sessions.map((s) => s.maxReps))}`, 'Most reps (set)'], [`${sessions.reduce((t, s) => t + s.reps, 0)}`, 'Total reps'], [`${sessions.length}`, 'Sessions']]
   // Cardio: effort is this exercise's "how hard" stat (like est. 1RM for a lift), plus heart rate and, with nutrition on, calories.
   const cardio = isCardio(ex)
@@ -202,7 +216,7 @@ function StatsTab({ ex, unit, sessions, strongest, own }: { ex: Exercise; unit: 
         <div className="rounded-2xl border border-line bg-surface p-3">
           <p className="mb-1 text-xs font-bold text-muted">{seriesLabel}</p>
           <Suspense fallback={<div className="h-48" />}>
-          <LineChart className="h-48" labels={sessions.map((s) => s.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={series} trend={trendLine(series)}
+          <LineChart className="h-48" yTitle={yAxis.yTitle} yFormat={yAxis.yFormat} labels={sessions.map((s) => s.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={series} trend={trendLine(series)}
             extras={weighted ? sessions.map((s) => `${fmtW(s.bestW, unit)} ${unit} × ${s.bestR} reps · est. 1RM ${fmtW(s.bestE1, unit)}`) : undefined} />
           </Suspense>
         </div>
