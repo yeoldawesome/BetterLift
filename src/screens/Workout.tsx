@@ -194,9 +194,9 @@ function ActiveWorkout() {
       const plan = x.plan?.[i] ?? x.plan?.[x.plan.length - 1]
       const patch: Partial<ASet> = { done: true }
       if (!s.w && (plan?.w || p?.w)) patch.w = fmtW(plan?.w || p!.w, unit)
-      if (!s.r && (x.target || plan?.r || p?.r)) patch.r = x.target || `${plan?.r || p!.r}`
-      if (!s.sec && p?.sec) patch.sec = `${p.sec}`
-      if (!s.dist && p?.dist) patch.dist = fmtDist(p.dist, unit)
+      if (!s.r && (plan?.r || x.target || p?.r)) patch.r = plan?.r ? `${plan.r}` : x.target || `${p!.r}`
+      if (!s.sec && (plan?.sec || p?.sec)) patch.sec = `${plan?.sec || p!.sec}`
+      if (!s.dist && (plan?.dist || p?.dist)) patch.dist = fmtDist(plan?.dist || p!.dist, unit)
       setSet(x.key, i, patch)
       // Supersets: no rest until the last exercise of the group, then that exercise's rest.
       const group = x.superset ? a.exercises.filter((e) => e.superset === x.superset) : [x]
@@ -234,23 +234,7 @@ function ActiveWorkout() {
       </div>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
       {finishing && <FinishSheet user={user} onClose={() => setFinishing(false)} />}
-      {reordering && (
-        <BottomSheet title="Reorder exercises" onClose={() => setReordering(false)}>
-          <div className="space-y-2">
-            <p className="text-center text-xs text-muted">Drag the handle or use the arrows.</p>
-            <DragList items={a.exercises} keyOf={(e) => e.key} onMove={moveTo} render={(e, i, handle) => (
-              <div className="flex items-center gap-2 rounded-xl bg-surface-2 p-2 pl-1">
-                {handle}
-                <span className="min-w-0 flex-1 truncate font-bold">{e.ex.name}</span>
-                {e.superset && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Superset</span>}
-                <button disabled={i === 0} onClick={() => move(e.key, -1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move up"><UpIcon width={18} height={18} /></button>
-                <button disabled={i === a.exercises.length - 1} onClick={() => move(e.key, 1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move down"><DownIcon width={18} height={18} /></button>
-              </div>
-            )} />
-            <Button onClick={() => setReordering(false)}>Done</Button>
-          </div>
-        </BottomSheet>
-      )}
+      {reordering && <ReorderSheet items={a.exercises} move={move} moveTo={moveTo} onClose={() => setReordering(false)} />}
       {replacing && <Sheet title="Replace exercise" onClose={() => setReplacing(null)}><ExerciseList onPick={(exs) => exs[0] && replace(replacing, exs[0])} /></Sheet>}
       {supersetFor && (
         <BottomSheet title="Add to superset" onClose={() => setSupersetFor(null)}>
@@ -267,6 +251,27 @@ function ActiveWorkout() {
         </BottomSheet>
       )}
     </section>
+  )
+}
+
+/** Reorder exercises: drag the grip handle or use the arrows. Shared with the routine editor. */
+export function ReorderSheet({ items, move, moveTo, onClose }: { items: AEx[]; move: (key: string, d: -1 | 1) => void; moveTo: (from: number, to: number) => void; onClose: () => void }) {
+  return (
+    <BottomSheet title="Reorder exercises" onClose={onClose}>
+      <div className="space-y-2">
+        <p className="text-center text-xs text-muted">Drag the handle or use the arrows.</p>
+        <DragList items={items} keyOf={(e) => e.key} onMove={moveTo} render={(e, i, handle) => (
+          <div className="flex items-center gap-2 rounded-xl bg-surface-2 p-2 pl-1">
+            {handle}
+            <span className="min-w-0 flex-1 truncate font-bold">{e.ex.name}</span>
+            {e.superset && <span className="rounded-md bg-red-600 px-1.5 py-0.5 text-[10px] font-bold text-white">Superset</span>}
+            <button disabled={i === 0} onClick={() => move(e.key, -1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move up"><UpIcon width={18} height={18} /></button>
+            <button disabled={i === items.length - 1} onClick={() => move(e.key, 1)} className="grid size-9 place-items-center rounded-lg bg-surface text-muted disabled:opacity-30" aria-label="Move down"><DownIcon width={18} height={18} /></button>
+          </div>
+        )} />
+        <Button onClick={onClose}>Done</Button>
+      </div>
+    </BottomSheet>
   )
 }
 
@@ -398,12 +403,17 @@ function prevText(p: Prev | undefined, x: AEx, unit: 'kg' | 'lb') {
   return `${fmtW(p.w, unit)}×${p.r}`
 }
 
-function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, onRemove, onSuperset }: {
+/**
+ * One exercise card. `planning` = the routine editor: same sets grid (types, weight/reps or time/distance), but no
+ * check-off column, PR line, supersets or cardio effort — the values typed are what the routine plans.
+ */
+export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, onRemove, onSuperset, planning }: {
   x: AEx; unit: 'kg' | 'lb'
   setEx: (k: string, fn: (x: AEx) => AEx) => void
   setSet: (k: string, i: number, p: Partial<ASet>) => void
   toggle: (x: AEx, i: number) => void
   onReorder: () => void; onReplace: () => void; onRemove: () => void; onSuperset: () => void
+  planning?: boolean
 }) {
   const [restOpen, setRestOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
@@ -418,9 +428,9 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
     [`Edit Rest (${restLabel(x.rest)}${(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''})`, () => setRestOpen(true)],
     ['Reorder Exercises', onReorder],
     [x.note !== undefined ? 'Remove Exercise Note' : 'Add Exercise Note', () => setEx(x.key, (e) => ({ ...e, note: e.note !== undefined ? undefined : '' }))],
-    [x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset],
+    ...(planning ? [] : [[x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset] as [string, () => void]]),
     ['Replace Exercise', onReplace],
-    ['Remove Exercise', async () => { if (await ask({ title: `Remove ${x.ex.name}?`, body: 'Its sets in this workout are removed too.', confirmLabel: 'Remove', danger: true })) onRemove() }, true],
+    ['Remove Exercise', async () => { if (await ask({ title: `Remove ${x.ex.name}?`, body: planning ? 'It comes out of this routine.' : 'Its sets in this workout are removed too.', confirmLabel: 'Remove', danger: true })) onRemove() }, true],
   ]
   const k = x.ex.kind
   const cardio = isCardio(x.ex)
@@ -432,16 +442,17 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
   const liveSec = Math.max(0, ...done.map((s) => Math.round(num(s.sec))))
   const prReps = parseInt(x.target) || Math.round(num(done[done.length - 1]?.r ?? '')) || x.prev[0]?.r || 5
   const workingW = num(done[done.length - 1]?.w ?? '') || num(x.sets.find((s) => s.w)?.w ?? '') || (x.prev[0]?.w ? Number(fmtW(x.prev[0].w, unit)) : 0) || (best?.w ? Number(fmtW(best.w, unit)) : 0)
-  const pr = prLine(x.ex, best, prReps, unit, liveE1, liveReps, liveSec, workingW)
+  const pr = planning ? null : prLine(x.ex, best, prReps, unit, liveE1, liveReps, liveSec, workingW)
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
   const placeholder = (p: Prev | undefined, c: string, i: number) => {
     const plan = x.plan?.[i] ?? x.plan?.[x.plan.length - 1]
-    if (c === 'Reps') return x.target || (plan?.r ? `${plan.r}` : p?.r ? `${p.r}` : '0')
-    if (c === 'Sec') return p?.sec ? `${p.sec}` : '0'
-    if (c === 'Min') return p?.sec ? `${Math.round(p.sec / 60)}` : '0'
-    if (c === distLabel(unit)) return p?.dist ? fmtDist(p.dist, unit) : '0'
+    if (c === 'Reps') return plan?.r ? `${plan.r}` : x.target || (p?.r ? `${p.r}` : '0')
+    const sec = plan?.sec || p?.sec, dist = plan?.dist || p?.dist
+    if (c === 'Sec') return sec ? `${sec}` : '0'
+    if (c === 'Min') return sec ? `${Math.round(sec / 60)}` : '0'
+    if (c === distLabel(unit)) return dist ? fmtDist(dist, unit) : '0'
     return plan?.w ? fmtW(plan.w, unit) : p?.w ? fmtW(p.w, unit) : '0'
   }
   // Cardio minutes are entered as minutes but stored as seconds.
@@ -462,10 +473,10 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         <div className="min-w-0 flex-1">
           <button onClick={() => setInfoOpen(true)} className="block max-w-full text-left text-base font-extrabold leading-snug break-words active:opacity-70">{x.ex.name}</button>
           {collapsed
-            ? <p className="num text-xs font-semibold text-muted">{done.length}/{x.sets.length} sets done</p>
+            ? <p className="num text-xs font-semibold text-muted">{planning ? `${x.sets.length} set${x.sets.length === 1 ? '' : 's'}` : `${done.length}/${x.sets.length} sets done`}</p>
             : <>
               {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
-              {x.target && <p className="text-xs text-faint">Target {x.target} reps</p>}
+              {x.target && !x.plan?.length && <p className="text-xs text-faint">Target {x.target} reps</p>}
             </>}
         </div>
         <div className="flex shrink-0 items-center gap-0.5">
@@ -495,7 +506,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         </div>
       )}
       {!collapsed && <div className="overflow-hidden rounded-b-2xl bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]">
-      <div className="grid gap-x-2 text-center" style={{ gridTemplateColumns: `0 2.75rem minmax(3.5rem,1.4fr) ${cols.map(() => 'minmax(0,1fr)').join(' ')} 3rem 0` }}>
+      <div className="grid gap-x-2 text-center" style={{ gridTemplateColumns: `0 2.75rem minmax(3.5rem,1.4fr) ${cols.map(() => 'minmax(0,1fr)').join(' ')} ${planning ? '0' : '3rem'} 0` }}>
         <div className="col-span-full grid grid-cols-subgrid bg-[color-mix(in_srgb,var(--color-canvas)_55%,var(--color-surface))] py-3">
           <span />
           <span className={head}>Set</span>
@@ -523,7 +534,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
                 className={`num ${box} w-full min-w-0 text-center text-xl font-extrabold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`} />
             )),
-            <div key={`d${i}`} className="grid place-items-center">
+            planning ? <span key={`d${i}`} /> : <div key={`d${i}`} className="grid place-items-center">
               <button data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)}
                 className={`grid size-12 place-items-center rounded-full transition-colors active:translate-y-0.5 ${s.done
                   ? 'bg-accent text-accent-ink shadow-[0_3px_0_color-mix(in_srgb,var(--color-accent)_60%,black)]'
@@ -531,7 +542,7 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
             </div>,
             <span key={`r${i}`} />,
             // Cardio: effort (RPE / heart rate / watch calories) and the estimated burn, under the set.
-            ...(cardio ? [
+            ...(cardio && !planning ? [
               <div key={`e${i}`} style={{ gridColumn: '2 / -2' }} className="-mt-0.5 mb-0.5">
                 <CardioEffort name={x.ex.name} kind={x.ex.kind} seconds={num(s.sec)} distanceKm={fromDist(num(s.dist), unit)}
                   effort={{ hr: s.hr, rpe: s.rpe, kcal: s.kcal }} onChange={(e) => setSet(x.key, i, { hr: e.hr, rpe: e.rpe, kcal: e.kcal })} />
@@ -541,7 +552,12 @@ function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onReplace, o
         })}
       </div>
       <div className="flex gap-2 p-3 pt-1.5">
-        <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: [...e.sets, { ...emptySet(), w: e.sets[e.sets.length - 1]?.w ?? '' }] }))}
+        <button onClick={() => setEx(x.key, (e) => {
+          const last = e.sets[e.sets.length - 1]
+          // Planning copies the last set's values (not its type); a workout copies just the weight.
+          const next = planning && last ? { ...emptySet(), w: last.w, r: last.r, sec: last.sec, dist: last.dist } : { ...emptySet(), w: last?.w ?? '' }
+          return { ...e, sets: [...e.sets, next] }
+        })}
           className="flex h-12 flex-1 items-center justify-center gap-2 rounded-xl bg-surface-2 text-base font-extrabold uppercase tracking-wider text-muted active:opacity-70"><PlusIcon width={20} height={20} strokeWidth={2.5} />Add set</button>
         {x.sets.length > 1 && <button onClick={() => setEx(x.key, (e) => ({ ...e, sets: e.sets.slice(0, -1) }))} className="h-12 rounded-xl bg-surface-2 px-5 text-lg font-extrabold text-muted active:opacity-70" aria-label="Remove last set">−</button>}
       </div>

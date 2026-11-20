@@ -53,10 +53,12 @@ export interface Exercise extends RecordModel {
   expand?: { owner?: User }
 }
 export interface Routine extends RecordModel { user: string; name: string; notes: string; position: number }
+/** One planned set on a routine: weight (kg), reps, time (s), distance (km) and set type (warm-up, failure…). */
+export type PlanSet = { w: number; r: number; sec?: number; dist?: number; type?: string }
 export interface RoutineExercise extends RecordModel {
   routine: string; user: string; exercise: string; position: number; target_sets: number; reps: number; rest_s: number
   /** Planned weight (kg) and reps per set. */
-  sets?: { w: number; r: number }[] | null
+  sets?: PlanSet[] | null
   note?: string
   expand?: { exercise?: Exercise }
 }

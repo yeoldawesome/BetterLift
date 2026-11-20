@@ -1,11 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from 'react'
-import { epley, fromDist, fromUnit, num } from './format'
+import { epley, fmtDist, fmtW, fromDist, fromUnit, num } from './format'
 import type { SetType } from './setTypes'
 import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
 import { idbDel, idbGet, idbSet } from './idb'
 import { scheduleRestPush } from './push'
-import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
+import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type PlanSet, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
 export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType; hr?: string; rpe?: number; kcal?: string }
@@ -14,7 +14,7 @@ export type Prev = { w: number; r: number; sec: number; dist: number }
 /** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
 export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean
   /** Planned weight (kg) and reps per set, saved on the routine. Used before `prev` for placeholders / one-tap fill. */
-  plan?: { w: number; r: number }[] }
+  plan?: PlanSet[] }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
 type Rest = { end: number; total: number; name?: string } | null
 
@@ -130,11 +130,71 @@ export async function routineExercises(routineId: string): Promise<AEx[]> {
   const u = pb.authStore.record as User | null
   return Promise.all(items.filter((i) => i.expand?.exercise).map((i) => {
     const ex = lib.get(i.exercise) ?? i.expand!.exercise!
-    return makeEx(ex, i.target_sets || 1, i.rest_s, i.reps ? `${i.reps}` : '', restFor(ex, u).after).then((x) => {
-      const plan = Array.isArray(i.sets) ? i.sets.filter((p) => p && (p.w > 0 || p.r > 0)) : []
-      return { ...x, ...(plan.length ? { plan } : {}), ...(i.note ? { note: i.note } : {}) }
-    })
+    const plan = Array.isArray(i.sets) ? i.sets.filter(Boolean) : []
+    const timed = ex.kind === 'cardio' || ex.kind === 'duration'
+    return makeEx(ex, plan.length || i.target_sets || 1, i.rest_s, i.reps && !timed ? `${i.reps}` : '', restFor(ex, u).after).then((x) => ({
+      ...x,
+      // Planned values show as placeholders (one tap fills them); set types (warm-up, failure…) carry over as-is.
+      sets: x.sets.map((st, j) => (plan[j]?.type && plan[j].type !== 'normal' ? { ...st, type: plan[j].type as SetType } : st)),
+      ...(plan.length ? { plan } : {}), ...(i.note ? { note: i.note } : {}),
+    }))
   }))
+}
+
+/** A routine as editable exercise cards (same shape as a live workout): the planned values are filled in. */
+export async function routineDraft(routineId: string, unit: Unit): Promise<AEx[]> {
+  const items = await pb.collection('routine_exercises').getFullList<RoutineExercise>({
+    filter: pb.filter('routine = {:r}', { r: routineId }), sort: 'position,created', expand: 'exercise',
+  })
+  const lib = new Map((await loadExercises()).map((e) => [e.id, e]))
+  const u = pb.authStore.record as User | null
+  return Promise.all(items.filter((i) => i.expand?.exercise).map(async (i) => {
+    const ex = lib.get(i.exercise) ?? i.expand!.exercise!
+    const x = await makeEx(ex, 1, i.rest_s, '', restFor(ex, u).after)
+    const plan = Array.isArray(i.sets) && i.sets.length ? i.sets
+      : Array.from({ length: Math.max(1, i.target_sets || 1) }, () => ({ w: 0, r: ex.kind === 'cardio' || ex.kind === 'duration' ? 0 : i.reps || 0 }))
+    return { ...x, key: i.id, note: i.note ? i.note : undefined, sets: plan.map((p) => planToSet(p, unit)) }
+  }))
+}
+
+const planToSet = (p: PlanSet, unit: Unit): ASet => ({
+  ...emptySet(), w: p.w ? fmtW(p.w, unit) : '', r: p.r ? `${p.r}` : '', sec: p.sec ? `${p.sec}` : '', dist: p.dist ? fmtDist(p.dist, unit) : '',
+  ...(p.type && p.type !== 'normal' ? { type: p.type as SetType } : {}),
+})
+
+const setToPlan = (s: ASet, unit: Unit): PlanSet => {
+  const out: PlanSet = { w: Math.round(fromUnit(num(s.w), unit) * 100) / 100, r: Math.round(num(s.r)) }
+  if (num(s.sec) > 0) out.sec = Math.round(num(s.sec))
+  if (num(s.dist) > 0) out.dist = Math.round(fromDist(num(s.dist), unit) * 1000) / 1000
+  if (s.type && s.type !== 'normal') out.type = s.type
+  return out
+}
+
+/** Routine record fields for an exercise card: every set (types and values), plus the summary columns. */
+function routineRow(x: AEx, sets: ASet[], unit: Unit) {
+  const plan = sets.map((s) => setToPlan(s, unit))
+  const timed = x.ex.kind === 'cardio' || x.ex.kind === 'duration'
+  const reps = timed ? 0 : mode(plan.filter((p) => p.type !== 'warmup' && p.type !== 'cooldown').map((p) => p.r).filter((r) => r > 0)) || parseInt(x.target) || 0
+  return { exercise: x.ex.id, target_sets: Math.max(1, plan.length), reps, rest_s: x.rest, sets: plan.length ? plan : null, note: (x.note ?? '').trim() }
+}
+
+/**
+ * Saves the routine editor's cards: updates kept exercises, creates new ones (their key is the new record id),
+ * deletes removed ones. `saved` is the set of record ids that exist on the server; it's updated in place.
+ */
+export async function saveRoutineDraft(routineId: string, xs: AEx[], unit: Unit, saved: Set<string>) {
+  const b = pb.createBatch()
+  const keep = new Set(xs.map((x) => x.key))
+  for (const id of saved) if (!keep.has(id)) b.collection('routine_exercises').delete(id)
+  xs.forEach((x, position) => {
+    const row = { ...routineRow(x, x.sets, unit), position }
+    if (saved.has(x.key)) b.collection('routine_exercises').update(x.key, row)
+    else b.collection('routine_exercises').create({ id: x.key, routine: routineId, user: me(), ...row })
+  })
+  if (!saved.size && !xs.length) return
+  await b.send()
+  saved.clear()
+  for (const x of xs) saved.add(x.key)
 }
 
 /** Persists the workout + completed sets atomically and flags e1RM PRs. Returns the workout id. */
@@ -212,9 +272,9 @@ const mode = (xs: number[]) => {
   return [...c.entries()].sort((a, b) => b[1] - a[1] || b[0] - a[0])[0]?.[0] ?? 0
 }
 
-/** Per-set weight (kg) and reps from the checked-off sets, for the routine's plan. */
+/** Per-set values and types from the checked-off sets, for the routine's plan. */
 function planOf(x: AEx, unit: Unit) {
-  return x.sets.filter((s) => s.done).map((s) => ({ w: Math.round(fromUnit(num(s.w), unit) * 100) / 100, r: Math.round(num(s.r)) }))
+  return x.sets.filter((s) => s.done).map((s) => setToPlan(s, unit))
 }
 
 /**
@@ -235,7 +295,7 @@ export async function syncRoutine(a: Active, routineId: string, unit: Unit, how:
       if (!done.length) continue
       // Keep the routine's set count and reps; only the weights change (the last done weight fills extra sets).
       const count = Math.max(1, o.target_sets || done.length)
-      const sets = Array.from({ length: count }, (_, i) => ({ w: (done[i] ?? done[done.length - 1]).w, r: o.sets?.[i]?.r || o.reps || done[i]?.r || 0 }))
+      const sets = Array.from({ length: count }, (_, i) => ({ ...(o.sets?.[i] ?? {}), w: (done[i] ?? done[done.length - 1]).w, r: o.sets?.[i]?.r || o.reps || done[i]?.r || 0 }))
       b.collection('routine_exercises').update(o.id, { sets })
       n++
     }
@@ -245,10 +305,7 @@ export async function syncRoutine(a: Active, routineId: string, unit: Unit, how:
   old.forEach((o) => b.collection('routine_exercises').delete(o.id))
   a.exercises.forEach((x, pos) => {
     const done = x.sets.filter((s) => s.done)
-    const reps = mode(done.map((s) => Math.round(num(s.r))).filter((r) => r > 0)) || parseInt(x.target) || 0
-    const plan = x.ex.kind === 'duration' || x.ex.kind === 'cardio' ? [] : planOf(x, unit)
-    b.collection('routine_exercises').create({ routine: routineId, user: uid, exercise: x.ex.id, position: pos, target_sets: Math.max(1, done.length || x.sets.length), reps, rest_s: x.rest,
-      sets: plan.length ? plan : null, note: (x.note ?? '').trim() })
+    b.collection('routine_exercises').create({ routine: routineId, user: uid, position: pos, ...routineRow(x, done.length ? done : x.sets, unit) })
   })
   await b.send()
 }

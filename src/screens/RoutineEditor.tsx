@@ -1,16 +1,17 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
-import { ExercisePicker } from '../components/ExerciseList'
-import { DragList } from '../components/DragList'
-import { selectAll } from '../lib/selectAll'
-import { fmtW } from '../lib/format'
-import { DownIcon, TimerIcon, TrashIcon, UpIcon } from '../components/icons'
-import { RestPicker, restLabel } from '../components/RestPicker'
-import { Button, Card, ErrorText, Input, Screen, Spinner } from '../components/ui'
-import { routineExercises, useActive } from '../lib/active'
-import { errMsg, me, pb, restFor as liftRest, useUnit, useUser, type Exercise, type Routine, type RoutineExercise } from '../lib/pb'
+import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
+import { PlusIcon } from '../components/icons'
+import { Button, ErrorText, Input, Screen, Sheet, Spinner } from '../components/ui'
+import { makeEx, routineDraft, routineExercises, saveRoutineDraft, useActive, type AEx, type ASet } from '../lib/active'
+import { errMsg, pb, restFor as liftRest, useUnit, useUser, type Exercise, type Routine } from '../lib/pb'
 import { ask } from '../components/Dialog'
+import { ExerciseBlock, ReorderSheet } from './Workout'
 
+/**
+ * Edit a routine with the same exercise cards as a live workout: every set has its type (warm-up, failure…) and its
+ * planned weight × reps, or time / distance for cardio and holds. Changes save automatically.
+ */
 export default function RoutineEditor() {
   const { id } = useParams()
   const nav = useNavigate()
@@ -18,74 +19,106 @@ export default function RoutineEditor() {
   const unit = useUnit()
   const { active, start } = useActive()
   const [r, setR] = useState<Routine | null>(null)
-  const [items, setItems] = useState<RoutineExercise[]>([])
+  const [list, setListState] = useState<AEx[] | null>(null)
   const [picking, setPicking] = useState(false)
-  const [restFor, setRestFor] = useState<RoutineExercise | null>(null)
+  const [reordering, setReordering] = useState(false)
+  const [replacing, setReplacing] = useState<string | null>(null)
   const [err, setErr] = useState('')
   const [saving, setSaving] = useState(false)
-  // Edits save on blur; the Save button waits for any in-flight writes before leaving.
-  const pending = useRef(new Set<Promise<unknown>>())
-  const failed = useRef(false)
-  const track = <T,>(p: Promise<T>) => { pending.current.add(p); p.finally(() => pending.current.delete(p)); return p }
-  const fail = (e: unknown) => { failed.current = true; setErr(errMsg(e)) }
+  const pendingRoutine = useRef(new Set<Promise<unknown>>())
 
-  const loadItems = () => pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: pb.filter('routine = {:r}', { r: id }), sort: 'position,created', expand: 'exercise' }).then(setItems)
+  // Record ids on the server; saves are queued one after another and debounced while typing.
+  const saved = useRef(new Set<string>())
+  const latest = useRef<AEx[] | null>(null)
+  const queue = useRef<Promise<void>>(Promise.resolve())
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const dirty = useRef(false)
+
+  const flush = useCallback(() => {
+    if (timer.current) { clearTimeout(timer.current); timer.current = null }
+    if (!dirty.current || !latest.current) return queue.current
+    dirty.current = false
+    const snapshot = latest.current
+    queue.current = queue.current.then(() => saveRoutineDraft(id!, snapshot, unit, saved.current)).then(() => setErr(''), (e) => { dirty.current = true; setErr(errMsg(e)) })
+    return queue.current
+  }, [id, unit])
+
+  const setList = (fn: (xs: AEx[]) => AEx[]) => setListState((xs) => {
+    const next = fn(xs ?? [])
+    latest.current = next
+    dirty.current = true
+    if (timer.current) clearTimeout(timer.current)
+    timer.current = setTimeout(flush, 700)
+    return next
+  })
+
   useEffect(() => {
     pb.collection('routines').getOne<Routine>(id!).then(setR).catch((e) => setErr(errMsg(e)))
-    loadItems()
+    routineDraft(id!, unit).then((xs) => {
+      saved.current = new Set(xs.map((x) => x.key))
+      latest.current = xs
+      setListState(xs)
+    }).catch((e) => setErr(errMsg(e)))
   }, [id])
+  // Leaving the screen saves whatever is still pending.
+  useEffect(() => () => { flush() }, [flush])
 
-  const saveRoutine = (patch: Partial<Routine>) => track(pb.collection('routines').update(id!, patch).catch(fail))
-  const saveItem = (it: RoutineExercise, patch: Partial<RoutineExercise>) => {
-    setItems((xs) => xs.map((x) => (x.id === it.id ? { ...x, ...patch } : x)))
-    track(pb.collection('routine_exercises').update(it.id, patch).catch(fail))
+  const saveRoutine = (patch: Partial<Routine>) => {
+    const p = pb.collection('routines').update(id!, patch).catch((e) => setErr(errMsg(e)))
+    pendingRoutine.current.add(p); p.finally(() => pendingRoutine.current.delete(p))
   }
+
+  const setEx = (key: string, fn: (x: AEx) => AEx) => setList((xs) => xs.map((x) => (x.key === key ? fn(x) : x)))
+  const setSet = (key: string, i: number, patch: Partial<ASet>) => setEx(key, (x) => ({ ...x, sets: x.sets.map((s, j) => (j === i ? { ...s, ...patch } : s)) }))
+  const move = (key: string, d: -1 | 1) => setList((xs) => {
+    const i = xs.findIndex((e) => e.key === key), j = i + d
+    if (i < 0 || j < 0 || j >= xs.length) return xs
+    const out = [...xs]; [out[i], out[j]] = [out[j], out[i]]
+    return out
+  })
+  const moveTo = (from: number, to: number) => setList((xs) => {
+    const out = [...xs]
+    const [it] = out.splice(from, 1)
+    out.splice(to, 0, it)
+    return out
+  })
 
   const add = async (exs: Exercise[]) => {
     setPicking(false)
-    for (const [i, e] of exs.entries()) {
-      await pb.collection('routine_exercises').create({ routine: id, user: me(), exercise: e.id, position: items.length + i, target_sets: 3, reps: 10, rest_s: liftRest(e, user).rest })
-    }
-    loadItems()
+    const made = await Promise.all(exs.map(async (e) => {
+      const rest = liftRest(e, user)
+      const x = await makeEx(e, 3, rest.rest, '', rest.after)
+      const timed = e.kind === 'duration' || e.kind === 'cardio'
+      return { ...x, sets: x.sets.map((s) => (timed ? s : { ...s, r: '10' })) }
+    }))
+    setList((xs) => [...xs, ...made])
   }
-
-  const move = (i: number, d: -1 | 1) => moveTo(i, i + d)
-  const moveTo = async (from: number, to: number) => {
-    const next = [...items]
-    const [it] = next.splice(from, 1)
-    next.splice(to, 0, it)
-    setItems(next)
-    await Promise.all(next.map((x, pos) => (x.position !== pos ? pb.collection('routine_exercises').update(x.id, { position: pos }) : null)))
-    loadItems()
+  const replace = async (key: string, ex: Exercise) => {
+    setReplacing(null)
+    const rest = liftRest(ex, user)
+    const made = await makeEx(ex, 1, rest.rest, '', rest.after)
+    // Keep the set count and types; values reset since the new lift is different.
+    setList((xs) => xs.map((e) => (e.key === key ? { ...made, key: made.key, note: e.note, sets: e.sets.map((s) => ({ ...s, w: '', sec: '', dist: '' })) } : e)))
   }
-
-  const remove = async (it: RoutineExercise) => { await pb.collection('routine_exercises').delete(it.id); loadItems() }
 
   const saveAndClose = async () => {
-    setSaving(true); failed.current = false
-    ;(document.activeElement as HTMLElement | null)?.blur() // flush the field being edited
+    setSaving(true)
+    ;(document.activeElement as HTMLElement | null)?.blur()
     await new Promise((res) => setTimeout(res, 0))
-    await Promise.allSettled([...pending.current])
+    await Promise.allSettled([...pendingRoutine.current])
+    await flush()
     setSaving(false)
-    if (!failed.current) nav('/routines')
+    if (!dirty.current) nav('/routines')
   }
 
   const launch = async () => {
     if (active && !await ask({ title: 'You have a workout in progress', body: 'Starting this routine replaces it.', confirmLabel: 'Replace', danger: true })) return
+    await flush()
     start(r!.name, r!.id, await routineExercises(r!.id))
     nav('/workout')
   }
 
-  if (!r) return <Screen title="Routine" back><ErrorText>{err}</ErrorText>{!err && <Spinner />}</Screen>
-
-  const numField = (it: RoutineExercise, k: 'target_sets' | 'reps', lbl: string) => (
-    <label className="block text-center">
-      <span className="block text-[10px] font-bold uppercase text-faint">{lbl}</span>
-      <input inputMode="numeric" defaultValue={it[k] || ''} onFocus={selectAll} onChange={(e) => { e.target.value = e.target.value.replace(/\D/g, '') }}
-        onBlur={(e) => { const v = parseInt(e.target.value) || 0; if (v !== it[k]) saveItem(it, { [k]: k === 'target_sets' ? Math.max(1, v) : v }) }}
-        className="num h-10 w-full rounded-lg bg-surface-2 text-center font-bold outline-none focus:ring-2 focus:ring-accent" />
-    </label>
-  )
+  if (!r || !list) return <Screen title="Routine" back><ErrorText>{err}</ErrorText>{!err && <Spinner />}</Screen>
 
   return (
     <Screen title="Edit routine" back>
@@ -97,36 +130,19 @@ export default function RoutineEditor() {
           className="block w-full resize-y rounded-xl border border-line bg-surface-2 px-3 py-2.5 text-base text-ink outline-none placeholder:text-faint focus:border-accent" />
       </label>
       <ErrorText>{err}</ErrorText>
-      <DragList items={items} keyOf={(it) => it.id} onMove={moveTo} className="space-y-3" render={(it, i, handle) => (
-        <Card className="space-y-2 p-3">
-          <div className="flex items-center gap-1">
-            <span className="-ml-2">{handle}</span>
-            <p className="min-w-0 flex-1 truncate font-extrabold text-accent">{it.expand?.exercise?.name}</p>
-            <button disabled={i === 0} onClick={() => move(i, -1)} className="p-1.5 text-muted disabled:opacity-30"><UpIcon width={18} height={18} /></button>
-            <button disabled={i === items.length - 1} onClick={() => move(i, 1)} className="p-1.5 text-muted disabled:opacity-30"><DownIcon width={18} height={18} /></button>
-            <button onClick={() => remove(it)} className="p-1.5 text-faint"><TrashIcon width={18} height={18} /></button>
-          </div>
-          <div className="grid grid-cols-3 gap-2">
-            {numField(it, 'target_sets', 'Sets')}
-            {numField(it, 'reps', 'Reps')}
-            <div className="text-center">
-              <span className="block text-[10px] font-bold uppercase text-faint">Rest</span>
-              <button onClick={() => setRestFor(it)} className="num flex h-10 w-full items-center justify-center gap-1 rounded-lg bg-surface-2 font-bold">
-                <TimerIcon width={14} height={14} className="text-muted" />{restLabel(it.rest_s)}
-              </button>
-            </div>
-          </div>
-          {!!it.sets?.length && it.sets.some((p) => p.w > 0) && (
-            <p className="num text-xs text-muted">Planned: {it.sets.map((p) => `${fmtW(p.w, unit)}×${p.r}`).join(', ')} {unit}</p>
-          )}
-          {it.note && <p className="text-xs italic text-muted">“{it.note}”</p>}
-        </Card>
-      )} />
-      <Button variant="ghost" onClick={() => setPicking(true)}>+ Add exercises</Button>
-      {items.length > 0 && <Button variant="ghost" onClick={launch}>Start this routine</Button>}
+      <div className="space-y-3" data-routine-cards>
+        {list.map((x) => (
+          <ExerciseBlock key={x.key} x={x} unit={unit} setEx={setEx} setSet={setSet} toggle={() => {}} planning
+            onReorder={() => setReordering(true)} onReplace={() => setReplacing(x.key)}
+            onRemove={() => setList((xs) => xs.filter((e) => e.key !== x.key))} onSuperset={() => {}} />
+        ))}
+      </div>
+      <Button variant="ghost" onClick={() => setPicking(true)}><PlusIcon width={18} height={18} className="mr-1 inline" />Add exercises</Button>
+      {list.length > 0 && <Button variant="ghost" onClick={launch}>Start this routine</Button>}
       <Button onClick={saveAndClose} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
       {picking && <ExercisePicker onPick={add} onClose={() => setPicking(false)} />}
-      {restFor && <RestPicker value={restFor.rest_s} title={`Rest · ${restFor.expand?.exercise?.name ?? ''}`} onSave={(v) => saveItem(restFor, { rest_s: v })} onClose={() => setRestFor(null)} />}
+      {reordering && <ReorderSheet items={list} move={move} moveTo={moveTo} onClose={() => setReordering(false)} />}
+      {replacing && <Sheet title="Replace exercise" onClose={() => setReplacing(null)}><ExerciseList onPick={(exs) => exs[0] && replace(replacing, exs[0])} /></Sheet>}
     </Screen>
   )
 }
