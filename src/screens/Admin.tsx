@@ -7,7 +7,8 @@ import { SearchIcon } from '../components/icons'
 import { Button, Card, Chips, ErrorText, Input, Segmented, Select, Sheet, Spinner } from '../components/ui'
 import { EQUIPMENT, KINDS, defaultLogTip, label, resetExercises } from '../lib/exercises'
 import { timeAgo } from '../lib/format'
-import { intensityForExercise, primaryOptions, secondaryOptions } from '../lib/muscles'
+import { cleanMuscles, intensityForExercise, primaryOptions } from '../lib/muscles'
+import { MuscleChips } from '../components/MuscleChips'
 import { errMsg, pb as appPb, type Exercise, type Feedback, type Kind } from '../lib/pb'
 import { ask } from '../components/Dialog'
 
@@ -67,13 +68,13 @@ function AdminLogin({ onDone }: { onDone: () => void }) {
 function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>; mode: 'edit' | 'create' | 'review'; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: ex.name ?? '', muscle: ex.muscle ?? 'chest', equipment: ex.equipment ?? 'barbell', kind: (ex.kind ?? 'weight') as Kind,
-    secondary: ex.secondary ?? [], instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
+    secondary: ex.secondary ?? [], co_primary: ex.co_primary ?? [], instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
   })
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }))
-  const data = { ...f, name: f.name.trim(), secondary: f.secondary.filter((m) => m !== f.muscle), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
+  const data = { ...f, ...cleanMuscles(f.muscle, f.co_primary, f.secondary), name: f.name.trim(), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
 
   const run = async (p: () => Promise<unknown>) => {
     setErr(''); setBusy(true)
@@ -93,15 +94,7 @@ function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>;
           <Select label="Equipment" value={f.equipment} onChange={(equipment) => set({ equipment })} options={EQUIPMENT.map((m) => [m, label(m)])} />
         </div>
         <Select label="Tracking" value={f.kind} onChange={(v) => set({ kind: v as Kind })} options={KINDS} />
-        <div>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
-          <div className="flex flex-wrap gap-1.5">
-            {secondaryOptions(f.muscle, f.secondary).map((m) => (
-              <button key={m} type="button" onClick={() => set({ secondary: f.secondary.includes(m) ? f.secondary.filter((x) => x !== m) : [...f.secondary, m] })}
-                className={`h-8 rounded-full px-3 text-sm font-semibold ${f.secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
-            ))}
-          </div>
-        </div>
+        <MuscleChips muscle={f.muscle} co={f.co_primary} secondary={f.secondary} onChange={set} />
         <div className="flex justify-center rounded-2xl bg-surface-2 py-2"><BodyMap intensity={intensityForExercise(f)} className="h-32" /></div>
         <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to perform (one step per line)</span>
           <textarea rows={5} value={f.instructions} onChange={(e) => set({ instructions: e.target.value })} className={areaCls} /></label>

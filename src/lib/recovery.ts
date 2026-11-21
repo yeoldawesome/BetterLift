@@ -16,7 +16,7 @@ export const MUSCLE_NAMES: Record<MapMuscle, string> = {
   quads: 'quadriceps', hamstrings: 'hamstrings', glutes: 'glutes', adductors: 'adductors', calves: 'calves', core: 'core',
 }
 
-type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { kind?: Exercise['kind'] }
+type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { co_primary?: string[]; kind?: Exercise['kind'] }
 /** 0..1 per muscle (1 = fully recovered) from sets done in the last few days. */
 export function recovery(sessions: { at: Date; sets: { ex?: Ex }[] }[], now = new Date()): Record<MapMuscle, number> {
   const fatigue = Object.fromEntries(MAP_MUSCLES.map((m) => [m, 0])) as Record<MapMuscle, number>

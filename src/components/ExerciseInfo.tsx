@@ -111,6 +111,7 @@ function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Us
     <>
       <div className="flex flex-wrap gap-1.5">
         <span className={`${tag} bg-accent text-accent-ink`}>{label(ex.muscle)}</span>
+        {(ex.co_primary ?? []).filter((m) => m !== ex.muscle).map((m) => <span key={m} className={`${tag} bg-accent text-accent-ink`}>{label(m)}</span>)}
         {(ex.secondary ?? []).filter((m) => m !== ex.muscle).map((m) => <span key={m} className={`${tag} bg-accent/20 text-accent`}>{label(m)}</span>)}
         <span className={`${tag} bg-surface-2 text-muted`}>{label(ex.equipment)}</span>
         {ex.owner && <span className={`${tag} bg-surface-2 text-muted`}>Custom</span>}

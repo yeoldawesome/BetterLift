@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { EQUIPMENT, KINDS, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, quickUsage, recentUsage, usageFrom, type Usage } from '../lib/exercises'
-import { FILTER_MUSCLES, MUSCLE_GROUPS, matchesMuscle, primaryOptions, secondaryOptions } from '../lib/muscles'
+import { FILTER_MUSCLES, MUSCLE_GROUPS, cleanMuscles, matchesMuscle, primaryOptions } from '../lib/muscles'
+import { MuscleChips } from './MuscleChips'
 import { cachedStats, invalidateStats } from '../lib/statsData'
 import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
@@ -197,6 +198,7 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
   const [name, setName] = useState(n0)
   const [muscle, setMuscle] = useState(initial?.muscle ?? guessMuscle(n0))
   const [secondary, setSecondary] = useState<string[]>(initial?.secondary ?? [])
+  const [co, setCo] = useState<string[]>(initial?.co_primary ?? [])
   const [equipment, setEquipment] = useState(initial?.equipment ?? guessEquipment(n0))
   const [kind, setKind] = useState<Kind>(initial?.kind ?? guessKind(n0))
   const [instructions, setInstructions] = useState(initial?.instructions ?? '')
@@ -208,13 +210,12 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
   const tip = logTip || defaultLogTip(kind, equipment)
   const instrOk = instructions.trim().length >= 20
   const tipOk = tip.trim().length >= 10
-  const toggleSec = (m: string) => setSecondary((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]))
 
   const save = async () => {
     if (review && (!instrOk || !tipOk)) return setErr('To submit for review, describe how to perform it (20+ characters) and how to log it.')
     setErr(''); setBusy(true)
     const data = {
-      name: name.trim(), muscle, secondary: secondary.filter((m) => m !== muscle), equipment, kind,
+      name: name.trim(), ...cleanMuscles(muscle, co, secondary), equipment, kind,
       instructions: instructions.trim(), log_tip: tip.trim(), review_status: review ? 'pending' : initial?.review_status === 'pending' ? '' : (initial?.review_status ?? ''),
     }
     try {
@@ -234,14 +235,7 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
         )}
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
         <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
-        <div>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
-          <div className="flex flex-wrap gap-1.5">
-            {secondaryOptions(muscle, secondary).map((m) => (
-              <button key={m} type="button" onClick={() => toggleSec(m)} className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
-            ))}
-          </div>
-        </div>
+        <MuscleChips muscle={muscle} co={co} secondary={secondary} onChange={(v) => { setCo(v.co_primary); setSecondary(v.secondary) }} />
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
         <Select label="Tracking (how sets are logged)" value={kind} onChange={(v) => setKind(v as Kind)} options={KINDS} />
         <label className="block">
@@ -287,17 +281,21 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
   const [name, setName] = useState(ex.name)
   const [muscle, setMuscle] = useState(ex.muscle)
   const [secondary, setSecondary] = useState<string[]>(ex.secondary ?? [])
+  const [co, setCo] = useState<string[]>(ex.co_primary ?? [])
   const [equipment, setEquipment] = useState(ex.equipment)
   const [instructions, setInstructions] = useState(ex.instructions ?? '')
   const [logTip, setLogTip] = useState(ex.log_tip ?? '')
   const [suggest, setSuggest] = useState(false)
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
-  const toggleSec = (m: string) => setSecondary((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]))
 
   const save = async () => {
     setErr(''); setBusy(true)
-    const data = { name: name.trim(), muscle, secondary: secondary.filter((m) => m !== muscle), equipment, instructions: instructions.trim(), log_tip: logTip.trim() }
+    const mus = cleanMuscles(muscle, co, secondary)
+    // Unchanged muscles are left blank so you keep following the official ones (and any later fixes to them).
+    const off = ex.official ?? ex, same = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((m) => b.includes(m))
+    const follow = mus.muscle === off.muscle && same(mus.co_primary, off.co_primary) && same(mus.secondary, off.secondary)
+    const data = { name: name.trim(), ...(follow ? { muscle: '', co_primary: [], secondary: [] } : mus), equipment, instructions: instructions.trim(), log_tip: logTip.trim() }
     try {
       if (ex.override) await pb.collection('exercise_overrides').update(ex.override, data)
       else await pb.collection('exercise_overrides').create({ ...data, user: me(), exercise: ex.id })
@@ -316,14 +314,7 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
         <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">This is an official exercise. Your changes only apply to <span className="font-bold text-ink">you</span> — everyone else keeps the original. Your logged sets aren't affected.</p>
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
         <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
-        <div>
-          <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
-          <div className="flex flex-wrap gap-1.5">
-            {secondaryOptions(muscle, secondary).map((m) => (
-              <button key={m} type="button" onClick={() => toggleSec(m)} className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
-            ))}
-          </div>
-        </div>
+        <MuscleChips muscle={muscle} co={co} secondary={secondary} onChange={(v) => { setCo(v.co_primary); setSecondary(v.secondary) }} />
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
         <p className="text-xs text-muted">Tracking type: {KINDS.find(([k]) => k === ex.kind)?.[1]} (can't change on official exercises — it would mix up your logged sets)</p>
         <label className="block">

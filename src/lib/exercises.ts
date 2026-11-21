@@ -78,8 +78,11 @@ function fetchExercises() {
       const out = list.filter((e) => !e.owner || e.owner === me()).map((e) => {
         const o = byEx.get(e.id)
         if (!o) return e
-        return { ...e, override: o.id, name: o.name || e.name, muscle: o.muscle || e.muscle, equipment: o.equipment || e.equipment,
-          secondary: o.secondary?.length ? o.secondary : e.secondary, instructions: o.instructions || e.instructions, log_tip: o.log_tip || e.log_tip,
+        // A personal muscle choice replaces all three lists; otherwise the official ones (and later fixes to them) apply.
+        const mine = !!o.muscle
+        return { ...e, override: o.id, name: o.name || e.name, equipment: o.equipment || e.equipment,
+          muscle: mine ? o.muscle : e.muscle, co_primary: mine ? o.co_primary ?? [] : e.co_primary, secondary: mine ? o.secondary ?? [] : e.secondary,
+          official: { muscle: e.muscle, co_primary: e.co_primary, secondary: e.secondary }, instructions: o.instructions || e.instructions, log_tip: o.log_tip || e.log_tip,
           rest_s: o.rest_s, rest_after_s: o.rest_after_s }
       }).sort((a, b) => a.name.localeCompare(b.name))
       idbSet(exKey(), out)

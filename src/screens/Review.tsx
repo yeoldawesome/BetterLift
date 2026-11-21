@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Avatar, Button, Card, Empty, ErrorText, Input, Screen, Select, Spinner } from '../components/ui'
 import { EQUIPMENT, KINDS, label, resetExercises } from '../lib/exercises'
 import { BodyMap } from '../components/BodyMap'
-import { intensityForExercise, primaryOptions, secondaryOptions } from '../lib/muscles'
+import { cleanMuscles, intensityForExercise, primaryOptions } from '../lib/muscles'
+import { MuscleChips } from '../components/MuscleChips'
 import { timeAgo } from '../lib/format'
 import { errMsg, pb, type Exercise, type Kind } from '../lib/pb'
 import { ask } from '../components/Dialog'
@@ -33,6 +34,7 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
   const [kind, setKind] = useState<Kind>(e.kind)
   const [note, setNote] = useState('')
   const [secondary, setSecondary] = useState<string[]>(e.secondary ?? [])
+  const [co, setCo] = useState<string[]>(e.co_primary ?? [])
   const [instructions, setInstructions] = useState(e.instructions ?? '')
   const [logTip, setLogTip] = useState(e.log_tip ?? '')
   const [err, setErr] = useState('')
@@ -42,7 +44,7 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
     if (action === 'reject' && !note.trim() && !await ask({ title: 'Reject without a note?', body: 'A short reason helps the submitter.', confirmLabel: 'Reject', danger: true })) return
     setErr(''); setBusy(true)
     try {
-      await pb.send(`/api/betterlift/exercises/${e.id}/review`, { method: 'POST', body: { action, note: note.trim(), name: name.trim(), muscle, equipment, kind, secondary: secondary.filter((m) => m !== muscle), instructions: instructions.trim(), log_tip: logTip.trim() } })
+      await pb.send(`/api/betterlift/exercises/${e.id}/review`, { method: 'POST', body: { action, note: note.trim(), name: name.trim(), ...cleanMuscles(muscle, co, secondary), equipment, kind, instructions: instructions.trim(), log_tip: logTip.trim() } })
       onDone()
     } catch (x) { setErr(errMsg(x)) } finally { setBusy(false) }
   }
@@ -59,17 +61,9 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
       </div>
       <Select label="Tracking" value={kind} onChange={(v) => setKind(v as Kind)} options={KINDS} />
-      <div>
-        <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
-        <div className="flex flex-wrap gap-1.5">
-          {secondaryOptions(muscle, secondary).map((m) => (
-            <button key={m} type="button" onClick={() => setSecondary((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]))}
-              className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
-          ))}
-        </div>
-      </div>
+      <MuscleChips muscle={muscle} co={co} secondary={secondary} onChange={(v) => { setCo(v.co_primary); setSecondary(v.secondary) }} />
       <div className="flex justify-center rounded-2xl bg-surface-2 py-2">
-        <BodyMap sex={e.expand?.owner?.sex} intensity={intensityForExercise({ muscle, secondary })} className="h-32" />
+        <BodyMap sex={e.expand?.owner?.sex} intensity={intensityForExercise({ muscle, co_primary: co, secondary })} className="h-32" />
       </div>
       <label className="block">
         <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to perform</span>

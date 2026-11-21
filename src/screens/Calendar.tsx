@@ -8,7 +8,7 @@ import { intensityFromSets, type Intensity } from '../lib/muscles'
 import { me, pb, useUser, type Exercise, type Workout } from '../lib/pb'
 
 type W = Pick<Workout, 'id' | 'name' | 'started_at' | 'duration_s' | 'accent' | 'pr_count'>
-type SetRow = { workout: string; expand?: { exercise?: Pick<Exercise, 'muscle' | 'secondary' | 'kind'> } }
+type SetRow = { workout: string; expand?: { exercise?: Pick<Exercise, 'muscle' | 'secondary' | 'co_primary' | 'kind'> } }
 type Day = { ws: W[]; intensity: Intensity; accent: string }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -36,7 +36,7 @@ export default function Calendar() {
     const u = { u: me() }
     Promise.all([
       pb.collection('workouts').getFullList<W>({ filter: pb.filter('user = {:u}', u), sort: 'started_at', fields: 'id,name,started_at,duration_s,accent,pr_count', batch: 1000 }),
-      pb.collection('workout_sets').getFullList<SetRow>({ filter: pb.filter('user = {:u} && completed = true', u), expand: 'exercise', fields: 'workout,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.kind', batch: 2000 }),
+      pb.collection('workout_sets').getFullList<SetRow>({ filter: pb.filter('user = {:u} && completed = true', u), expand: 'exercise', fields: 'workout,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.co_primary,expand.exercise.kind', batch: 2000 }),
     ]).then(([ws, sets]) => {
       if (!live) return
       const byWorkout = new Map<string, SetRow[]>()

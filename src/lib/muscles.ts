@@ -32,9 +32,20 @@ export const matchesMuscle = (m: string, filter: string) => !filter || m === fil
 /** Primary-muscle picker options; keeps a legacy value selectable if the exercise still has one. */
 export const primaryOptions = (cur: string | undefined, label: (s: string) => string): [string, string][] =>
   [...MUSCLES, ...(cur && LEGACY[cur] ? [cur] : [])].map((m) => [m, label(m)])
-/** Secondary-muscle chips: every muscle but the primary, plus any legacy value already ticked (so it can be cleared). */
+/** Other-muscle chips: every muscle but the primary, plus any legacy value already ticked (so it can be cleared). */
 export const secondaryOptions = (primary: string, cur: string[] = []) =>
   [...MAP_MUSCLES.filter((m) => m !== primary), ...cur.filter((m) => LEGACY[m])]
+/** Chip tap cycle for the other muscles: off → secondary (half a set) → also primary (full set) → off. */
+export function cycleMuscle(m: string, co: string[], sec: string[]): { co_primary: string[]; secondary: string[] } {
+  if (co.includes(m)) return { co_primary: co.filter((x) => x !== m), secondary: sec.filter((x) => x !== m) }
+  if (sec.includes(m)) return { co_primary: [...co, m], secondary: sec.filter((x) => x !== m) }
+  return { co_primary: co, secondary: [...sec, m] }
+}
+/** Drop the main muscle and duplicates from the other lists before saving. */
+export const cleanMuscles = (muscle: string, co: string[] = [], sec: string[] = []) => {
+  const c = [...new Set(co)].filter((m) => m !== muscle)
+  return { muscle, co_primary: c, secondary: [...new Set(sec)].filter((m) => m !== muscle && !c.includes(m)) }
+}
 
 /** Heart strength from a number of cardio sets: any cardio shows clearly, more fills it in. */
 export const cardioIntensity = (sets: number) => (sets > 0 ? Math.min(1, 0.6 + 0.2 * (sets - 1)) : 0)
@@ -44,15 +55,16 @@ const isMap = (m: string): m is MapMuscle => (MAP_MUSCLES as readonly string[]).
 const spread = (m: string): [MapMuscle, number][] => (isMap(m) ? [[m, 1]] : LEGACY[m] ?? [])
 const LEGS = ['quads', 'hamstrings', 'calves', 'glutes'] as const
 
-type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { kind?: Exercise['kind'] }
+type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { co_primary?: string[]; kind?: Exercise['kind'] }
 /** Lights the heart: exercises filed under the Cardio muscle group, or logged as the Cardio type (runs, bike, rower…). */
 export const isCardioEx = (ex: Ex) => ex.muscle === 'cardio' || ex.kind === 'cardio'
 
-/** Weighted work per muscle for one set: primary 1, secondary 0.5; "full body" spreads 0.4 everywhere; cardio leans on legs. */
+/** Weighted work per muscle for one set: primary (and co-primary) 1, secondary 0.5; "full body" spreads 0.4 everywhere; cardio leans on legs. */
 function work(ex: Ex, add: (m: MapMuscle, v: number) => void) {
   if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => add(m, 0.4))
   else if (ex.muscle === 'cardio') LEGS.forEach((m) => add(m, 0.5))
   else for (const [m, w] of spread(ex.muscle)) add(m, w)
+  for (const p of ex.co_primary ?? []) for (const [m, w] of spread(p)) add(m, w)
   for (const s of ex.secondary ?? []) for (const [m, w] of spread(s)) add(m, 0.5 * w)
 }
 
@@ -79,13 +91,14 @@ export function muscleSetCounts(sets: { ex?: Ex }[]): Record<MapMuscle, number> 
   return out
 }
 
-/** Highlight for a single exercise (info sheet): primary full, secondary half. */
+/** Highlight for a single exercise (info sheet): primary and co-primary full, secondary half. */
 export function intensityForExercise(ex: Ex): Intensity {
   const out: Intensity = {}
   if (isCardioEx(ex)) out.cardio = 1
   if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => { out[m] = 0.6 })
   else if (ex.muscle === 'cardio') LEGS.forEach((m) => { out[m] = 0.6 })
   else for (const [m, w] of spread(ex.muscle)) out[m] = w
+  for (const p of ex.co_primary ?? []) for (const [m, w] of spread(p)) out[m] = Math.max(out[m] ?? 0, w)
   for (const s of ex.secondary ?? []) for (const [m, w] of spread(s)) if (!out[m]) out[m] = 0.45 * w
   return out
 }
