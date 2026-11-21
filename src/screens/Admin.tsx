@@ -5,9 +5,9 @@ import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { BodyMap } from '../components/BodyMap'
 import { SearchIcon } from '../components/icons'
 import { Button, Card, Chips, ErrorText, Input, Segmented, Select, Sheet, Spinner } from '../components/ui'
-import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, label, resetExercises } from '../lib/exercises'
+import { EQUIPMENT, KINDS, defaultLogTip, label, resetExercises } from '../lib/exercises'
 import { timeAgo } from '../lib/format'
-import { intensityForExercise } from '../lib/muscles'
+import { intensityForExercise, primaryOptions, secondaryOptions } from '../lib/muscles'
 import { errMsg, pb as appPb, type Exercise, type Feedback, type Kind } from '../lib/pb'
 import { ask } from '../components/Dialog'
 
@@ -89,14 +89,14 @@ function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>;
         {ex.owner && mode !== 'review' && <p className="rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">This is a user's custom exercise (@{ex.expand?.owner?.username ?? ex.owner}).</p>}
         <Input label="Name" value={f.name} onChange={(e) => set({ name: e.target.value })} />
         <div className="grid grid-cols-2 gap-2">
-          <Select label="Primary muscle" value={f.muscle} onChange={(muscle) => set({ muscle })} options={MUSCLES.map((m) => [m, label(m)])} />
+          <Select label="Primary muscle" value={f.muscle} onChange={(muscle) => set({ muscle })} options={primaryOptions(f.muscle, label)} />
           <Select label="Equipment" value={f.equipment} onChange={(equipment) => set({ equipment })} options={EQUIPMENT.map((m) => [m, label(m)])} />
         </div>
         <Select label="Tracking" value={f.kind} onChange={(v) => set({ kind: v as Kind })} options={KINDS} />
         <div>
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
           <div className="flex flex-wrap gap-1.5">
-            {MUSCLES.filter((m) => m !== f.muscle && m !== 'cardio' && m !== 'full_body').map((m) => (
+            {secondaryOptions(f.muscle, f.secondary).map((m) => (
               <button key={m} type="button" onClick={() => set({ secondary: f.secondary.includes(m) ? f.secondary.filter((x) => x !== m) : [...f.secondary, m] })}
                 className={`h-8 rounded-full px-3 text-sm font-semibold ${f.secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
             ))}

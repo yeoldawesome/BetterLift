@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { EQUIPMENT, KINDS, MUSCLES, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, quickUsage, recentUsage, usageFrom, type Usage } from '../lib/exercises'
+import { EQUIPMENT, KINDS, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, quickUsage, recentUsage, usageFrom, type Usage } from '../lib/exercises'
+import { FILTER_MUSCLES, MUSCLE_GROUPS, matchesMuscle, primaryOptions, secondaryOptions } from '../lib/muscles'
 import { cachedStats, invalidateStats } from '../lib/statsData'
 import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
@@ -31,6 +32,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
   const dupes = useMemo(() => (all ? findDuplicates(all) : []), [all])
   const [q, setQ] = useState('')
   const [muscle, setMuscle] = useState('')
+  const [group, setGroup] = useState('') // top-level chip; Back / Shoulders open a row of their muscles
   // Adding to a workout or routine opens on your most-performed lifts; browsing the library opens on All.
   const [show, setShow] = useState<Show>(onPick ? 'most' : 'all')
   const [sort, setSort] = useState<Sort>(onPick ? 'most' : 'name')
@@ -75,7 +77,7 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
     const monthAgo = Date.now() - 30 * 86400000
     const count = (e: Exercise) => usage.get(e.id)?.count ?? 0
     const last = (e: Exercise) => usage.get(e.id)?.last ?? 0
-    const base = (all ?? []).filter((e) => !muscle || e.muscle === muscle)
+    const base = (all ?? []).filter((e) => matchesMuscle(e.muscle, muscle))
     if (q.trim()) {
       // Searching looks through every exercise (not just Most performed / Recent), best match first.
       const hits = searchExercises(base, q)
@@ -133,7 +135,10 @@ export function ExerciseList({ onPick, multi, openId }: { onPick?: (ex: Exercise
           <option value="recent">Recently performed</option>
         </select>
       </div>
-      <Chips value={muscle} onChange={setMuscle} options={[['', 'All muscles'], ...MUSCLES.map((m) => [m, label(m)] as [string, string])]} />
+      <Chips value={group} onChange={(g) => { setGroup(g); setMuscle(g) }} options={[['', 'All muscles'], ...FILTER_MUSCLES.map((m) => [m, label(m)] as [string, string])]} />
+      {group in MUSCLE_GROUPS && (
+        <Chips value={muscle} onChange={setMuscle} options={[[group, `All ${group}`], ...MUSCLE_GROUPS[group].filter((m) => m !== group).map((m) => [m, label(m)] as [string, string])]} />
+      )}
       <Button variant="ghost" onClick={() => setForm({})}>+ Create custom exercise</Button>
       {!onPick && dupes.length > 0 && (
         <button onClick={() => setMerging(true)} className="flex w-full items-center gap-3 rounded-2xl border border-accent/40 bg-accent/10 p-3 text-left">
@@ -228,11 +233,11 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
           </div>
         )}
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
-        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={MUSCLES.map((m) => [m, label(m)])} />
+        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
         <div>
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
           <div className="flex flex-wrap gap-1.5">
-            {MUSCLES.filter((m) => m !== muscle && m !== 'cardio' && m !== 'full_body').map((m) => (
+            {secondaryOptions(muscle, secondary).map((m) => (
               <button key={m} type="button" onClick={() => toggleSec(m)} className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
             ))}
           </div>
@@ -310,11 +315,11 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
       <div className="space-y-3 pb-8">
         <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">This is an official exercise. Your changes only apply to <span className="font-bold text-ink">you</span> — everyone else keeps the original. Your logged sets aren't affected.</p>
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={MUSCLES.map((m) => [m, label(m)])} />
+        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
         <div>
           <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
           <div className="flex flex-wrap gap-1.5">
-            {MUSCLES.filter((m) => m !== muscle && m !== 'cardio' && m !== 'full_body').map((m) => (
+            {secondaryOptions(muscle, secondary).map((m) => (
               <button key={m} type="button" onClick={() => toggleSec(m)} className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
             ))}
           </div>

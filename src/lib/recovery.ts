@@ -3,7 +3,7 @@ import type { Exercise } from './pb'
 
 /** Hours for a muscle to fully recover from a hard session; big muscles take longer. */
 const HOURS: Record<MapMuscle, number> = {
-  chest: 60, back: 66, shoulders: 54, biceps: 48, triceps: 48, forearms: 36,
+  chest: 60, lats: 66, traps: 54, upper_back: 60, lower_back: 72, front_delts: 54, side_delts: 48, rear_delts: 48, biceps: 48, triceps: 48, forearms: 36,
   quads: 72, hamstrings: 72, glutes: 66, adductors: 60, calves: 42, core: 36,
 }
 /** Weighted sets that fully tire a muscle. */
@@ -11,7 +11,8 @@ const FULL = 6
 export const RECOVERY_WINDOW_H = 96
 
 export const MUSCLE_NAMES: Record<MapMuscle, string> = {
-  chest: 'chest', back: 'back', shoulders: 'shoulders', biceps: 'biceps', triceps: 'triceps', forearms: 'forearms',
+  chest: 'chest', lats: 'lats', traps: 'traps', upper_back: 'upper back', lower_back: 'lower back',
+  front_delts: 'front delts', side_delts: 'side delts', rear_delts: 'rear delts', biceps: 'biceps', triceps: 'triceps', forearms: 'forearms',
   quads: 'quadriceps', hamstrings: 'hamstrings', glutes: 'glutes', adductors: 'adductors', calves: 'calves', core: 'core',
 }
 

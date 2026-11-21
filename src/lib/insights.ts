@@ -2,7 +2,7 @@
 // All weights returned are in the viewer's display unit unless a name ends in Kg.
 import type { BodyMetric } from './body'
 import { epley, fromUnit, toUnit } from './format'
-import { MAP_MUSCLES, muscleSetCounts, type MapMuscle } from './muscles'
+import { MAP_MUSCLES, muscleGroup, muscleSetCounts, type MapMuscle } from './muscles'
 import type { Lift, Unit } from './pb'
 import type { StatRow } from './statsData'
 
@@ -133,8 +133,9 @@ export function improvement(series: LiftSeries[], from = 0, now = Date.now()): I
       }
       best = Math.max(best, p.v)
     }
-    const mu = muscle.get(s.muscle) ?? { gain: 0, lifts: 0 }
-    if (s.pts.length >= 3) muscle.set(s.muscle, { gain: mu.gain + total, lifts: mu.lifts + 1 })
+    const g = muscleGroup(s.muscle) // "back" / "shoulders" as a whole, not each part
+    const mu = muscle.get(g) ?? { gain: 0, lifts: 0 }
+    if (s.pts.length >= 3) muscle.set(g, { gain: mu.gain + total, lifts: mu.lifts + 1 })
   }
   // Every month from the first session to now, including empty ones.
   const list: Month[] = []

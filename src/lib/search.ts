@@ -19,7 +19,9 @@ const SYNONYMS: Record<string, string> = {
 
 // Words that mean a muscle group, for "chest", "back day", "rear delts" style searches.
 const MUSCLE_WORDS: Record<string, string[]> = {
-  chest: ['chest', 'pec'], back: ['back', 'lat', 'trap', 'row'], shoulders: ['shoulder', 'delt'], biceps: ['bicep', 'arm'], triceps: ['tricep', 'arm'],
+  chest: ['chest', 'pec'], back: ['back', 'lat', 'trap', 'row'], shoulders: ['shoulder', 'delt'],
+  lats: ['back', 'lat', 'row'], traps: ['back', 'trap', 'shrug'], upper_back: ['back', 'upper', 'rhomboid', 'row'], lower_back: ['back', 'lower', 'erector'],
+  front_delts: ['shoulder', 'delt', 'front'], side_delts: ['shoulder', 'delt', 'side', 'lateral'], rear_delts: ['shoulder', 'delt', 'rear', 'back'], biceps: ['bicep', 'arm'], triceps: ['tricep', 'arm'],
   forearms: ['forearm', 'grip', 'wrist'], quads: ['quad', 'leg', 'thigh'], hamstrings: ['hamstring', 'leg'], glutes: ['glute', 'butt', 'hip'],
   adductors: ['adductor', 'groin', 'inner'], calves: ['calf', 'leg'], core: ['core', 'ab', 'oblique'], cardio: ['cardio'], full_body: ['full', 'body'],
 }

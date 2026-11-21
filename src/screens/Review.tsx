@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Avatar, Button, Card, Empty, ErrorText, Input, Screen, Select, Spinner } from '../components/ui'
-import { EQUIPMENT, KINDS, MUSCLES, label, resetExercises } from '../lib/exercises'
+import { EQUIPMENT, KINDS, label, resetExercises } from '../lib/exercises'
 import { BodyMap } from '../components/BodyMap'
-import { intensityForExercise } from '../lib/muscles'
+import { intensityForExercise, primaryOptions, secondaryOptions } from '../lib/muscles'
 import { timeAgo } from '../lib/format'
 import { errMsg, pb, type Exercise, type Kind } from '../lib/pb'
 import { ask } from '../components/Dialog'
@@ -55,14 +55,14 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
       </div>
       <Input label="Name" value={name} onChange={(x) => setName(x.target.value)} />
       <div className="grid grid-cols-2 gap-2">
-        <Select label="Muscle" value={muscle} onChange={setMuscle} options={MUSCLES.map((m) => [m, label(m)])} />
+        <Select label="Muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
       </div>
       <Select label="Tracking" value={kind} onChange={(v) => setKind(v as Kind)} options={KINDS} />
       <div>
         <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">Secondary muscles</span>
         <div className="flex flex-wrap gap-1.5">
-          {MUSCLES.filter((m) => m !== muscle && m !== 'cardio' && m !== 'full_body').map((m) => (
+          {secondaryOptions(muscle, secondary).map((m) => (
             <button key={m} type="button" onClick={() => setSecondary((s) => (s.includes(m) ? s.filter((x) => x !== m) : [...s, m]))}
               className={`h-8 rounded-full px-3 text-sm font-semibold ${secondary.includes(m) ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{label(m)}</button>
           ))}

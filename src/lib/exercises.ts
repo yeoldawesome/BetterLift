@@ -3,7 +3,7 @@ import { idbDel, idbGet, idbSet } from './idb'
 import { loadStatsRows, warmStats } from './statsData'
 import { me, pb, type Exercise, type Kind, type Override, type WSet } from './pb'
 
-export const MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps', 'forearms', 'quads', 'hamstrings', 'glutes', 'adductors', 'calves', 'core', 'full_body', 'cardio']
+export { MUSCLES } from './muscles'
 export const EQUIPMENT = ['barbell', 'dumbbell', 'machine', 'cable', 'bodyweight', 'kettlebell', 'band', 'other']
 export const KINDS: [Kind, string][] = [['weight', 'Weight × reps'], ['bodyweight', 'Bodyweight reps'], ['assisted', 'Assisted'], ['duration', 'Timed'], ['cardio', 'Cardio']]
 export function defaultLogTip(kind: Kind, equipment = '') {
@@ -331,16 +331,18 @@ export function guessMuscle(name: string): string {
   const rules: [RegExp, string][] = [
     [/run|jog|bike|cycl|treadmill|elliptical|stair|walk|swim|rowing machine|erg|hike|sprint|basketball|soccer|tennis|jump(ing)? (rope|jack)/, 'cardio'],
     [/calf|calves/, 'calves'], [/wrist|forearm|grip|carry|reverse (ez.?bar |barbell |cable )?curl|dead hang/, 'forearms'],
-    [/reverse fly|rear delt|face pull|lateral raise|front raise|upright row|y.?raise/, 'shoulders'],
+    [/reverse fly|rear delt|face pull|reverse pec|y.?raise/, 'rear_delts'], [/lateral raise|side raise|upright row/, 'side_delts'], [/front raise/, 'front_delts'],
     [/close.?grip (incline )?bench|jm press|tricep|pushdown|skull|kickback(?!.*glute)|\bdip/, 'triceps'],
     [/adduct|inner thigh|copenhagen/, 'adductors'], [/leg curl|hamstring|romanian|rdl|stiff.?leg|good morning|nordic/, 'hamstrings'],
     [/hip thrust|glute|abduct|bridge|pull.?through|kettlebell swing|kb swing/, 'glutes'],
     [/squat|leg press|lunge|split|step.?up|leg extension|quad|sissy/, 'quads'],
     [/curl|bicep/, 'biceps'],
     [/crunch|plank|sit.?up|\babs?\b|core|twist|rotation|woodchop|pallof|leg raise|knee raise|hollow|dead bug|v.?up/, 'core'],
+    [/wide.?grip.*row|chest.?supported|seal row|\bt.?bar|inverted row|pendlay/, 'upper_back'],
     [/bench|chest|fly|pec|push.?up|incline press|decline press/, 'chest'],
-    [/shrug|row|pull|lat\b|pulldown|deadlift|back extension|hyperextension/, 'back'],
-    [/shoulder|overhead press|military|arnold|delt|\bpress\b/, 'shoulders'],
+    [/shrug/, 'traps'], [/back extension|hyperextension|superman|deadlift|rack pull/, 'lower_back'],
+    [/row|pull|lat\b|pulldown/, 'lats'],
+    [/shoulder|overhead press|military|arnold|delt|\bpress\b/, 'front_delts'],
     [/clean|snatch|jerk|thruster|burpee|swing|get.?up|sled/, 'full_body'],
   ]
   return rules.find(([re]) => has(name, re))?.[1] ?? 'full_body'
