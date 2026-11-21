@@ -14,6 +14,7 @@ import {
 } from '../lib/nutrition'
 import { errMsg, useUser } from '../lib/pb'
 import { fmtW } from '../lib/format'
+import { RESTAURANTS } from '../lib/restaurants'
 
 const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S']
 const weekStart = (d: string) => addDays(d, -parseDay(d).getDay())
@@ -35,7 +36,7 @@ export default function Nutrition() {
   const reload = useCallback(() => setTick((t) => t + 1), [])
 
   const [adding, setAdding] = useState<{ meal: Meal; tab: Tab } | null>(null)
-  const [editing, setEditing] = useState<FoodLog | null>(null)
+  const [editing, setEditing] = useState<{ log: FoodLog; item?: number } | null>(null)
   const [weighing, setWeighing] = useState(false)
   const [undo, setUndo] = useState<FoodLog | null>(null)
   useEffect(() => { if (!undo) return; const t = setTimeout(() => setUndo(null), 5000); return () => clearTimeout(t) }, [undo])
@@ -192,16 +193,31 @@ export default function Nutrition() {
               <div className="grid grid-cols-1 px-4 pb-2">
                 {items.map((l, i) => (
                   <SwipeRow key={l.id} label={`Delete ${l.name}`} onDelete={() => swipeDelete(l)}>
-                    <button onClick={() => setEditing(l)} className={`flex w-full items-center gap-3 py-2.5 text-left active:opacity-70 ${i ? 'border-t border-line' : ''}`}>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold">{l.name}</span>
-                        <span className="flex min-w-0 items-center gap-2">
-                          {l.detail && <span className="truncate text-xs text-muted">{l.detail}</span>}
-                          <MacroLine m={logMacros(l)} className="shrink-0" />
+                    <div className={i ? 'border-t border-line' : ''}>
+                      <button onClick={() => setEditing({ log: l })} className="flex w-full items-center gap-3 py-2.5 text-left active:opacity-70">
+                        <span className="min-w-0 flex-1">
+                          <span className="block truncate font-semibold">{l.name}</span>
+                          <span className="flex min-w-0 items-center gap-2">
+                            {l.detail && !(l.items && l.items.length > 1) && <span className="truncate text-xs text-muted">{l.detail}</span>}
+                            <MacroLine m={logMacros(l)} className="shrink-0" />
+                          </span>
                         </span>
-                      </span>
-                      <span className="num shrink-0 font-bold">{fmtK(l.kcal)}</span>
-                    </button>
+                        <span className="num shrink-0 font-bold">{fmtK(l.kcal)}</span>
+                      </button>
+                      {l.items && l.items.length > 1 && (
+                        // A meal lists what's in it; tap a line to edit that item.
+                        <ul className="-mt-1 mb-2 ml-1 border-l-2 border-line pl-3" aria-label={`${l.name} items`}>
+                          {l.items.map((it, k) => (
+                            <li key={k}>
+                              <button onClick={() => setEditing({ log: l, item: k })} className="flex w-full items-baseline gap-2 py-1 text-left text-sm active:opacity-70">
+                                <span className="min-w-0 flex-1 truncate"><span className="font-medium">{itemName(it.name, l.name)}</span>{it.detail && <span className="text-xs text-muted"> · {it.detail}</span>}</span>
+                                <span className="num shrink-0 text-xs font-semibold text-muted">{fmtK(it.macros.kcal)}</span>
+                              </button>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </SwipeRow>
                 ))}
               </div>
@@ -231,7 +247,7 @@ export default function Nutrition() {
         </div>
       )}
       {adding && <AddFood day={day} meal={adding.meal} tab={adding.tab} onClose={() => setAdding(null)} onAdded={onAdded} />}
-      {editing && <LogEditor log={editing} onClose={() => setEditing(null)} onChanged={reload} />}
+      {editing && <LogEditor log={editing.log} item={editing.item} onClose={() => setEditing(null)} onChanged={reload} />}
       {weighing && <WeighInSheet day={day} unit={unit} lastKg={weight?.weighIns[weight.weighIns.length - 1]?.kg ?? user.bodyweight_kg} onClose={() => setWeighing(false)} />}
     </Screen>
   )
@@ -315,4 +331,10 @@ function EnergyCard({ t, s, burn, kgText, ageKnown }: { t: Targets; s: Settings;
       <Link to="/nutrition/goals" className="mt-1 flex h-9 items-center justify-center rounded-2xl bg-surface-2 text-sm font-bold">{tracking ? 'Goals & expenditure' : 'Adjust goals & expenditure'}</Link>
     </Card>
   )
+}
+
+/** "Chipotle Chicken" reads as "Chicken" under a meal already named "Chipotle burrito". */
+function itemName(name: string, mealName: string) {
+  const brand = RESTAURANTS.find((r) => name.startsWith(`${r.name} `) && mealName.toLowerCase().includes(r.name.toLowerCase()))
+  return brand ? name.slice(brand.name.length + 1) : name
 }
