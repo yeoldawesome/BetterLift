@@ -7,6 +7,7 @@ import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type 
 import { errMsg, useUser } from '../../lib/pb'
 import { createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
+import { RESTAURANTS, type Restaurant } from '../../lib/restaurants'
 import { fmtK, MacroLine, MealChips, NumField, Stepper } from './bits'
 
 const Scanner = lazy(() => import('./Scanner'))
@@ -30,6 +31,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
   const [picked, setPicked] = useState<{ food: Food; source: Source } | null>(null)
   const [recent, setRecent] = useState<Food[]>([])
   const [q, setQ] = useState('')
+  const [rest, setRest] = useState<Restaurant | null>(null)
   const [quick, setQuick] = useState<QuickPrefill>({})
   const [toast, setToast] = useState('')
   const [scanKey, setScanKey] = useState(0)
@@ -88,7 +90,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
           <Describe day={day} meal={meal} recent={recent} collecting={!!collect} onMeal={(m) => !mealTouched && setMeal(m)} onSave={(ds) => save(ds, true)} onWeighed={onClose}
             onSearch={(s) => { setQ(s); go('search') }} onQuick={(p) => { setQuick(p); go('quick') }} />
         ) : tab === 'search' ? (
-          <Search q={q} setQ={setQ} recent={recent} meal={meal} onPick={(food) => setPicked({ food, source: food.source === 'recent' ? 'recent' : 'search' })}
+          <Search q={q} setQ={setQ} rest={rest} setRest={setRest} recent={recent} meal={meal} onPick={(food) => setPicked({ food, source: food.source === 'recent' ? 'recent' : 'search' })}
             onAdd={(d) => save([d], false)} />
         ) : tab === 'scan' ? (
           <Scan key={scanKey} onFound={(food) => setPicked({ food, source: 'barcode' })} onManual={(barcode) => { setQuick({ barcode, source: 'barcode' }); go('quick') }} />
@@ -226,7 +228,7 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
           <p className="font-bold text-ink">Two ways to use this</p>
           <p><span className="font-semibold text-ink">Know your numbers?</span> Type them: “40g protein 55g carbs 12g fat 480 cal”. They're logged exactly.</p>
           <p><span className="font-semibold text-ink">Just know the meal?</span> Describe it with amounts: “3 eggs, 2 slices of toast with butter and a coffee”. You'll get an estimate to review.</p>
-          <p><span className="font-semibold text-ink">Ate out?</span> Name the place: “Chipotle burrito with white rice, black beans, double chicken and cheese” or “Panda Express bowl with orange chicken and white rice” uses their menu.</p>
+          <p><span className="font-semibold text-ink">Ate out?</span> Name the place: “Chipotle burrito with white rice, black beans, double chicken and cheese” , “Panda Express bowl with orange chicken and white rice” or “chicken alfredo and 2 breadsticks at Olive Garden” uses their menu. Browse menus under Search.</p>
           <p><span className="font-semibold text-ink">Weighed in?</span> “I weigh 182” logs your weight.</p>
         </div>
       )}
@@ -254,13 +256,20 @@ function FoodRow({ food, onPick, onAdd }: { food: Food; onPick: () => void; onAd
   )
 }
 
-function Search({ q, setQ, recent, meal, onPick, onAdd }: {
-  q: string; setQ: (q: string) => void; recent: Food[]; meal: Meal; onPick: (f: Food) => void; onAdd: (d: Draft) => Promise<void>
+function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAdd }: {
+  q: string; setQ: (q: string) => void; rest: Restaurant | null; setRest: (r: Restaurant | null) => void; recent: Food[]; meal: Meal; onPick: (f: Food) => void; onAdd: (d: Draft) => Promise<void>
 }) {
   const [off, setOff] = useState<Food[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
   const local = useMemo(() => (q.trim() ? searchLocal(q, [...recent, ...LOCAL_FOODS], 15) : []), [q, recent])
+  const [mq, setMq] = useState('')
+  const restHits = useMemo(() => {
+    const t = q.trim().toLowerCase().replace(/[’']/g, '')
+    return t.length < 2 ? [] : RESTAURANTS.filter((r) => [r.name.toLowerCase(), ...r.aliases].some((a) => a.startsWith(t) || t.startsWith(a)))
+  }, [q])
+  const menuHits = useMemo(() => (q.trim().length >= 3 ? searchLocal(q, RESTAURANTS.flatMap((r) => r.foods), 6) : []), [q])
+  const menuList = useMemo(() => (!rest ? [] : mq.trim() ? searchLocal(mq, rest.foods, 100) : rest.foods), [rest, mq])
 
   useEffect(() => {
     setOff(null); setErr('')
@@ -284,22 +293,56 @@ function Search({ q, setQ, recent, meal, onPick, onAdd }: {
     </div>
   )
 
+  const restChips = (list: Restaurant[]) => (
+    <div className="flex flex-wrap gap-1.5">
+      {list.map((r) => (
+        <button key={r.id} onClick={() => { setRest(r); setMq('') }} className="h-9 rounded-full border border-line bg-surface px-3 text-sm font-semibold active:scale-[0.98]">
+          {r.name} <span className="text-xs text-muted">· {r.foods.length}</span>
+        </button>
+      ))}
+    </div>
+  )
+
+  if (rest) return (
+    <div className="space-y-3">
+      <button onClick={() => setRest(null)} className="-ml-1 flex items-center gap-1 text-sm font-semibold text-accent"><BackIcon width={18} height={18} /> Restaurants</button>
+      <div>
+        <h3 className="text-xl font-extrabold leading-tight">{rest.name} menu</h3>
+        <p className="text-xs text-muted">Standard portions from {rest.name}'s published nutrition info. Tap an item to change the amount.</p>
+      </div>
+      <div className="relative">
+        <SearchIcon width={18} height={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
+        <input value={mq} onChange={(e) => setMq(e.target.value)} placeholder={`Search ${rest.name}`} type="search" enterKeyHint="search"
+          className="h-12 w-full rounded-xl border border-line bg-surface-2 pl-10 pr-3 text-base outline-none placeholder:text-faint focus:border-accent" />
+      </div>
+      {menuList.length ? section(`${menuList.length} item${menuList.length === 1 ? '' : 's'}`, menuList) : <p className="px-1 text-sm text-muted">Nothing on the {rest.name} menu matches.</p>}
+    </div>
+  )
+
   return (
     <div className="space-y-3">
       <div className="relative">
         <SearchIcon width={18} height={18} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
-        <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="Search foods & brands" type="search" enterKeyHint="search"
+        <input value={q} onChange={(e) => setQ(e.target.value)} autoFocus placeholder="Search foods, brands & restaurants" type="search" enterKeyHint="search"
           className="h-12 w-full rounded-xl border border-line bg-surface-2 pl-10 pr-3 text-base outline-none placeholder:text-faint focus:border-accent" />
       </div>
       {!q.trim() ? (
-        recent.length ? section('Recent', recent.slice(0, 25)) : <p className="px-1 text-sm text-muted">Search common foods instantly, or packaged foods by name or brand (Open Food Facts).</p>
+        <>
+          <div>
+            <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Restaurant menus</p>
+            {restChips(RESTAURANTS)}
+          </div>
+          {recent.length ? section('Recent', recent.slice(0, 25)) : <p className="px-1 text-sm text-muted">Search common foods instantly, or packaged foods by name or brand (Open Food Facts).</p>}
+        </>
       ) : (
         <>
+          {restHits.length > 0 && restChips(restHits)}
+          {menuHits.length > 0 && section('Restaurant menus', menuHits)}
           {local.length > 0 && section('Common foods', local)}
           {off && off.length > 0 && section('Packaged foods', off, <span className="normal-case tracking-normal text-faint">Open Food Facts</span>)}
           {loading && <Spinner />}
           {err && <p className="px-1 text-sm text-muted">{err}</p>}
-          {!loading && off && !off.length && !local.length && <p className="px-1 text-sm text-muted">No matches. Try fewer words, or use Quick to type the numbers from the label.</p>}
+          {!loading && off && !off.length && !local.length && !menuHits.length && !restHits.length && <p className="px-1 text-sm text-muted">No matches. Try fewer words, or use Quick to type the numbers from the label.</p>}
           {q.trim().length > 0 && q.trim().length < 3 && !local.length && <p className="px-1 text-sm text-muted">Keep typing…</p>}
         </>
       )}

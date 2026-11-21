@@ -312,7 +312,7 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
     [TrendIcon, snap.mostImproved, `Most Improved (+${n0(snap.mostImprovedGain)} ${unit})`],
     [CalendarIcon, snap.activeWeekday, 'Day you train most often'],
     [HistoryIcon, snap.peakMonth, 'Your most active month'],
-    [StatsIcon, `${snap.perWeek}`, 'Avg Workouts / Week'],
+    [StatsIcon, `${snap.perWeek}`, 'Avg Workouts / Week Since Start', snap.firstDate ? `since ${day(snap.firstDate)}` : ''],
     [MuscleIcon, n0(snap.totalReps), 'Total Reps All Time'],
     [WorkoutIcon, snap.heaviest ? `${n0(snap.heaviest)} ${unit}` : '-', `Heaviest Lift${snap.heaviestExercise !== '-' ? ` (${snap.heaviestExercise})` : ''}`],
     [BoltIcon, `${snap.maxSetsInSession}`, 'Most Sets in One Day', day(snap.maxSetsDate)],
@@ -342,7 +342,7 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
             <Icon width={22} height={22} className="text-accent" aria-hidden />
             <span className={`num mt-1 w-full truncate font-black ${size(value)}`} title={value}>{value || '-'}</span>
             <span className="mt-0.5 text-[11px] font-semibold text-muted">{lbl}</span>
-            {date && <span className="mt-0.5 text-[10px] text-faint">{date.startsWith('on ') ? date : `set on ${date}`}</span>}
+            {date && <span className="mt-0.5 text-[10px] text-faint">{/^(on|since) /.test(date) ? date : `set on ${date}`}</span>}
           </div>
         ))}
       </div>

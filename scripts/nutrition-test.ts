@@ -65,6 +65,11 @@ ok(rs('panda plate with half chow mein half fried rice, beijing beef and broccol
   `Panda half-and-half plate (${rs('panda plate with half chow mein half fried rice, beijing beef and broccoli beef')})`)
 ok(rs('chipotle bowl with steak, extra guac and a coke') === '1×Chipotle Steak, 1.5×Chipotle Guacamole, 1×Soda', `extra + off-menu item (${rs('chipotle bowl with steak, extra guac and a coke')})`)
 ok(rs('2 chipotle tacos with chicken') === '6×Chipotle Taco tortilla, flour, 2×Chipotle Chicken', `tacos come in threes (${rs('2 chipotle tacos with chicken')})`)
+const og = 'I had chicken alfredo at olive garden with 2 breadsticks and a house salad with dressing'
+ok(rs(og) === '1×Olive Garden Chicken Alfredo, 2×Olive Garden Breadstick, 1×Olive Garden Famous House Salad (no dressing), 1×Olive Garden Signature Italian Dressing'
+  && estimateMeal(og).title === 'Olive Garden Chicken Alfredo', `Olive Garden order (${rs(og)} | ${estimateMeal(og).title})`)
+ok(rs('olive garden zuppa toscana, tiramisu') === '1×Olive Garden Zuppa Toscana, 1×Olive Garden Tiramisu', `Olive Garden soup + dessert (${rs('olive garden zuppa toscana, tiramisu')})`)
+ok(rs('olive garden chicken parm and fettuccine alfredo') === '1×Olive Garden Chicken Parmigiana, 1×Olive Garden Fettuccine Alfredo', `Olive Garden parm (${rs('olive garden chicken parm and fettuccine alfredo')})`)
 ok(!estimateMeal('chicken with chipotle mayo').restaurant, '"chipotle mayo" is a sauce, not the restaurant')
 ok(rs('white and brown rice') === '1×White rice, cooked, 1×Brown rice, cooked', `shared noun borrowed (${rs('white and brown rice')})`)
 

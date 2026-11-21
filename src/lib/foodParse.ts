@@ -273,5 +273,7 @@ export function estimateMeal(text: string, extra: Food[] = []): MealEstimate {
     if (format) mainCount = q.qty ?? 1
     else if (!isTop && !rest) mainCount = !q.unit || q.unit === 'count' ? q.qty ?? 1 : 1
   }
+  // No order format ("chicken alfredo and breadsticks at Olive Garden"): name the meal after its first dish.
+  if (rest && !title && items.length > 1) title = items[0].food.name
   return { items, unknown, restaurant: rest?.restaurant, title }
 }

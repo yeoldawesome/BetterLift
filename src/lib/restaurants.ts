@@ -78,6 +78,45 @@ Veggie Spring Roll|spring roll;veggie spring roll|1 roll|45|120|2|17|5
 Cream Cheese Rangoon|rangoon;crab rangoon;cream cheese rangoon|3 pieces|72|190|5|24|8
 `)
 
+const OLIVE = menu('olive', 'Olive Garden', `
+Breadstick|breadstick;breadsticks;bread stick;garlic breadstick;bread|1 breadstick|50|140|4|25|2.5
+Famous House Salad (no dressing)|house salad;salad;garden salad;famous house salad|1 serving|130|70|3|11|2
+Signature Italian Dressing|italian dressing;dressing;house dressing|1 serving (1.5 oz)|43|80|0|3|8
+Zuppa Toscana|zuppa toscana;zuppa;sausage potato soup|1 bowl|255|220|7|15|15
+Chicken & Gnocchi Soup|chicken gnocchi;chicken and gnocchi;chicken gnocchi soup;gnocchi soup|1 bowl|255|230|11|25|10
+Minestrone|minestrone;minestrone soup;vegetable soup|1 bowl|255|110|4|18|1.5
+Pasta e Fagioli|pasta e fagioli;pasta fagioli;fagioli|1 bowl|255|150|8|18|5
+Fettuccine Alfredo|fettuccine alfredo;fettuccini alfredo;alfredo;fettuccine|1 dinner|482|1310|36|116|75
+Chicken Alfredo|chicken alfredo;chicken fettuccine alfredo;chicken fettuccine;grilled chicken alfredo|1 dinner|595|1570|86|98|89
+Shrimp Alfredo|shrimp alfredo;shrimp fettuccine alfredo;shrimp fettuccine|1 dinner|560|1430|66|98|81
+Chicken & Shrimp Carbonara|carbonara;chicken and shrimp carbonara;chicken carbonara|1 dinner|560|1390|68|92|82
+Chicken Parmigiana|chicken parmigiana;chicken parm;chicken parmesan|1 dinner|595|1060|81|82|46
+Eggplant Parmigiana|eggplant parmigiana;eggplant parm;eggplant parmesan|1 dinner|595|1060|34|108|54
+Lasagna Classico|lasagna;lasagna classico;lasagne;meat lasagna|1 dinner|510|940|56|52|54
+Tour of Italy|tour of italy|1 dinner|680|1520|82|99|88
+Five Cheese Ziti al Forno|ziti;five cheese ziti;5 cheese ziti;ziti al forno;baked ziti|1 dinner|595|1080|44|113|49
+Spaghetti with Meat Sauce|spaghetti with meat sauce;spaghetti meat sauce;spaghetti bolognese;meat sauce|1 dinner|482|700|37|96|18
+Spaghetti with Marinara|spaghetti with marinara;spaghetti marinara;spaghetti;marinara pasta|1 dinner|425|480|17|87|7
+Spaghetti with Meatballs|spaghetti and meatballs;spaghetti with meatballs;spaghetti meatballs|1 dinner|595|1110|55|104|51
+Cheese Ravioli|cheese ravioli;ravioli|1 dinner|425|610|28|66|26
+Chicken Marsala|chicken marsala;marsala|1 dinner|510|840|63|48|45
+Chicken Scampi|chicken scampi|1 dinner|595|1050|59|89|51
+Shrimp Scampi|shrimp scampi;scampi|1 dinner|425|510|34|54|18
+Herb-Grilled Salmon|salmon;grilled salmon;herb grilled salmon|1 dinner|340|460|45|8|27
+6 oz Sirloin|sirloin;steak;6 oz sirloin;grilled sirloin|1 dinner|310|310|46|9|10
+Fried Mozzarella|fried mozzarella;mozzarella sticks;mozz sticks;cheese sticks|1 appetizer|255|900|38|64|56
+Calamari|calamari;fried calamari|1 appetizer|255|690|30|60|37
+Toasted Ravioli|toasted ravioli;fried ravioli|1 appetizer|255|600|25|56|30
+Grilled chicken (add-on)|add chicken;grilled chicken;chicken|1 portion|113|150|28|0|4
+Shrimp (add-on)|add shrimp;shrimp|1 portion|85|70|13|1|1.5
+Meatballs (add-on)|meatballs;meatball;add meatballs|2 meatballs|142|420|23|11|31
+Italian sausage (add-on)|sausage;italian sausage|1 portion|113|390|21|4|32
+Tiramisu|tiramisu|1 slice|142|470|7|47|28
+Black Tie Mousse Cake|black tie mousse cake;mousse cake;chocolate mousse cake|1 slice|170|750|9|75|47
+Chocolate Brownie Lasagna|chocolate brownie lasagna;brownie lasagna|1 slice|227|910|10|108|49
+Sicilian Cheesecake|cheesecake;sicilian cheesecake|1 slice|170|730|11|51|54
+`)
+
 export const RESTAURANTS: Restaurant[] = [
   {
     id: 'chipotle', name: 'Chipotle', aliases: ['chipotle', 'chipotles', 'chipotle mexican grill'], foods: CHIPOTLE,
@@ -96,6 +135,10 @@ export const RESTAURANTS: Restaurant[] = [
       { aliases: ['plate'], label: 'plate', adds: [] },
       { aliases: ['bowl'], label: 'bowl', adds: [] },
     ],
+  },
+  {
+    id: 'olive', name: 'Olive Garden', aliases: ['olive garden', 'olive gardens', 'olivegarden'], foods: OLIVE,
+    formats: [],
   },
 ]
 
