@@ -45,8 +45,10 @@ export interface Exercise extends RecordModel {
   name: string; muscle: string; equipment: string; kind: Kind; is_main_lift: boolean; main_lift: '' | Lift; owner: string
   review_status: ReviewStatus; review_note: string; submitted_by: string
   secondary: string[]; instructions: string; log_tip: string
+  /** Optional second primary muscle (incline bench: chest + front delts). */
+  muscle2?: string
   /** The official muscles, kept client-side when a personal edit replaces them. */
-  official?: Pick<Exercise, 'muscle' | 'secondary'>
+  official?: Pick<Exercise, 'muscle' | 'muscle2' | 'secondary'>
   /** Set client-side when the user has a personal edit of this exercise. */
   override?: string
   /** Per-lift rest defaults from the user's override: 0/undefined = use account default, -1 = off. */
@@ -83,7 +85,7 @@ export interface Friendship extends RecordModel { requester: string; addressee: 
 export interface Comment extends RecordModel { workout: string; user: string; body: string; parent: string; expand?: { user?: User } }
 export interface CustomReaction extends RecordModel { owner: string; name: string; image: string }
 export interface Reaction extends RecordModel { workout: string; user: string; emoji: Emoji; custom: string; expand?: { custom?: CustomReaction } }
-export interface Override extends RecordModel { user: string; exercise: string; name: string; muscle: string; secondary: string[]; equipment: string; instructions: string; log_tip: string; rest_s: number; rest_after_s: number }
+export interface Override extends RecordModel { user: string; exercise: string; name: string; muscle: string; muscle2: string; secondary: string[]; equipment: string; instructions: string; log_tip: string; rest_s: number; rest_after_s: number }
 export type FeedbackType = 'general' | 'exercise_request' | 'edit_request'
 export interface Feedback extends RecordModel {
   user: string; type: FeedbackType; exercise: string; message: string; proposal: Record<string, unknown> | null; status: '' | 'open' | 'done' | 'declined'; admin_note: string
