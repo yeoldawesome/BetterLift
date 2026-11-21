@@ -8,13 +8,14 @@ import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
 import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
-import { prLine, useBest, clearBestCache } from '../lib/best'
+import { prLine, progressionLine, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, num } from '../lib/format'
 import { CardioEffort } from '../components/nutrition/CardioEffort'
 import { SwipeRow } from '../components/SwipeRow'
 import { RoutineUpdatePicker } from '../components/RoutineUpdatePicker'
+import { RestInline } from '../components/RestBar'
 import { DragList } from '../components/DragList'
 import { selectAll } from '../lib/selectAll'
 import { isCardio } from '../lib/energy'
@@ -215,7 +216,8 @@ function ActiveWorkout() {
         box from blurring first (closing the keyboard shifts the layout and the tap would miss).
       */}
       <div className="sticky top-0 z-30 -mx-4 mb-4 mt-[calc(-1*env(safe-area-inset-top))] flex items-center justify-between gap-3 bg-canvas/90 px-4 pb-2 pt-[calc(env(safe-area-inset-top)+1rem)] backdrop-blur-xl" data-workout-header>
-        <div className="flex items-center gap-2 text-sm font-bold text-accent"><TimerIcon width={18} height={18} /><Elapsed since={a.startedAt} /></div>
+        <div className="flex shrink-0 items-center gap-2 text-sm font-bold text-accent"><TimerIcon width={18} height={18} /><Elapsed since={a.startedAt} /></div>
+        <RestInline />
         <Button size="sm" onPointerDown={(e) => e.preventDefault()} onClick={() => { (document.activeElement as HTMLElement | null)?.blur(); setFinishing(true) }}>Finish</Button>
       </div>
       <input value={a.name} onChange={(e) => update((w) => ({ ...w, name: e.target.value }))} className="mb-4 w-full bg-transparent text-3xl font-extrabold tracking-tight outline-none" />
@@ -443,6 +445,8 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   const prReps = parseInt(x.target) || Math.round(num(done[done.length - 1]?.r ?? '')) || x.prev[0]?.r || 5
   const workingW = num(done[done.length - 1]?.w ?? '') || num(x.sets.find((s) => s.w)?.w ?? '') || (x.prev[0]?.w ? Number(fmtW(x.prev[0].w, unit)) : 0) || (best?.w ? Number(fmtW(best.w, unit)) : 0)
   const pr = planning ? null : prLine(x.ex, best, prReps, unit, liveE1, liveReps, liveSec, workingW)
+  const work = done.filter((s) => s.type !== 'warmup' && s.type !== 'cooldown').map((s) => ({ w: num(s.w), r: Math.round(num(s.r)) }))
+  const prog = planning || k !== 'weight' ? null : progressionLine(x.prev, unit, work)
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
@@ -475,7 +479,8 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
           {collapsed
             ? <p className="num text-xs font-semibold text-muted">{planning ? `${x.sets.length} set${x.sets.length === 1 ? '' : 's'}` : `${done.length}/${x.sets.length} sets done`}</p>
             : <>
-              {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
+              {prog && <p className={`num text-xs font-semibold leading-snug ${prog.hit ? 'text-accent' : 'text-ink'}`} data-progression>{prog.text}</p>}
+              {pr && <p className={`num text-xs font-semibold leading-snug ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
               {x.target && !x.plan?.length && <p className="text-xs text-faint">Target {x.target} reps</p>}
             </>}
         </div>

@@ -11,7 +11,7 @@ import { fmtVol, fmtW, toUnit } from '../lib/format'
 import { loadWeight } from '../lib/nutrition'
 import { MAP_MUSCLES } from '../lib/muscles'
 import { me, nutritionOn, pb, useUser, type Routine, type RoutineExercise, type User, type WSet, type Workout } from '../lib/pb'
-import { nextUp, userPlan, type NextUp } from '../lib/plan'
+import { nextUp, savePlan, userPlan, type NextUp } from '../lib/plan'
 import { recovery, RECOVERY_WINDOW_H, recoverySummary } from '../lib/recovery'
 
 type Data = {
@@ -83,6 +83,14 @@ function NextWorkout({ user, data }: { user: User; data: Data }) {
     nav('/workout')
   }
   const routine = up.status === 'train' ? up.routine : up.status === 'none' ? null : up.next
+  const [skipping, setSkipping] = useState(false)
+  // Skip whatever's highlighted (a workout or a rest day): the plan moves on to the next workout.
+  const skip = async () => {
+    if (up.status === 'none') return
+    setSkipping(true)
+    try { await savePlan(user.id, { ...plan, skip: { step: up.status === 'done' ? up.nextStep : up.step, at: new Date().toISOString() } }); await pb.collection('users').authRefresh() }
+    catch { /* offline: nothing changes */ } finally { setSkipping(false) }
+  }
   const ex = routine ? data.preview.get(routine.id) ?? [] : []
   const sets = ex.reduce((t, x) => t + (x.target_sets || 1), 0)
   const label = up.status === 'rest' ? 'Rest day today' : up.status === 'done' ? (up.restFirst ? 'Done for today · rest next' : 'Done for today · up next') : up.status === 'train' && up.afterRest ? 'Rested up · today' : 'Up next'
@@ -111,7 +119,12 @@ function NextWorkout({ user, data }: { user: User; data: Data }) {
           </div>
           {/* Plan strip: where you are in the rotation. */}
           <PlanStrip user={user} routines={data.routines} current={up.status === 'done' ? up.nextStep : up.step} />
-          {routine && <Button variant={up.status === 'train' ? 'primary' : 'ghost'} onClick={() => launch(routine)}>{up.status === 'train' ? `Start ${routine.name}` : `Start ${routine.name} anyway`}</Button>}
+          <div className="flex gap-2">
+            {routine && <Button className="flex-1" variant={up.status === 'train' ? 'primary' : 'ghost'} onClick={() => launch(routine)}>{up.status === 'train' ? `Start ${routine.name}` : `Start ${routine.name} anyway`}</Button>}
+            <Button className={routine ? '!w-auto px-4' : 'flex-1'} variant="ghost" disabled={skipping} onClick={skip} data-skip-workout>
+              {skipping ? 'Skipping…' : up.status === 'rest' ? 'Skip rest' : 'Skip'}
+            </Button>
+          </div>
         </Card>
       )}
     </Section>

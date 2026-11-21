@@ -1,4 +1,4 @@
-import { MAP_MUSCLES, muscleSetCounts, type Intensity, type MapMuscle } from './muscles'
+import { isCardioEx, MAP_MUSCLES, muscleSetCounts, type Intensity, type MapMuscle } from './muscles'
 import type { Exercise } from './pb'
 
 /** Hours for a muscle to fully recover from a hard session; big muscles take longer. */
@@ -9,6 +9,8 @@ const HOURS: Record<MapMuscle, number> = {
 /** Weighted sets that fully tire a muscle. */
 const FULL = 6
 export const RECOVERY_WINDOW_H = 96
+/** Cardio (runs, bike, basketball…) tires legs far less than lifting: each set counts this much, capped, and it clears in a day and a half. */
+const CARDIO = { perSet: 0.12, max: 0.25, hours: 36 }
 
 export const MUSCLE_NAMES: Record<MapMuscle, string> = {
   chest: 'chest', lats: 'lats', traps: 'traps', upper_back: 'upper back', lower_back: 'lower back',
@@ -23,8 +25,12 @@ export function recovery(sessions: { at: Date; sets: { ex?: Ex }[] }[], now = ne
   for (const s of sessions) {
     const h = (now.getTime() - s.at.getTime()) / 3600000
     if (h < 0 || h > RECOVERY_WINDOW_H) continue
-    const counts = muscleSetCounts(s.sets)
-    for (const m of MAP_MUSCLES) fatigue[m] += Math.min(FULL, counts[m]) / FULL * Math.max(0, 1 - h / HOURS[m])
+    const counts = muscleSetCounts(s.sets.filter((x) => x.ex && !isCardioEx(x.ex)))
+    const cardio = muscleSetCounts(s.sets.filter((x) => x.ex && isCardioEx(x.ex)))
+    for (const m of MAP_MUSCLES) {
+      fatigue[m] += Math.min(FULL, counts[m]) / FULL * Math.max(0, 1 - h / HOURS[m])
+      fatigue[m] += Math.min(CARDIO.max, cardio[m] * CARDIO.perSet) * Math.max(0, 1 - h / CARDIO.hours)
+    }
   }
   return Object.fromEntries(MAP_MUSCLES.map((m) => [m, Math.max(0, 1 - Math.min(1, fatigue[m]))])) as Record<MapMuscle, number>
 }

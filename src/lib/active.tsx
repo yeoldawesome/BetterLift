@@ -14,7 +14,9 @@ export type Prev = { w: number; r: number; sec: number; dist: number }
 /** note: undefined = no note box shown. superset: shared id for exercises done back-to-back. */
 export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean
   /** Planned weight (kg) and reps per set, saved on the routine. Used before `prev` for placeholders / one-tap fill. */
-  plan?: PlanSet[] }
+  plan?: PlanSet[]
+  /** Last session's sets are still loading (the card shows right away; placeholders fill in when they arrive). */
+  prevPending?: boolean }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
 type Rest = { end: number; total: number; name?: string } | null
 
@@ -94,6 +96,21 @@ export function ActiveProvider({ children }: { children: ReactNode }) {
     pushed.current = end
   }, [rest])
 
+  // New exercise cards show at once; their "previous" sets load here in the background.
+  const loadingPrev = useRef(new Set<string>())
+  useEffect(() => {
+    for (const x of active?.exercises ?? []) {
+      if (!x.prevPending || loadingPrev.current.has(x.key)) continue
+      loadingPrev.current.add(x.key)
+      prevFor(x.ex.id).catch(() => [] as WSet[]).then((ss) => {
+        loadingPrev.current.delete(x.key)
+        const prev = ss.map((s) => ({ w: s.weight_kg, r: s.reps, sec: s.seconds, dist: s.distance_km }))
+        setActive((a) => (a && a.exercises.some((e) => e.key === x.key)
+          ? { ...a, exercises: a.exercises.map((e) => (e.key === x.key ? { ...e, prev: e.prev.length ? e.prev : prev, prevPending: undefined } : e)) } : a))
+      })
+    }
+  }, [active])
+
   const update = useCallback((fn: (a: Active) => Active) => setActive((a) => (a ? fn(a) : a)), [])
   const start = useCallback((name: string, routine = '', exercises: AEx[] = []) => {
     restored.current = true
@@ -116,9 +133,9 @@ export async function prevFor(exId: string, before?: string): Promise<WSet[]> {
   return res.items.filter((s) => s.workout === wid).sort((a, b) => a.set_index - b.set_index)
 }
 
+/** A new exercise card. Its previous sets aren't fetched here (that waited on the network): the workout loads them after it shows. */
 export async function makeEx(ex: Exercise, sets = 1, rest = DEFAULT_REST, target = '', restAfter = rest): Promise<AEx> {
-  const prev = (await prevFor(ex.id).catch(() => [])).map((s) => ({ w: s.weight_kg, r: s.reps, sec: s.seconds, dist: s.distance_km }))
-  return { key: newId(), ex, rest, restAfter, target, sets: Array.from({ length: Math.max(1, sets) }, emptySet), prev }
+  return { key: newId(), ex, rest, restAfter, target, sets: Array.from({ length: Math.max(1, sets) }, emptySet), prev: [], prevPending: true }
 }
 
 export async function routineExercises(routineId: string): Promise<AEx[]> {
@@ -250,6 +267,17 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
     rows.forEach((r, i) => { if (r.ex.id === id && r.e1 > 0 && (best < 0 || r.e1 > rows[best].e1)) best = i })
     if (best >= 0 && rows[best].e1 > (bestPrev.get(id) ?? 0) + 0.01) prs.add(best)
   }
+  // Rep records: more reps than ever at this weight or heavier (135 × 9 → 135 × 10), checked on each lift's top set.
+  await Promise.all(exIds.map(async (id) => {
+    let top = -1
+    rows.forEach((r, i) => { if (r.ex.id === id && r.e1 > 0 && r.kg > 0 && (top < 0 || r.kg > rows[top].kg || (r.kg === rows[top].kg && r.reps > rows[top].reps))) top = i })
+    if (top < 0 || [...prs].some((i) => rows[i].ex.id === id)) return
+    try {
+      const r = await pb.collection('workout_sets').getFirstListItem<WSet>(
+        pb.filter('user = {:u} && exercise = {:e} && completed = true && weight_kg >= {:w}', { u: uid, e: id, w: rows[top].kg - 0.01 }), { sort: '-reps', fields: 'reps' })
+      if (rows[top].reps > r.reps) prs.add(top)
+    } catch { /* never lifted this heavy before: the est. 1RM check above covers it */ }
+  }))
 
   const batch = pb.createBatch()
   batch.collection('workouts').create({

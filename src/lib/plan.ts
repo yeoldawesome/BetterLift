@@ -3,12 +3,18 @@ import { pb } from './pb'
 
 /** Weekly plan: a repeating rotation of routines and rest days, e.g. Push, Pull, Legs, Rest. */
 export type PlanStep = string // routine id or 'rest'
-export type Plan = { cycle: PlanStep[] }
+/** `skip`: the step you skipped and when; it moves you on to the next workout until you train again. */
+export type Plan = { cycle: PlanStep[]; skip?: { step: number; at: string } }
 export const REST = 'rest'
 
 export const userPlan = (u: Pick<User, 'plan'> | null | undefined): Plan => {
-  const c = (u?.plan as Plan | null)?.cycle
-  return { cycle: Array.isArray(c) ? c.filter((x) => typeof x === 'string').slice(0, 21) : [] }
+  const p = u?.plan as Plan | null
+  const c = p?.cycle
+  const sk = p?.skip
+  return {
+    cycle: Array.isArray(c) ? c.filter((x) => typeof x === 'string').slice(0, 21) : [],
+    ...(sk && typeof sk.step === 'number' && typeof sk.at === 'string' ? { skip: { step: sk.step, at: sk.at } } : {}),
+  }
 }
 export const savePlan = (userId: string, plan: Plan) => pb.collection('users').update(userId, { plan })
 
@@ -33,6 +39,12 @@ export function nextUp(plan: Plan, routines: Routine[], recent: Pick<Workout, 'r
   const firstLift = (from: number) => { for (let k = 0; k < n; k++) { const i = (from + k) % n; if (cycle[i] !== REST) return i } return -1 }
 
   const last = recent.find((w) => w.routine && cycle.includes(w.routine))
+  // Skipped since your last planned workout: the next workout after the skipped spot is up now.
+  const sk = plan.skip
+  if (sk && sk.step >= 0 && sk.step < n && (!last || new Date(sk.at) > new Date(last.started_at))) {
+    const i = firstLift(sk.step + 1)
+    return { status: 'train', step: i, routine: byId.get(cycle[i])!, afterRest: false }
+  }
   if (!last) { const i = firstLift(0); return { status: 'train', step: i, routine: byId.get(cycle[i])!, afterRest: false } }
 
   // A routine can appear twice (Push, Pull, Legs, Push, Pull, Legs, Rest): pick the spot that follows the workout before it.
