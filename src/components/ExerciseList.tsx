@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { EQUIPMENT, KINDS, defaultLogTip, findDuplicates, guessEquipment, guessKind, guessMuscle, label, loadExercises, loadUsage, mergeExercise, cachedExercises, cachedUsage, freshExercises, quickUsage, recentUsage, usageFrom, type Usage } from '../lib/exercises'
-import { FILTER_MUSCLES, MUSCLE_GROUPS, cleanMuscles, matchesMuscle, primaryLabel, primaryOptions } from '../lib/muscles'
-import { MuscleChips } from './MuscleChips'
+import { FILTER_MUSCLES, MUSCLE_GROUPS, cleanMuscles, matchesMuscle, primariesOf, primaryLabel } from '../lib/muscles'
+import { MusclePicker } from './MusclePicker'
 import { cachedStats, invalidateStats } from '../lib/statsData'
 import { clearBestCache } from '../lib/best'
 import { timeAgo } from '../lib/format'
@@ -196,9 +196,8 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
   const [mergeMsg, setMergeMsg] = useState('')
   const n0 = initial?.name ?? name0
   const [name, setName] = useState(n0)
-  const [muscle, setMuscle] = useState(initial?.muscle ?? guessMuscle(n0))
+  const [prim, setPrim] = useState<string[]>(() => initial ? primariesOf(initial) : [guessMuscle(n0)])
   const [secondary, setSecondary] = useState<string[]>(initial?.secondary ?? [])
-  const [muscle2, setMuscle2] = useState(initial?.muscle2 ?? '')
   const [equipment, setEquipment] = useState(initial?.equipment ?? guessEquipment(n0))
   const [kind, setKind] = useState<Kind>(initial?.kind ?? guessKind(n0))
   const [instructions, setInstructions] = useState(initial?.instructions ?? '')
@@ -215,7 +214,7 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
     if (review && (!instrOk || !tipOk)) return setErr('To submit for review, describe how to perform it (20+ characters) and how to log it.')
     setErr(''); setBusy(true)
     const data = {
-      name: name.trim(), ...cleanMuscles(muscle, muscle2, secondary), equipment, kind,
+      name: name.trim(), ...cleanMuscles(prim, secondary), equipment, kind,
       instructions: instructions.trim(), log_tip: tip.trim(), review_status: review ? 'pending' : initial?.review_status === 'pending' ? '' : (initial?.review_status ?? ''),
     }
     try {
@@ -234,8 +233,7 @@ function ExerciseForm({ initial, lib, name0, review0, onClose, onSaved }: { init
           </div>
         )}
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus={!initial} />
-        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
-        <MuscleChips muscle={muscle} muscle2={muscle2} onMuscle2={setMuscle2} secondary={secondary} onChange={setSecondary} />
+<MusclePicker primaries={prim} secondary={secondary} onChange={(v) => { setPrim(v.primaries); setSecondary(v.secondary) }} />
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
         <Select label="Tracking (how sets are logged)" value={kind} onChange={(v) => setKind(v as Kind)} options={KINDS} />
         <label className="block">
@@ -279,9 +277,8 @@ export function ExercisePicker({ onPick, onClose }: { onPick: (ex: Exercise[]) =
 /** Edit an official exercise just for yourself (stored as a personal override). Optionally suggest it to everyone. */
 function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () => void; onSaved: () => void }) {
   const [name, setName] = useState(ex.name)
-  const [muscle, setMuscle] = useState(ex.muscle)
+  const [prim, setPrim] = useState<string[]>(() => primariesOf(ex))
   const [secondary, setSecondary] = useState<string[]>(ex.secondary ?? [])
-  const [muscle2, setMuscle2] = useState(ex.muscle2 ?? '')
   const [equipment, setEquipment] = useState(ex.equipment)
   const [instructions, setInstructions] = useState(ex.instructions ?? '')
   const [logTip, setLogTip] = useState(ex.log_tip ?? '')
@@ -291,11 +288,11 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
 
   const save = async () => {
     setErr(''); setBusy(true)
-    const mus = cleanMuscles(muscle, muscle2, secondary)
+    const mus = cleanMuscles(prim, secondary)
     // Unchanged muscles are left blank so you keep following the official ones (and any later fixes to them).
     const off = ex.official ?? ex, same = (a: string[] = [], b: string[] = []) => a.length === b.length && a.every((m) => b.includes(m))
-    const follow = mus.muscle === off.muscle && mus.muscle2 === (off.muscle2 ?? '') && same(mus.secondary, off.secondary)
-    const data = { name: name.trim(), ...(follow ? { muscle: '', muscle2: '', secondary: [] } : mus), equipment, instructions: instructions.trim(), log_tip: logTip.trim() }
+    const follow = same(mus.primaries, primariesOf(off)) && same(mus.secondary, off.secondary)
+    const data = { name: name.trim(), ...(follow ? { muscle: '', primaries: [], secondary: [] } : mus), equipment, instructions: instructions.trim(), log_tip: logTip.trim() }
     try {
       if (ex.override) await pb.collection('exercise_overrides').update(ex.override, data)
       else await pb.collection('exercise_overrides').create({ ...data, user: me(), exercise: ex.id })
@@ -313,8 +310,7 @@ function PersonalEditForm({ ex, onClose, onSaved }: { ex: Exercise; onClose: () 
       <div className="space-y-3 pb-8">
         <p className="rounded-xl bg-surface-2 p-3 text-sm text-muted">This is an official exercise. Your changes only apply to <span className="font-bold text-ink">you</span> — everyone else keeps the original. Your logged sets aren't affected.</p>
         <Input label="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <Select label="Primary muscle" value={muscle} onChange={setMuscle} options={primaryOptions(muscle, label)} />
-        <MuscleChips muscle={muscle} muscle2={muscle2} onMuscle2={setMuscle2} secondary={secondary} onChange={setSecondary} />
+<MusclePicker primaries={prim} secondary={secondary} onChange={(v) => { setPrim(v.primaries); setSecondary(v.secondary) }} />
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
         <p className="text-xs text-muted">Tracking type: {KINDS.find(([k]) => k === ex.kind)?.[1]} (can't change on official exercises — it would mix up your logged sets)</p>
         <label className="block">

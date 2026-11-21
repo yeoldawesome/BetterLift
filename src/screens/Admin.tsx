@@ -7,8 +7,8 @@ import { SearchIcon } from '../components/icons'
 import { Button, Card, Chips, ErrorText, Input, Segmented, Select, Sheet, Spinner } from '../components/ui'
 import { EQUIPMENT, KINDS, defaultLogTip, label, resetExercises } from '../lib/exercises'
 import { timeAgo } from '../lib/format'
-import { cleanMuscles, intensityForExercise, primaryLabel, primaryOptions } from '../lib/muscles'
-import { MuscleChips } from '../components/MuscleChips'
+import { cleanMuscles, intensityForExercise, primariesOf, primaryLabel } from '../lib/muscles'
+import { MusclePicker } from '../components/MusclePicker'
 import { errMsg, pb as appPb, type Exercise, type Feedback, type Kind } from '../lib/pb'
 import { ask } from '../components/Dialog'
 
@@ -67,14 +67,14 @@ function AdminLogin({ onDone }: { onDone: () => void }) {
 /** Edit any exercise field (admin). `onAction` adds review buttons for pending submissions. */
 function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>; mode: 'edit' | 'create' | 'review'; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
-    name: ex.name ?? '', muscle: ex.muscle ?? 'chest', equipment: ex.equipment ?? 'barbell', kind: (ex.kind ?? 'weight') as Kind,
-    secondary: ex.secondary ?? [], muscle2: ex.muscle2 ?? '', instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
+    name: ex.name ?? '', primaries: ex.muscle ? primariesOf({ muscle: ex.muscle, primaries: ex.primaries }) : ['chest'], equipment: ex.equipment ?? 'barbell', kind: (ex.kind ?? 'weight') as Kind,
+    secondary: ex.secondary ?? [], instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
   })
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }))
-  const data = { ...f, ...cleanMuscles(f.muscle, f.muscle2, f.secondary), name: f.name.trim(), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
+  const data = { ...f, ...cleanMuscles(f.primaries, f.secondary), name: f.name.trim(), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
 
   const run = async (p: () => Promise<unknown>) => {
     setErr(''); setBusy(true)
@@ -90,12 +90,11 @@ function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>;
         {ex.owner && mode !== 'review' && <p className="rounded-xl bg-amber-400/10 p-3 text-sm text-amber-300">This is a user's custom exercise (@{ex.expand?.owner?.username ?? ex.owner}).</p>}
         <Input label="Name" value={f.name} onChange={(e) => set({ name: e.target.value })} />
         <div className="grid grid-cols-2 gap-2">
-          <Select label="Primary muscle" value={f.muscle} onChange={(muscle) => set({ muscle })} options={primaryOptions(f.muscle, label)} />
           <Select label="Equipment" value={f.equipment} onChange={(equipment) => set({ equipment })} options={EQUIPMENT.map((m) => [m, label(m)])} />
+          <Select label="Tracking" value={f.kind} onChange={(v) => set({ kind: v as Kind })} options={KINDS} />
         </div>
-        <Select label="Tracking" value={f.kind} onChange={(v) => set({ kind: v as Kind })} options={KINDS} />
-        <MuscleChips muscle={f.muscle} muscle2={f.muscle2} onMuscle2={(muscle2) => set({ muscle2 })} secondary={f.secondary} onChange={(secondary) => set({ secondary })} />
-        <div className="flex justify-center rounded-2xl bg-surface-2 py-2"><BodyMap intensity={intensityForExercise(f)} className="h-32" /></div>
+        <MusclePicker primaries={f.primaries} secondary={f.secondary} onChange={set} />
+        <div className="flex justify-center rounded-2xl bg-surface-2 py-2"><BodyMap intensity={intensityForExercise({ muscle: f.primaries[0] ?? '', ...f })} className="h-32" /></div>
         <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to perform (one step per line)</span>
           <textarea rows={5} value={f.instructions} onChange={(e) => set({ instructions: e.target.value })} className={areaCls} /></label>
         <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to log it</span>

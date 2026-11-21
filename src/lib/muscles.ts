@@ -27,26 +27,23 @@ export const FILTER_MUSCLES = ['chest', 'back', 'shoulders', 'biceps', 'triceps'
 /** The group a muscle rolls up to (lats → back, side delts → shoulders); anything else is its own group. */
 export const muscleGroup = (m: string) => (DELT_MUSCLES as readonly string[]).includes(m) || m === 'shoulders' ? 'shoulders' : MUSCLE_GROUPS.back.includes(m) ? 'back' : m
 const matchOne = (m: string, filter: string) => m === filter || (MUSCLE_GROUPS[filter]?.includes(m) ?? false)
-/** A muscle filter ("back", "lats", "chest") matches either of an exercise's primary muscles. */
-export const matchesMuscle = (ex: { muscle: string; muscle2?: string }, filter: string) =>
-  !filter || matchOne(ex.muscle, filter) || (!!ex.muscle2 && matchOne(ex.muscle2, filter))
-/** "Chest" or "Chest · Front delts" for an exercise with two primary muscles. */
-export const primaryLabel = (ex: { muscle: string; muscle2?: string }, label: (s: string) => string) =>
-  [ex.muscle, ex.muscle2].filter(Boolean).map((m) => label(m!)).join(' · ')
+type Prim = { muscle: string; primaries?: string[] }
+/** All of an exercise's primary muscles (older records only have the single `muscle`). */
+export const primariesOf = (ex: Prim) => (ex.primaries?.length ? ex.primaries : [ex.muscle].filter(Boolean))
+/** A muscle filter ("back", "lats", "chest") matches any of an exercise's primary muscles. */
+export const matchesMuscle = (ex: Prim, filter: string) => !filter || primariesOf(ex).some((m) => matchOne(m, filter))
+/** "Chest" or "Chest · Front delts" for an exercise with several primary muscles. */
+export const primaryLabel = (ex: Prim, label: (s: string) => string) => primariesOf(ex).map(label).join(' · ')
 
-/** Primary-muscle picker options; keeps a legacy value selectable if the exercise still has one. */
-export const primaryOptions = (cur: string | undefined, label: (s: string) => string): [string, string][] =>
-  [...MUSCLES, ...(cur && LEGACY[cur] ? [cur] : [])].map((m) => [m, label(m)])
-/** Second primary muscle picker: optional, any body-graph muscle but the first primary. */
-export const secondPrimaryOptions = (primary: string, cur: string | undefined, label: (s: string) => string): [string, string][] =>
-  [['', 'None'], ...[...MAP_MUSCLES.filter((m) => m !== primary), ...(cur && LEGACY[cur] ? [cur] : [])].map((m): [string, string] => [m, label(m)])]
+/** Primary-muscle chips; keeps a legacy value selectable if the exercise still has one. */
+export const primaryOptions = (cur: string[] = []) => [...MUSCLES, ...cur.filter((m) => LEGACY[m])]
 /** Secondary-muscle chips: every muscle but the primaries, plus any legacy value already ticked (so it can be cleared). */
 export const secondaryOptions = (primaries: string[], cur: string[] = []) =>
   [...MAP_MUSCLES.filter((m) => !primaries.includes(m)), ...cur.filter((m) => LEGACY[m])]
-/** Tidy before saving: no second primary for full body / cardio or repeating the first; secondary without the primaries. */
-export const cleanMuscles = (muscle: string, muscle2: string, sec: string[] = []) => {
-  const m2 = muscle2 && muscle2 !== muscle && muscle !== 'full_body' && muscle !== 'cardio' ? muscle2 : ''
-  return { muscle, muscle2: m2, secondary: [...new Set(sec)].filter((m) => m !== muscle && m !== m2) }
+/** Tidy before saving: `muscle` is the first primary (sorting / grouping); secondary never repeats a primary. */
+export const cleanMuscles = (primaries: string[], sec: string[] = []) => {
+  const p = [...new Set(primaries)]
+  return { muscle: p[0] ?? '', primaries: p, secondary: [...new Set(sec)].filter((m) => !p.includes(m)) }
 }
 
 /** Heart strength from a number of cardio sets: any cardio shows clearly, more fills it in. */
@@ -57,16 +54,17 @@ const isMap = (m: string): m is MapMuscle => (MAP_MUSCLES as readonly string[]).
 const spread = (m: string): [MapMuscle, number][] => (isMap(m) ? [[m, 1]] : LEGACY[m] ?? [])
 const LEGS = ['quads', 'hamstrings', 'calves', 'glutes'] as const
 
-type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { muscle2?: string; kind?: Exercise['kind'] }
+type Ex = Pick<Exercise, 'muscle' | 'secondary'> & { primaries?: string[]; kind?: Exercise['kind'] }
 /** Lights the heart: exercises filed under the Cardio muscle group, or logged as the Cardio type (runs, bike, rower…). */
-export const isCardioEx = (ex: Ex) => ex.muscle === 'cardio' || ex.kind === 'cardio'
+export const isCardioEx = (ex: Ex) => primariesOf(ex).includes('cardio') || ex.kind === 'cardio'
 
 /** Weighted work per muscle for one set: each primary 1, secondary 0.5; "full body" spreads 0.4 everywhere; cardio leans on legs. */
 function work(ex: Ex, add: (m: MapMuscle, v: number) => void) {
-  if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => add(m, 0.4))
-  else if (ex.muscle === 'cardio') LEGS.forEach((m) => add(m, 0.5))
-  else for (const [m, w] of spread(ex.muscle)) add(m, w)
-  if (ex.muscle2) for (const [m, w] of spread(ex.muscle2)) add(m, w)
+  for (const p of primariesOf(ex)) {
+    if (p === 'full_body') MAP_MUSCLES.forEach((m) => add(m, 0.4))
+    else if (p === 'cardio') LEGS.forEach((m) => add(m, 0.5))
+    else for (const [m, w] of spread(p)) add(m, w)
+  }
   for (const s of ex.secondary ?? []) for (const [m, w] of spread(s)) add(m, 0.5 * w)
 }
 
@@ -97,10 +95,12 @@ export function muscleSetCounts(sets: { ex?: Ex }[]): Record<MapMuscle, number> 
 export function intensityForExercise(ex: Ex): Intensity {
   const out: Intensity = {}
   if (isCardioEx(ex)) out.cardio = 1
-  if (ex.muscle === 'full_body') MAP_MUSCLES.forEach((m) => { out[m] = 0.6 })
-  else if (ex.muscle === 'cardio') LEGS.forEach((m) => { out[m] = 0.6 })
-  else for (const [m, w] of spread(ex.muscle)) out[m] = w
-  if (ex.muscle2) for (const [m, w] of spread(ex.muscle2)) out[m] = Math.max(out[m] ?? 0, w)
+  const set = (m: MapMuscle, v: number) => { out[m] = Math.max(out[m] ?? 0, v) }
+  for (const p of primariesOf(ex)) {
+    if (p === 'full_body') MAP_MUSCLES.forEach((m) => set(m, 0.6))
+    else if (p === 'cardio') LEGS.forEach((m) => set(m, 0.6))
+    else for (const [m, w] of spread(p)) set(m, w)
+  }
   for (const s of ex.secondary ?? []) for (const [m, w] of spread(s)) if (!out[m]) out[m] = 0.45 * w
   return out
 }

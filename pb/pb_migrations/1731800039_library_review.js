@@ -1,11 +1,11 @@
 /// <reference path="../pb_data/types.d.ts" />
 
-// Exercises can have up to two primary muscles ("muscle" + optional "muscle2"): incline bench works chest and front
-// delts, flat bench is chest with front delts as a secondary. Every official exercise is re-checked against the new
+// Exercises can have several primary muscles ("primaries"; "muscle" stays the first one): incline bench works chest
+// and front delts, flat bench is chest with front delts as a secondary. Every official exercise is re-checked against the new
 // back/shoulder muscles. Personal edits that only repeated the old official muscles are cleared so those users pick up
 // the corrected ones.
 
-// "primary(+second primary) / secondary, secondary"
+// "primary+primary / secondary, secondary"
 const LIB = {
   // ---- chest. Incline (and feet-up) pressing makes the front delts a primary mover; flat/decline and flys use them as helpers.
   "Barbell Bench Press": "chest / triceps, front_delts",
@@ -65,8 +65,8 @@ const LIB = {
   "Inverted Row": "upper_back / lats, rear_delts, biceps, core",
 
   // ---- hinges / erectors
-  "Barbell Deadlift": "lower_back+glutes / hamstrings, adductors, quads, traps, lats, forearms, core",
-  "Deficit Deadlift": "lower_back+glutes / hamstrings, quads, traps, lats, forearms",
+  "Barbell Deadlift": "lower_back+glutes+hamstrings / adductors, quads, traps, lats, forearms, core",
+  "Deficit Deadlift": "lower_back+glutes+hamstrings / quads, traps, lats, forearms",
   "Rack Pull": "lower_back+traps / glutes, hamstrings, upper_back, forearms",
   "Back Extension": "lower_back / glutes, hamstrings",
   "Machine Back Extension": "lower_back / glutes, hamstrings",
@@ -256,8 +256,8 @@ const LIB = {
 const MUSCLES = ["chest", "back", "shoulders", "lats", "traps", "upper_back", "lower_back", "front_delts", "side_delts", "rear_delts", "biceps", "triceps", "forearms", "quads", "hamstrings", "glutes", "adductors", "calves", "core", "full_body", "cardio"]
 const parse = (spec) => {
   const [p, s] = spec.split("/")
-  const [muscle, muscle2] = p.trim().split("+")
-  return { muscle, muscle2: muscle2 || "", sec: s.split(",").map((x) => x.trim()).filter(Boolean) }
+  const primaries = p.trim().split("+")
+  return { muscle: primaries[0], primaries, sec: s.split(",").map((x) => x.trim()).filter(Boolean) }
 }
 const list = (r, f) => { const out = [], s = r.getStringSlice(f); for (let i = 0; i < s.length; i++) out.push(s[i]); return out }
 // Old whole-group names, for telling whether a personal edit just copied the official muscles.
@@ -267,7 +267,7 @@ const fold = (ms) => ms.map((m) => GROUP[m] || m).filter((m, i, a) => a.indexOf(
 migrate((app) => {
   for (const name of ["exercises", "exercise_overrides"]) {
     const c = app.findCollectionByNameOrId(name)
-    if (!c.fields.getByName("muscle2")) c.fields.add(new SelectField({ name: "muscle2", values: MUSCLES, maxSelect: 1 }))
+    if (!c.fields.getByName("primaries")) c.fields.add(new SelectField({ name: "primaries", values: MUSCLES, maxSelect: MUSCLES.length }))
     app.save(c)
   }
 
@@ -278,7 +278,7 @@ migrate((app) => {
     official.set(r.id, { before: { muscle: r.getString("muscle"), sec: list(r, "secondary") }, after: parse(LIB[name]) })
     const v = parse(LIB[name])
     r.set("muscle", v.muscle)
-    r.set("muscle2", v.muscle2)
+    r.set("primaries", v.primaries)
     r.set("secondary", v.sec)
     app.save(r)
   }
@@ -289,21 +289,21 @@ migrate((app) => {
     if (!ex) continue
     const mine = { muscle: GROUP[o.getString("muscle")] || o.getString("muscle"), sec: fold(list(o, "secondary")) }
     const same = (v) => mine.muscle === (GROUP[v.muscle] || v.muscle) && mine.sec === fold(v.sec)
-    if (same(ex.before) || same({ muscle: ex.after.muscle, sec: [ex.after.muscle2, ...ex.after.sec].filter(Boolean) })) {
+    if (same(ex.before) || same({ muscle: ex.after.muscle, sec: [...ex.after.primaries.slice(1), ...ex.after.sec] })) {
       o.set("muscle", "")
       o.set("secondary", [])
       app.save(o)
     }
   }
 }, (app) => {
-  // Second primary muscles become the first secondary muscle, then the field goes. Other muscle changes stay.
+  // Extra primary muscles become the first secondary muscles, then the field goes. Other muscle changes stay.
   for (const name of ["exercises", "exercise_overrides"]) {
-    for (const r of app.findRecordsByFilter(name, "muscle2 != ''", "", 0, 0)) {
-      r.set("secondary", [r.getString("muscle2"), ...list(r, "secondary")].filter((m, i, a) => a.indexOf(m) === i))
+    for (const r of app.findRecordsByFilter(name, "primaries != ''", "", 0, 0)) {
+      r.set("secondary", [...list(r, "primaries").slice(1), ...list(r, "secondary")].filter((m, i, a) => a.indexOf(m) === i && m !== r.getString("muscle")))
       app.save(r)
     }
     const c = app.findCollectionByNameOrId(name)
-    c.fields.removeByName("muscle2")
+    c.fields.removeByName("primaries")
     app.save(c)
   }
 })

@@ -5,7 +5,7 @@ import { distLabel, epley, fmtDate, fmtDist, fmtMin, fmtW, timeAgo, toDist } fro
 import { fmtMinutes, fmtPace } from '../lib/stats'
 import { estimateCardio, isCardio } from '../lib/energy'
 import { rpeLabel, usePerson } from './nutrition/CardioEffort'
-import { intensityForExercise } from '../lib/muscles'
+import { intensityForExercise, primariesOf } from '../lib/muscles'
 import { me, nutritionOn, pb, restFor, useUnit, useUser, userRest, userRestAfter, type Exercise, type Unit, type WSet } from '../lib/pb'
 import { saveLiftRest } from '../lib/exercises'
 import { RestPicker, restLabel } from './RestPicker'
@@ -110,9 +110,8 @@ function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Us
   return (
     <>
       <div className="flex flex-wrap gap-1.5">
-        <span className={`${tag} bg-accent text-accent-ink`}>{label(ex.muscle)}</span>
-        {ex.muscle2 && <span className={`${tag} bg-accent text-accent-ink`}>{label(ex.muscle2)}</span>}
-        {(ex.secondary ?? []).filter((m) => m !== ex.muscle && m !== ex.muscle2).map((m) => <span key={m} className={`${tag} bg-accent/20 text-accent`}>{label(m)}</span>)}
+        {primariesOf(ex).map((m) => <span key={m} className={`${tag} bg-accent text-accent-ink`}>{label(m)}</span>)}
+        {(ex.secondary ?? []).filter((m) => !primariesOf(ex).includes(m)).map((m) => <span key={m} className={`${tag} bg-accent/20 text-accent`}>{label(m)}</span>)}
         <span className={`${tag} bg-surface-2 text-muted`}>{label(ex.equipment)}</span>
         {ex.owner && <span className={`${tag} bg-surface-2 text-muted`}>Custom</span>}
       </div>

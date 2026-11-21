@@ -81,8 +81,8 @@ function fetchExercises() {
         // A personal muscle choice replaces primary + secondary; otherwise the official ones (and later fixes to them) apply.
         const mine = !!o.muscle
         return { ...e, override: o.id, name: o.name || e.name, equipment: o.equipment || e.equipment,
-          muscle: mine ? o.muscle : e.muscle, muscle2: mine ? o.muscle2 ?? '' : e.muscle2, secondary: mine ? o.secondary ?? [] : e.secondary,
-          official: { muscle: e.muscle, muscle2: e.muscle2, secondary: e.secondary }, instructions: o.instructions || e.instructions, log_tip: o.log_tip || e.log_tip,
+          muscle: mine ? o.muscle : e.muscle, primaries: mine ? o.primaries ?? [] : e.primaries, secondary: mine ? o.secondary ?? [] : e.secondary,
+          official: { muscle: e.muscle, primaries: e.primaries, secondary: e.secondary }, instructions: o.instructions || e.instructions, log_tip: o.log_tip || e.log_tip,
           rest_s: o.rest_s, rest_after_s: o.rest_after_s }
       }).sort((a, b) => a.name.localeCompare(b.name))
       idbSet(exKey(), out)
