@@ -1,18 +1,16 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { BellIcon, CalendarIcon, ChevronIcon, CommentIcon, DownIcon, ExercisesIcon, FriendsIcon, HistoryIcon, ImportIcon, PaletteIcon, PlusIcon, RoutinesIcon, SettingsIcon, SmileIcon, StatsIcon, TrendIcon, TrophyIcon } from '../components/icons'
-import { Avatar, Card, ErrorText, Stat } from '../components/ui'
+import { Avatar, Card, ErrorText } from '../components/ui'
 import { resizeImage } from '../lib/image'
 import { useNotifications } from '../lib/notifications'
-import { loadStreak, type Streak } from '../lib/streak'
-import { StreakCard } from './Workout'
 import { calendarLink } from './Calendar'
 import { resetExercises } from '../lib/exercises'
 import { idbClear } from '../lib/idb'
 import { disablePush } from '../lib/push'
 import { invalidateStats } from '../lib/statsData'
 import { fmtDur, fmtHeight, fmtVol, fmtW } from '../lib/format'
-import { errMsg, friendIds, me, nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
+import { errMsg, me,nutritionNew, pb, useUnit, useUser, type Friendship, type Unit, type Workout } from '../lib/pb'
 
 // Commit + build time of this copy of the app (set at build; "dev" when running locally).
 const VERSION = (() => {
@@ -27,12 +25,8 @@ type WRow = Pick<Workout, 'id' | 'started_at' | 'duration_s' | 'volume_kg'>
 export default function Profile() {
   const user = useUser()!
   const unit = useUnit()
-  const [total, setTotal] = useState(0)
-  const [friends, setFriends] = useState(0)
   const [pending, setPending] = useState(0)
-  const [prs, setPrs] = useState(0)
   const [toReview, setToReview] = useState(0)
-  const [streak, setStreak] = useState<Streak | null>(null)
   const [ws, setWs] = useState<WRow[]>([])
   const [photoMenu, setPhotoMenu] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -52,11 +46,8 @@ export default function Profile() {
   useEffect(() => {
     const uid = me()
     pb.collection('workouts').getFullList<WRow>({ filter: pb.filter('user = {:u}', { u: uid }), fields: 'id,started_at,duration_s,volume_kg', sort: 'started_at' })
-      .then((r) => { setWs(r); setTotal(r.length) }).catch(() => {})
-    loadStreak(uid).then(setStreak).catch(() => {})
-    friendIds().then((f) => setFriends(f.length)).catch(() => {})
+      .then(setWs).catch(() => {})
     pb.collection('friendships').getList<Friendship>(1, 1, { filter: pb.filter('addressee = {:u} && status = "pending"', { u: uid }) }).then((r) => setPending(r.totalItems)).catch(() => {})
-    pb.collection('workout_sets').getList(1, 1, { filter: pb.filter('user = {:u} && is_pr = true', { u: uid }), fields: 'id' }).then((r) => setPrs(r.totalItems)).catch(() => {})
     if (pb.authStore.record?.is_moderator) pb.collection('exercises').getList(1, 1, { filter: 'review_status = "pending"' }).then((r) => setToReview(r.totalItems)).catch(() => {})
   }, [])
 
@@ -106,12 +97,6 @@ export default function Profile() {
         <Link to="/profile/edit" className="absolute bottom-3 right-4 rounded-full bg-black/30 px-3 py-1 text-xs font-bold">Edit</Link>
       </div>
       <ErrorText>{err}</ErrorText>
-      {streak && <StreakCard s={streak} />}
-      <Card className="grid grid-cols-3 gap-2">
-        <Link to="/history"><Stat value={total} label="Workouts" /></Link>
-        <Link to="/friends"><Stat value={friends} label="Friends" /></Link>
-        <Link to="/stats"><Stat value={prs} label="PRs" /></Link>
-      </Card>
       <div className="grid grid-cols-5 gap-y-4 py-2">
         {tiles.map(({ to, label, icon: Icon, badge, dot }) => (
           <Link key={to} to={to} className="relative flex flex-col items-center gap-1 active:opacity-70">

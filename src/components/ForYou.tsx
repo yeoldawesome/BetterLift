@@ -109,12 +109,6 @@ function NextWorkout({ user, data }: { user: User; data: Data }) {
               <p className="text-sm text-muted">{ex.length} exercise{ex.length === 1 ? '' : 's'} · {sets} sets</p>
             </div>
           </div>
-          {ex.length > 0 && (
-            <div className="flex flex-wrap gap-1.5">
-              {ex.slice(0, 5).map((x, i) => <span key={i} className="rounded-full bg-surface-2 px-2.5 py-1 text-xs font-semibold text-muted">{x.expand!.exercise!.name}</span>)}
-              {ex.length > 5 && <span className="rounded-full px-1 py-1 text-xs font-semibold text-faint">+{ex.length - 5} more</span>}
-            </div>
-          )}
           {/* Plan strip: where you are in the rotation. */}
           <PlanStrip user={user} routines={data.routines} current={up.status === 'done' ? up.nextStep : up.step} />
           {routine && <Button variant={up.status === 'train' ? 'primary' : 'ghost'} onClick={() => launch(routine)}>{up.status === 'train' ? `Start ${routine.name}` : `Start ${routine.name} anyway`}</Button>}
