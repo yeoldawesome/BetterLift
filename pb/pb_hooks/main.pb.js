@@ -281,12 +281,17 @@ onRecordAfterUpdateSuccess((e) => {
 }, "feedback")
 
 // ---- Food search proxy (Nutrition tab) ----
-// GET /api/betterlift/food-search?q=…  → { products: [...] } in Open Food Facts product shape.
+// GET /api/betterlift/food-search?q=…  → { foods: [...] } from FatSecret (app food shape, see pb_hooks/fatsecret.js),
+// or, when FatSecret isn't configured / fails / finds nothing, { products: [...] } in Open Food Facts product shape.
 // Browsers can't call OFF's newer search service directly (it sends no CORS header) and the older endpoint is often
-// overloaded (503), so the server asks both: newer first, older as a fallback. Only the search text is sent to OFF.
+// overloaded (503), so the server asks both: newer first, older as a fallback. Only the search text is sent out.
 routerAdd("GET", "/api/betterlift/food-search", (e) => {
   const q = String(e.request.url.query().get("q") || "").trim().slice(0, 100)
   if (q.length < 2) return e.json(200, { products: [] })
+  try {
+    const foods = require(`${__hooks}/fatsecret.js`).search(q)
+    if (foods && foods.length) return e.json(200, { foods })
+  } catch (err) { console.log("fatsecret search failed, using Open Food Facts:", err) }
   const fields = "code,product_name,product_name_en,generic_name,brands,serving_size,serving_quantity,nutriments,quantity"
   const enc = encodeURIComponent(q)
   const urls = [

@@ -13,7 +13,7 @@ export type Food = {
   detail?: string
   /** First serving is the default. */
   servings: Serving[]
-  source: 'local' | 'off' | 'recent'
+  source: 'local' | 'off' | 'fatsecret' | 'recent'
   barcode?: string
   /** Local foods: other names it goes by (used for matching). */
   aliases?: string[]
@@ -368,12 +368,14 @@ const dedupe = (products: OffProduct[]) => {
 }
 
 /**
- * Search Open Food Facts for packaged foods. Goes through our own server (/api/betterlift/food-search), which can
- * reach OFF's newer search service; if the server doesn't have that route yet, calls OFF's older endpoint directly.
+ * Search foods & brands online. Goes through our own server (/api/betterlift/food-search), which asks FatSecret
+ * (results already in app shape) and falls back to Open Food Facts; if the server doesn't have that route yet,
+ * calls OFF's older endpoint directly.
  */
 export async function searchOff(q: string, signal?: AbortSignal): Promise<Food[]> {
   try {
-    const d = await pb.send<{ products?: OffProduct[] }>('/api/betterlift/food-search', { query: { q }, signal, requestKey: null })
+    const d = await pb.send<{ foods?: Food[]; products?: OffProduct[] }>('/api/betterlift/food-search', { query: { q }, signal, requestKey: null })
+    if (d.foods?.length) return d.foods.filter((f) => f.servings?.length)
     return dedupe(d.products ?? [])
   } catch (e) {
     const err = e as { status?: number; isAbort?: boolean; name?: string }

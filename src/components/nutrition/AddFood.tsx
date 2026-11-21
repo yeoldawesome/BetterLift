@@ -236,7 +236,7 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
   )
 }
 
-// ---------- Search: built-in foods, your recents, and Open Food Facts ----------
+// ---------- Search: built-in foods, your recents, and FatSecret (Open Food Facts as fallback) ----------
 
 function FoodRow({ food, onPick, onAdd }: { food: Food; onPick: () => void; onAdd: () => Promise<void> }) {
   const s = food.servings[0]
@@ -332,14 +332,17 @@ function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAdd }: {
             <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Restaurant menus</p>
             {restChips(RESTAURANTS)}
           </div>
-          {recent.length ? section('Recent', recent.slice(0, 25)) : <p className="px-1 text-sm text-muted">Search common foods instantly, or packaged foods by name or brand (Open Food Facts).</p>}
+          {recent.length ? section('Recent', recent.slice(0, 25)) : <p className="px-1 text-sm text-muted">Search common foods instantly, or any food, brand or restaurant item by name.</p>}
         </>
       ) : (
         <>
           {restHits.length > 0 && restChips(restHits)}
           {menuHits.length > 0 && section('Restaurant menus', menuHits)}
           {local.length > 0 && section('Common foods', local)}
-          {off && off.length > 0 && section('Packaged foods', off, <span className="normal-case tracking-normal text-faint">Open Food Facts</span>)}
+          {off && off.length > 0 && (off[0].source === 'fatsecret'
+            // FatSecret's free API requires this attribution wherever its data is shown.
+            ? section('Foods & brands', off, <a href="https://www.fatsecret.com" target="_blank" rel="noopener noreferrer" className="normal-case tracking-normal text-faint underline-offset-2 hover:underline">Powered by FatSecret</a>)
+            : section('Packaged foods', off, <span className="normal-case tracking-normal text-faint">Open Food Facts</span>))}
           {loading && <Spinner />}
           {err && <p className="px-1 text-sm text-muted">{err}</p>}
           {!loading && off && !off.length && !local.length && !menuHits.length && !restHits.length && <p className="px-1 text-sm text-muted">No matches. Try fewer words, or use Quick to type the numbers from the label.</p>}
