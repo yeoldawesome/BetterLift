@@ -107,21 +107,28 @@ export function ExerciseInfo({ ex, usage, userId, ownerName, initialTab = 'about
 function About({ ex, sex, usage, tag }: { ex: Exercise; sex?: string; usage?: Usage; tag: string }) {
   const steps = (ex.instructions || '').split('\n').map((s) => s.trim()).filter(Boolean)
   const u = usage?.get(ex.id)
+  const prim = primariesOf(ex)
+  const sec = (ex.secondary ?? []).filter((m) => !prim.includes(m))
   return (
     <>
       <div className="flex flex-wrap gap-1.5">
-        {primariesOf(ex).map((m) => <span key={m} className={`${tag} bg-accent text-accent-ink`}>{label(m)}</span>)}
-        {(ex.secondary ?? []).filter((m) => !primariesOf(ex).includes(m)).map((m) => <span key={m} className={`${tag} bg-accent/20 text-accent`}>{label(m)}</span>)}
         <span className={`${tag} bg-surface-2 text-muted`}>{label(ex.equipment)}</span>
         {ex.owner && <span className={`${tag} bg-surface-2 text-muted`}>Custom</span>}
       </div>
       <div className="flex justify-center rounded-3xl border border-line bg-surface py-4">
         <BodyMap sex={sex} intensity={intensityForExercise(ex)} className="h-56" labels />
       </div>
-      <div className="-mt-2 flex justify-center gap-4 text-xs text-muted">
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-accent" />Primary</span>
-        <span className="flex items-center gap-1.5"><span className="size-3 rounded-sm bg-accent/45" />Secondary</span>
-      </div>
+      {/* Muscle list doubles as the body graph's legend: swatch colours match the graph. */}
+      <dl className="-mt-1 space-y-1.5 text-sm">
+        <div className="flex gap-2">
+          <dt className="flex w-24 shrink-0 items-center gap-1.5 font-bold text-muted"><span className="size-3 rounded-sm bg-accent" />Primary</dt>
+          <dd className="font-semibold">{prim.map(label).join(', ') || '—'}</dd>
+        </div>
+        <div className="flex gap-2">
+          <dt className="flex w-24 shrink-0 items-center gap-1.5 font-bold text-muted"><span className="size-3 rounded-sm bg-accent/45" />Secondary</dt>
+          <dd className="font-semibold">{sec.map(label).join(', ') || 'None'}</dd>
+        </div>
+      </dl>
       <section>
         <h3 className="mb-2 text-sm font-bold uppercase tracking-wider text-muted">How to perform</h3>
         {steps.length ? (

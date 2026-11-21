@@ -91,6 +91,21 @@ export function muscleSetCounts(sets: { ex?: Ex }[]): Record<MapMuscle, number> 
   return out
 }
 
+/** Muscle groups for summaries: back and shoulder muscles rolled up into "back" and "shoulders". */
+export const SUMMARY_GROUPS = [...new Set(MAP_MUSCLES.map(muscleGroup))]
+
+/** Weighted set count per summary group; each set counts once per group (its strongest muscle there), so a row isn't counted for lats + upper back + traps. */
+export function groupSetCounts(sets: { ex?: Ex }[]): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(SUMMARY_GROUPS.map((g) => [g, 0]))
+  for (const { ex } of sets) {
+    if (!ex) continue
+    const per: Record<string, number> = {}
+    work(ex, (m, v) => { const g = muscleGroup(m); per[g] = Math.max(per[g] ?? 0, v) })
+    for (const [g, v] of Object.entries(per)) out[g] += v
+  }
+  return out
+}
+
 /** Highlight for a single exercise (info sheet): primaries full, secondary half. */
 export function intensityForExercise(ex: Ex): Intensity {
   const out: Intensity = {}

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { loadExercises } from './exercises'
+import { freshExercises, loadExercises } from './exercises'
 import { idbGet, idbSet } from './idb'
 import { pb, type Exercise, type Workout, type WSet } from './pb'
 
@@ -54,7 +54,8 @@ export function loadStatsRows(userId: string, force = false): Promise<StatRow[]>
         filter: pb.filter('user = {:u} && completed = true', { u: userId }), sort: 'performed_at', batch: 1000,
         fields: 'exercise,workout,performed_at,weight_kg,reps,seconds,distance_km', requestKey: null,
       }),
-      loadExercises(),
+      // The server copy of the library (not the instant on-device one), so muscle/name fixes show up; on-device copy when offline.
+      freshExercises().catch(() => loadExercises()),
       pb.collection('workouts').getFullList<Workout>({ filter: pb.filter('user = {:u}', { u: userId }), fields: 'id,name,duration_s', batch: 1000, requestKey: null }),
     ])
     const rows = join(sets, workouts, exercises)
