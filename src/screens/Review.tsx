@@ -34,7 +34,6 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
   const [kind, setKind] = useState<Kind>(e.kind)
   const [note, setNote] = useState('')
   const [secondary, setSecondary] = useState<string[]>(e.secondary ?? [])
-  const [co, setCo] = useState<string[]>(e.co_primary ?? [])
   const [instructions, setInstructions] = useState(e.instructions ?? '')
   const [logTip, setLogTip] = useState(e.log_tip ?? '')
   const [err, setErr] = useState('')
@@ -44,7 +43,7 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
     if (action === 'reject' && !note.trim() && !await ask({ title: 'Reject without a note?', body: 'A short reason helps the submitter.', confirmLabel: 'Reject', danger: true })) return
     setErr(''); setBusy(true)
     try {
-      await pb.send(`/api/betterlift/exercises/${e.id}/review`, { method: 'POST', body: { action, note: note.trim(), name: name.trim(), ...cleanMuscles(muscle, co, secondary), equipment, kind, instructions: instructions.trim(), log_tip: logTip.trim() } })
+      await pb.send(`/api/betterlift/exercises/${e.id}/review`, { method: 'POST', body: { action, note: note.trim(), name: name.trim(), ...cleanMuscles(muscle, secondary), equipment, kind, instructions: instructions.trim(), log_tip: logTip.trim() } })
       onDone()
     } catch (x) { setErr(errMsg(x)) } finally { setBusy(false) }
   }
@@ -61,9 +60,9 @@ function ReviewCard({ e, onDone }: { e: Exercise; onDone: () => void }) {
         <Select label="Equipment" value={equipment} onChange={setEquipment} options={EQUIPMENT.map((m) => [m, label(m)])} />
       </div>
       <Select label="Tracking" value={kind} onChange={(v) => setKind(v as Kind)} options={KINDS} />
-      <MuscleChips muscle={muscle} co={co} secondary={secondary} onChange={(v) => { setCo(v.co_primary); setSecondary(v.secondary) }} />
+      <MuscleChips muscle={muscle} secondary={secondary} onChange={setSecondary} />
       <div className="flex justify-center rounded-2xl bg-surface-2 py-2">
-        <BodyMap sex={e.expand?.owner?.sex} intensity={intensityForExercise({ muscle, co_primary: co, secondary })} className="h-32" />
+        <BodyMap sex={e.expand?.owner?.sex} intensity={intensityForExercise({ muscle, secondary })} className="h-32" />
       </div>
       <label className="block">
         <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to perform</span>

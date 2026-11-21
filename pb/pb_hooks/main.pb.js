@@ -11,7 +11,6 @@ routerAdd("POST", "/api/betterlift/exercises/{id}/review", (e) => {
   if (body.action === "approve") {
     for (const k of ["name", "muscle", "equipment", "kind", "instructions", "log_tip"]) if (body[k]) ex.set(k, String(body[k]))
     if (Array.isArray(body.secondary)) ex.set("secondary", body.secondary.map(String))
-    if (Array.isArray(body.co_primary)) ex.set("co_primary", body.co_primary.map(String))
     ex.set("submitted_by", ex.getString("owner"))
     ex.set("owner", "")
     ex.set("review_status", "approved")

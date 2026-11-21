@@ -31,9 +31,9 @@ export default function ForYou() {
     const since = new Date(Date.now() - RECOVERY_WINDOW_H * 3600000)
     Promise.all([
       pb.collection('routines').getFullList<Routine>({ filter: u, sort: 'position,created' }),
-      pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: u, sort: 'position', expand: 'exercise', fields: 'routine,target_sets,expand.exercise.name,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.co_primary,expand.exercise.kind' }),
+      pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: u, sort: 'position', expand: 'exercise', fields: 'routine,target_sets,expand.exercise.name,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.kind' }),
       pb.collection('workouts').getList<Workout>(1, 14, { filter: u, sort: '-started_at' }),
-      pb.collection('workout_sets').getFullList<WSet>({ filter: pb.filter('user = {:u} && performed_at >= {:d} && completed = true', { u: me(), d: since }), expand: 'exercise', fields: 'workout,performed_at,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.co_primary,expand.exercise.kind', batch: 1000 }),
+      pb.collection('workout_sets').getFullList<WSet>({ filter: pb.filter('user = {:u} && performed_at >= {:d} && completed = true', { u: me(), d: since }), expand: 'exercise', fields: 'workout,performed_at,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.kind', batch: 1000 }),
     ]).then(async ([routines, rex, last, sets]) => {
       const preview = new Map<string, RoutineExercise[]>()
       for (const r of rex) if (r.expand?.exercise) preview.set(r.routine, [...(preview.get(r.routine) ?? []), r])

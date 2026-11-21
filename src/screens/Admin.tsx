@@ -68,13 +68,13 @@ function AdminLogin({ onDone }: { onDone: () => void }) {
 function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>; mode: 'edit' | 'create' | 'review'; onClose: () => void; onSaved: () => void }) {
   const [f, setF] = useState({
     name: ex.name ?? '', muscle: ex.muscle ?? 'chest', equipment: ex.equipment ?? 'barbell', kind: (ex.kind ?? 'weight') as Kind,
-    secondary: ex.secondary ?? [], co_primary: ex.co_primary ?? [], instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
+    secondary: ex.secondary ?? [], instructions: ex.instructions ?? '', log_tip: ex.log_tip ?? '',
   })
   const [note, setNote] = useState('')
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const set = (patch: Partial<typeof f>) => setF((x) => ({ ...x, ...patch }))
-  const data = { ...f, ...cleanMuscles(f.muscle, f.co_primary, f.secondary), name: f.name.trim(), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
+  const data = { ...f, ...cleanMuscles(f.muscle, f.secondary), name: f.name.trim(), instructions: f.instructions.trim(), log_tip: f.log_tip.trim() || defaultLogTip(f.kind, f.equipment) }
 
   const run = async (p: () => Promise<unknown>) => {
     setErr(''); setBusy(true)
@@ -94,7 +94,7 @@ function ExerciseEditor({ ex, mode, onClose, onSaved }: { ex: Partial<Exercise>;
           <Select label="Equipment" value={f.equipment} onChange={(equipment) => set({ equipment })} options={EQUIPMENT.map((m) => [m, label(m)])} />
         </div>
         <Select label="Tracking" value={f.kind} onChange={(v) => set({ kind: v as Kind })} options={KINDS} />
-        <MuscleChips muscle={f.muscle} co={f.co_primary} secondary={f.secondary} onChange={set} />
+        <MuscleChips muscle={f.muscle} secondary={f.secondary} onChange={(secondary) => set({ secondary })} />
         <div className="flex justify-center rounded-2xl bg-surface-2 py-2"><BodyMap intensity={intensityForExercise(f)} className="h-32" /></div>
         <label className="block"><span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-muted">How to perform (one step per line)</span>
           <textarea rows={5} value={f.instructions} onChange={(e) => set({ instructions: e.target.value })} className={areaCls} /></label>
