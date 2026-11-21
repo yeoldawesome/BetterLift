@@ -32,7 +32,7 @@ const LIB = {
   "Push-Up": "chest / triceps, front_delts, core",
   "Incline Push-Up": "chest / triceps, front_delts",
   "Decline Push-Up": "chest+front_delts / triceps, core",
-  "Dip": "chest+triceps / front_delts",
+  "Dip": "chest / triceps",
   "Dumbbell Pullover": "chest+lats / triceps",
 
   // ---- vertical pulls and high rows: lats. The lower back does nothing here.
