@@ -263,7 +263,7 @@ function singular(w: string) {
 const keysOf = (f: Food) => [f.name.replace(/,.*$/, ''), f.name, ...(f.aliases ?? [])].map(norm)
 
 /** Index of `needle` as a contiguous run inside `hay`, or -1. */
-function findRun(hay: string[], needle: string[]) {
+export function findRun(hay: string[], needle: string[]) {
   outer: for (let i = 0; i + needle.length <= hay.length; i++) {
     for (let j = 0; j < needle.length; j++) if (hay[i + j] !== needle[j]) continue outer
     return i

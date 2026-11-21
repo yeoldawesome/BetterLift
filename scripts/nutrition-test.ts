@@ -52,6 +52,22 @@ ok(e9.items[0].food.name === 'Soda' && near(e9.items[0].servings, 1, 0.05), `12 
 const e10 = estimateMeal('cup noodles')
 ok(e10.items[0]?.food.name === 'Instant ramen', `"cup noodles" isn't read as a cup of noodles (${e10.items[0]?.food.name})`)
 
+// ---- Restaurant menus
+const rs = (t: string) => estimateMeal(t).items.map((i) => `${i.servings}×${i.food.name}`).join(', ')
+const c1 = estimateMeal('I got a burrito from Chipotle with white rice, brown and black beans, with double chicken and sour cream and cheese')
+ok(c1.restaurant?.id === 'chipotle' && c1.title === 'Chipotle burrito', `Chipotle detected (${c1.title})`)
+ok(rs('I got a burrito from Chipotle with white rice, brown and black beans, with double chicken and sour cream and cheese')
+  === '1×Chipotle Burrito tortilla, 1×Chipotle White rice, 1×Chipotle Pinto beans, 1×Chipotle Black beans, 2×Chipotle Chicken, 1×Chipotle Sour cream, 1×Chipotle Cheese' && !c1.unknown.length,
+  `Chipotle burrito items (${rs('I got a burrito from Chipotle with white rice, brown and black beans, with double chicken and sour cream and cheese')} | unknown: ${c1.unknown})`)
+const p1 = estimateMeal('I got a bowl from Panda Express with orange chicken and white rice')
+ok(p1.title === 'Panda Express bowl' && rs('I got a bowl from Panda Express with orange chicken and white rice') === '1×Panda Express Orange Chicken, 1×Panda Express White Steamed Rice', `Panda bowl (${rs('I got a bowl from Panda Express with orange chicken and white rice')})`)
+ok(rs('panda plate with half chow mein half fried rice, beijing beef and broccoli beef') === '0.5×Panda Express Chow Mein, 0.5×Panda Express Fried Rice, 1×Panda Express Beijing Beef, 1×Panda Express Broccoli Beef',
+  `Panda half-and-half plate (${rs('panda plate with half chow mein half fried rice, beijing beef and broccoli beef')})`)
+ok(rs('chipotle bowl with steak, extra guac and a coke') === '1×Chipotle Steak, 1.5×Chipotle Guacamole, 1×Soda', `extra + off-menu item (${rs('chipotle bowl with steak, extra guac and a coke')})`)
+ok(rs('2 chipotle tacos with chicken') === '6×Chipotle Taco tortilla, flour, 2×Chipotle Chicken', `tacos come in threes (${rs('2 chipotle tacos with chicken')})`)
+ok(!estimateMeal('chicken with chipotle mayo').restaurant, '"chipotle mayo" is a sauce, not the restaurant')
+ok(rs('white and brown rice') === '1×White rice, cooked, 1×Brown rice, cooked', `shared noun borrowed (${rs('white and brown rice')})`)
+
 // ---- Search & Open Food Facts
 ok(searchLocal('chick')[0]?.name.startsWith('Chicken'), `type-ahead "chick" (${searchLocal('chick')[0]?.name})`)
 ok(searchLocal('sesame seed oil')[0]?.name === 'Olive oil' && searchLocal('canola')[0]?.name === 'Olive oil', 'oils match the oil entry')

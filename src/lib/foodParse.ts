@@ -1,5 +1,6 @@
-import { bestMatch, LOCAL_FOODS, norm, type Food } from './foods'
+import { bestMatch, findRun, LOCAL_FOODS, norm, type Food } from './foods'
 import { kcalFrom, type Macros, type Meal, type Serving } from './nutrition'
+import { findRestaurant, type Restaurant } from './restaurants'
 
 /** Meal named in the text ("…for lunch"), if any. */
 export function mealIn(text: string): Meal | undefined {
@@ -69,7 +70,13 @@ export function parseMacros(text: string): ParsedMacros | null {
 // ---------- Meal estimate: "two chicken tacos with cheese and salsa and a diet soda" ----------
 
 export type EstItem = { food: Food; servings: number; said: string; approx?: boolean }
-export type MealEstimate = { items: EstItem[]; unknown: string[] }
+export type MealEstimate = {
+  items: EstItem[]; unknown: string[]
+  /** Restaurant named in the text ("…from Chipotle"): its menu was used first. */
+  restaurant?: Restaurant
+  /** A name for the whole meal: "Chipotle burrito", "Panda Express bowl". */
+  title?: string
+}
 
 const WORDNUM: Record<string, number> = {
   a: 1, an: 1, one: 1, single: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
@@ -183,23 +190,32 @@ const sizeOfLabel = (label: string) => { const w = Object.keys(SIZE).find((k) =>
 let protectedNames: string[] | null = null
 function protectList(extra: Food[]) {
   if (!protectedNames) protectedNames = LOCAL_FOODS.flatMap((f) => [f.name, ...(f.aliases ?? [])]).map((a) => a.toLowerCase()).filter((a) => /\s(and|with|n|on the)\s/.test(a))
-  return [...protectedNames, ...extra.map((f) => f.name.toLowerCase()).filter((a) => /\s(and|with)\s/.test(a))].sort((a, b) => b.length - a.length)
+  return [...protectedNames, ...extra.flatMap((f) => [f.name, ...(f.aliases ?? [])]).map((a) => a.toLowerCase()).filter((a) => /\s(and|with)\s/.test(a))].sort((a, b) => b.length - a.length)
 }
 
 const FILLER = /^(?:(?:i|we)\s+)?(?:just\s+)?(?:ate|had|have|got|drank|eaten|grabbed|ordered|made)\s+|^(?:then|also|plus|some|a side of|side of|side)\s+/
 
-/** Estimates the foods (and amounts) in a plain-English meal description. */
+/** Estimates the foods (and amounts) in a plain-English meal description. Uses a restaurant's menu when one is named. */
 export function estimateMeal(text: string, extra: Food[] = []): MealEstimate {
-  let t = ` ${text.toLowerCase().replace(/[’']/g, '').replace(/\bw\/\s*/g, ' with ')} `
+  const rest = findRestaurant(text)
+  let t = ` ${(rest ? rest.text : text).toLowerCase().replace(/[’']/g, '').replace(/\bw\/\s*/g, ' with ')} `
   t = t.replace(/\b(for|at|as)\s+(breakfast|lunch|dinner|supper|a snack|snack|dessert)\b/g, ' ')
   t = t.replace(/\b(\d+|one|two|three)\s+and\s+a\s+half\b/g, (_, n) => `${(parseNum(n) ?? WORDNUM[n]) + 0.5}`)
+  if (rest) {
+    // Ordering words: "double chicken", "extra guac", "light rice", "half white rice half brown rice".
+    t = t.replace(/\bdouble\b/g, '2').replace(/\btriple\b/g, '3').replace(/\bextra\b/g, '1.5').replace(/\b(light|easy on the|a little)\b/g, '0.5')
+      .replace(/([a-z]) half (?!a\b|an\b)/g, '$1, half ')
+  }
   t = t.replace(/(\d)([a-z])/g, '$1 $2').replace(/\b([a-z]+)(\d)/g, (m, a, d) => (a === 'x' ? `x ${d}` : m))
-  for (const name of protectList(extra)) t = t.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), name.replace(/\s/g, '_'))
+  const menu = rest?.restaurant.foods ?? []
+  for (const name of protectList([...extra, ...menu])) t = t.replace(new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'g'), name.replace(/\s/g, '_'))
 
   const foods = [...LOCAL_FOODS, ...extra]
+  const formats = (rest?.restaurant.formats ?? []).flatMap((f) => f.aliases.map((a) => ({ f, k: norm(a) }))).sort((a, b) => b.k.length - a.k.length)
   const parts = t.split(/(,|;|\n|\+|&|\bwith\b|\band\b|\bplus\b|\balso\b|\bthen\b|\bon the side\b)/)
   const items: EstItem[] = [], unknown: string[] = []
-  let topping = false, mainCount = 1
+  let topping = false, mainCount = 1, title: string | undefined
+  const clean = (raw: string) => raw.replace(/_/g, ' ').trim().replace(FILLER, '').replace(FILLER, '').trim()
   for (let i = 0; i < parts.length; i++) {
     const raw = parts[i]
     if (i % 2 === 1) { // separator
@@ -208,31 +224,54 @@ export function estimateMeal(text: string, extra: Food[] = []): MealEstimate {
       else if (sep !== 'and' && sep !== '&') topping = false // commas etc. end a "with …" list
       continue
     }
-    const seg = raw.replace(/_/g, ' ').trim().replace(FILLER, '').replace(FILLER, '').trim()
+    const seg = clean(raw)
     if (!seg) continue
     const q = parseQty(seg.split(/\s+/))
     // "…with cheese and salsa and a diet soda": an explicit amount ends the topping list.
     const isTop = topping && !q.explicit
     if (topping && q.explicit) topping = false
     let phrase = norm(q.rest.join(' '))
-    const found: { food: Food; first: boolean }[] = []
-    for (let guard = 0; guard < 6 && phrase.length; guard++) {
-      const m = bestMatch(phrase, foods)
-      if (!m) break
-      found.push({ food: m.food, first: found.length === 0 })
-      phrase = [...phrase.slice(0, m.at), '|', ...phrase.slice(m.at + m.len)].filter((w, j, a) => w !== '|' || (j > 0 && j < a.length - 1))
+    const cut = (at: number, len: number) => { phrase = [...phrase.slice(0, at), '|', ...phrase.slice(at + len)].filter((w, j, a) => w !== '|' || (j > 0 && j < a.length - 1)) }
+    const found: { food: Food; first: boolean; servings?: number }[] = []
+    // Restaurant order format: "a burrito" adds the tortilla, "a bowl" adds nothing; both set how many the toppings are for.
+    let format = false
+    for (const { f, k } of formats) {
+      const at = findRun(phrase, k)
+      // "a bowl" / "2 plates": the amount reader took the word as a unit, so look in the whole part too.
+      if (at < 0 && findRun(norm(seg), k) < 0) continue
+      if (at >= 0) cut(at, k.length)
+      format = true
+      title ??= `${rest!.restaurant.name} ${f.label}`
+      for (const a of f.adds) { const food = menu.find((m) => m.name === a.of); if (food) found.push({ food, first: false, servings: a.servings * (q.qty ?? 1) }) }
+      break
     }
-    if (!found.length) { if (/[a-z]{3,}/.test(seg)) unknown.push(seg); continue }
-    for (const { food, first } of found) {
+    for (const list of rest ? [menu, foods] : [foods]) {
+      for (let guard = 0; guard < 6 && phrase.length; guard++) {
+        const m = bestMatch(phrase, list)
+        if (!m) break
+        found.push({ food: m.food, first: !format && !found.some((x) => x.servings === undefined) })
+        cut(m.at, m.len)
+      }
+    }
+    if (!found.length && !format) {
+      // "brown and black beans", "white and brown rice": borrow the noun from the next part.
+      const next = parts[i + 1]?.trim() === 'and' ? clean(parts[i + 2] ?? '').split(/\s+/).pop() : undefined
+      const m = next && bestMatch(norm(`${q.rest.join(' ')} ${next}`), rest ? [...menu, ...foods] : foods)
+      if (m) found.push({ food: m.food, first: true })
+      else { if (/[a-z]{3,}/.test(seg)) unknown.push(seg); continue }
+    }
+    for (const { food, first, servings } of found) {
       let res: { servings: number; approx?: boolean }
-      if (isTop) res = { servings: (food.topping ?? 1) * mainCount }
+      if (servings !== undefined) res = { servings }
+      else if (isTop) res = { servings: (food.topping ?? 1) * mainCount }
       else if (first) res = servingsFor(q, food)
       else res = { servings: 1 }
       if (first && q.size !== 1) res.servings *= q.size / sizeOfLabel(food.servings[0].label)
       items.push({ food, servings: Math.max(0.05, Math.round(res.servings * 100) / 100), said: seg, approx: res.approx })
     }
-    // Toppings scale with a counted main item ("two tacos with cheese" → cheese for two).
-    if (!isTop) mainCount = !q.unit || q.unit === 'count' ? q.qty ?? 1 : 1
+    // Toppings scale with a counted main item ("two tacos with cheese" → cheese for two). At a restaurant only the order sets it.
+    if (format) mainCount = q.qty ?? 1
+    else if (!isTop && !rest) mainCount = !q.unit || q.unit === 'count' ? q.qty ?? 1 : 1
   }
-  return { items, unknown }
+  return { items, unknown, restaurant: rest?.restaurant, title }
 }

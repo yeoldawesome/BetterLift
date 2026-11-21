@@ -1,11 +1,11 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BarcodeIcon, BackIcon, BoltIcon, CheckIcon, CloseIcon, PlusIcon, SearchIcon, SparkIcon } from '../icons'
-import { Button, ErrorText, Input, Sheet, Spinner } from '../ui'
+import { Button, ErrorText, Input, Sheet, Spinner, Toggle } from '../ui'
 import { estimateMeal, mealIn, parseMacros, parseWeight } from '../../lib/foodParse'
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
 import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
-import { itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
+import { createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
 import { fmtK, MacroLine, MealChips, NumField, Stepper } from './bits'
 
@@ -85,7 +85,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
         {picked ? (
           <FoodDetail food={picked.food} source={picked.source} meal={meal} onBack={() => setPicked(null)} onAdd={(d) => save([d], false)} />
         ) : tab === 'describe' ? (
-          <Describe day={day} meal={meal} recent={recent} onMeal={(m) => !mealTouched && setMeal(m)} onSave={(ds) => save(ds, true)} onWeighed={onClose}
+          <Describe day={day} meal={meal} recent={recent} collecting={!!collect} onMeal={(m) => !mealTouched && setMeal(m)} onSave={(ds) => save(ds, true)} onWeighed={onClose}
             onSearch={(s) => { setQ(s); go('search') }} onQuick={(p) => { setQuick(p); go('quick') }} />
         ) : tab === 'search' ? (
           <Search q={q} setQ={setQ} recent={recent} meal={meal} onPick={(food) => setPicked({ food, source: food.source === 'recent' ? 'recent' : 'search' })}
@@ -113,13 +113,15 @@ function useRun() {
 
 // ---------- Describe: exact macros or a meal estimate from plain English ----------
 
-function Describe({ day, meal, recent, onMeal, onSave, onWeighed, onSearch, onQuick }: {
-  day: string; meal: Meal; recent: Food[]; onMeal: (m: Meal) => void; onSave: (d: Draft[]) => Promise<void>; onWeighed: () => void; onSearch: (q: string) => void; onQuick: (p: QuickPrefill) => void
+function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, onSearch, onQuick }: {
+  day: string; meal: Meal; recent: Food[]; collecting: boolean; onMeal: (m: Meal) => void; onSave: (d: Draft[]) => Promise<void>; onWeighed: () => void; onSearch: (q: string) => void; onQuick: (p: QuickPrefill) => void
 }) {
   const unit = useUser()?.unit || 'lb'
   const [text, setText] = useState('')
   const [name, setName] = useState('')
   const [edits, setEdits] = useState<Record<string, number | null>>({})
+  const [asOne, setAsOne] = useState<boolean | null>(null)
+  const [keep, setKeep] = useState(false)
   const { busy, err, run } = useRun()
   const weigh = useMemo(() => parseWeight(text), [text])
   const macro = useMemo(() => (weigh ? null : parseMacros(text)), [text, weigh])
@@ -134,6 +136,15 @@ function Describe({ day, meal, recent, onMeal, onSave, onWeighed, onSearch, onQu
     return { ...it, key, servings, macros: servings == null ? null : macrosFor(it.food.servings[0], servings) }
   }).filter((it) => it.servings !== null) as (ReturnType<typeof estimateMeal>['items'][number] & { key: string; servings: number; macros: Macros })[]
   const sum = total(items.map((i) => i.macros))
+  const drafts: Draft[] = items.map((it) => ({ name: it.food.name, detail: undefined, meal, servings: it.servings, base: it.food.servings[0], macros: it.macros, source: 'estimate' as const }))
+  // A restaurant order ("a Chipotle burrito") is one dish: log it as one meal unless you say otherwise.
+  const one = items.length > 1 && (asOne ?? !!est?.title)
+  const mealName = name.trim() || est?.title || (items.length > 1 ? items.slice(0, 3).map((i) => i.food.name.replace(/,.*$/, '')).join(', ') : items[0]?.food.name ?? '')
+  const saveEstimate = async () => {
+    const mi = drafts.map(itemFromDraft)
+    if (keep) await createSaved(mealName, mi.length > 1 ? 'meal' : 'food', mi)
+    await onSave(one ? [{ name: mealName, detail: mi.map((i) => i.name).join(', '), meal, servings: 1, base: null, macros: sum, source: 'estimate', items: mi }] : drafts)
+  }
   const fromMacros = macro ? kcalFrom(macro.macros.p, macro.macros.c, macro.macros.f) : 0
 
   return (
@@ -170,7 +181,9 @@ function Describe({ day, meal, recent, onMeal, onSave, onWeighed, onSearch, onQu
         </div>
       ) : est && (items.length > 0 || est.unknown.length > 0) ? (
         <div className="space-y-2">
-          <p className="text-xs font-bold uppercase tracking-wider text-accent">Estimate — adjust amounts to match what you ate</p>
+          <p className="text-xs font-bold uppercase tracking-wider text-accent">
+            {est.restaurant ? `${est.restaurant.name} menu — adjust portions to match your order` : 'Estimate — adjust amounts to match what you ate'}
+          </p>
           {items.map((it) => (
             <div key={it.key} className="flex items-center gap-2 rounded-xl border border-line bg-surface p-2 pl-3">
               <div className="min-w-0 flex-1">
@@ -193,10 +206,17 @@ function Describe({ day, meal, recent, onMeal, onSave, onWeighed, onSearch, onQu
                 <MacroLine m={sum} />
                 <span className="num text-lg font-black">{fmtK(sum.kcal)} kcal</span>
               </div>
-              <p className="text-xs text-muted">Estimates use typical portions and recipes, so treat them as a starting point. Each item is logged separately so you can fine-tune it later.</p>
+              <p className="text-xs text-muted">{est.restaurant ? `Standard ${est.restaurant.name} portions from its published nutrition info. “Double” counts 2 portions, “extra” 1.5, “light” half.` : 'Estimates use typical portions and recipes, so treat them as a starting point.'}</p>
+              {!collecting && (
+                <>
+                  {(one || keep) && <Input placeholder={mealName} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} aria-label="Meal name" />}
+                  {items.length > 1 && <Toggle on={one} onChange={setAsOne} title="Log as one meal" body={one ? 'One entry with these items inside' : 'Each item is logged separately'} />}
+                  <Toggle on={keep} onChange={setKeep} title="Save to My meals" body="Log it again later with one tap" />
+                </>
+              )}
               <ErrorText>{err}</ErrorText>
-              <Button disabled={busy} onClick={() => run(() => onSave(items.map((it) => ({ name: it.food.name, detail: undefined, meal, servings: it.servings, base: it.food.servings[0], macros: it.macros, source: 'estimate' as const }))))}>
-                {busy ? 'Saving…' : `Log ${items.length} item${items.length === 1 ? '' : 's'} · ${fmtK(sum.kcal)} kcal`}
+              <Button disabled={busy} onClick={() => run(saveEstimate)}>
+                {busy ? 'Saving…' : one ? `Log ${mealName} · ${fmtK(sum.kcal)} kcal` : `Log ${items.length} item${items.length === 1 ? '' : 's'} · ${fmtK(sum.kcal)} kcal`}
               </Button>
             </>
           )}
@@ -206,6 +226,7 @@ function Describe({ day, meal, recent, onMeal, onSave, onWeighed, onSearch, onQu
           <p className="font-bold text-ink">Two ways to use this</p>
           <p><span className="font-semibold text-ink">Know your numbers?</span> Type them: “40g protein 55g carbs 12g fat 480 cal”. They're logged exactly.</p>
           <p><span className="font-semibold text-ink">Just know the meal?</span> Describe it with amounts: “3 eggs, 2 slices of toast with butter and a coffee”. You'll get an estimate to review.</p>
+          <p><span className="font-semibold text-ink">Ate out?</span> Name the place: “Chipotle burrito with white rice, black beans, double chicken and cheese” or “Panda Express bowl with orange chicken and white rice” uses their menu.</p>
           <p><span className="font-semibold text-ink">Weighed in?</span> “I weigh 182” logs your weight.</p>
         </div>
       )}
