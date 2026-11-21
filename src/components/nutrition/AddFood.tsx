@@ -1,8 +1,8 @@
 import { Suspense, lazy, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { BarcodeIcon, BackIcon, BoltIcon, CheckIcon, CloseIcon, PlusIcon, SearchIcon, SparkIcon } from '../icons'
 import { Button, ErrorText, Input, Sheet, Spinner, Toggle } from '../ui'
-import { estimateMeal, mealIn, parseMacros, parseWeight } from '../../lib/foodParse'
-import { foodFromLog, LOCAL_FOODS, lookupBarcode, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
+import { estimateMeal, itemFromLookup, lookupPhrase, mealIn, parseMacros, parseWeight } from '../../lib/foodParse'
+import { foodFromLog, LOCAL_FOODS, lookupBarcode, lookupFood, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
 import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
 import { createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
@@ -131,8 +131,26 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
   const weighKg = weigh ? fromUnit(weigh.value, weigh.unit ?? unit) : 0
   useEffect(() => { const m = mealIn(text); if (m) onMeal(m) }, [text]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Parts the built-in foods/menus can't place are looked up on FatSecret (after a pause in typing).
+  // found[phrase]: a food, null = nothing online, missing = still looking.
+  const [found, setFound] = useState<Record<string, Food | null>>({})
+  const unknownPhrases = (est?.unknown ?? []).map((u) => [u, lookupPhrase(u)] as const)
+  const pending = unknownPhrases.filter(([, p]) => p.length >= 3 && !(p in found))
+  const pendingKey = pending.map(([, p]) => p).join('|')
+  useEffect(() => {
+    if (!pendingKey) return
+    let live = true
+    const t = setTimeout(() => {
+      for (const p of pendingKey.split('|')) lookupFood(p).then((f) => { if (live) setFound((o) => ({ ...o, [p]: f })) }, () => { if (live) setFound((o) => ({ ...o, [p]: null })) })
+    }, 600)
+    return () => { live = false; clearTimeout(t) }
+  }, [pendingKey])
+  const online = unknownPhrases.filter(([, p]) => found[p]).map(([u, p]) => itemFromLookup(u, found[p]!))
+  const looking = new Set(pending.map(([u]) => u))
+  const stillUnknown = unknownPhrases.filter(([, p]) => !found[p]).map(([u]) => u)
+
   // Your tweaks stick to an item while you keep typing elsewhere in the sentence.
-  const items = (est?.items ?? []).map((it, i) => {
+  const items = [...(est?.items ?? []), ...online].map((it, i) => {
     const key = `${it.food.key}|${it.said}|${i}`
     const servings = edits[key] === undefined ? it.servings : edits[key]
     return { ...it, key, servings, macros: servings == null ? null : macrosFor(it.food.servings[0], servings) }
@@ -196,12 +214,18 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
               <button onClick={() => setEdits((e) => ({ ...e, [it.key]: null }))} className="grid size-8 shrink-0 place-items-center text-faint" aria-label={`Remove ${it.food.name}`}><CloseIcon width={16} height={16} /></button>
             </div>
           ))}
-          {est.unknown.map((u) => (
+          {stillUnknown.map((u) => (
             <div key={u} className="flex items-center gap-2 rounded-xl border border-dashed border-line p-2 pl-3 text-sm">
-              <span className="min-w-0 flex-1 truncate text-muted">Couldn't estimate “{u}”</span>
-              <button onClick={() => onSearch(u)} className="h-8 shrink-0 rounded-lg bg-surface-2 px-3 text-xs font-bold text-accent">Search it</button>
+              <span className="min-w-0 flex-1 truncate text-muted">{looking.has(u) ? `Looking up “${u}”…` : `Couldn't estimate “${u}”`}</span>
+              {looking.has(u)
+                ? <span className="size-4 shrink-0 animate-spin rounded-full border-2 border-line border-t-accent" />
+                : <button onClick={() => onSearch(lookupPhrase(u) || u)} className="h-8 shrink-0 rounded-lg bg-surface-2 px-3 text-xs font-bold text-accent">Search it</button>}
             </div>
           ))}
+          {online.length > 0 && (
+            // FatSecret's free API requires this attribution wherever its data is shown.
+            <p className="text-right text-[11px] text-faint">Some items <a href="https://www.fatsecret.com" target="_blank" rel="noopener noreferrer" className="underline-offset-2 hover:underline">powered by FatSecret</a></p>
+          )}
           {items.length > 0 && (
             <>
               <div className="flex items-center justify-between rounded-xl bg-surface-2 px-3 py-2.5">
@@ -336,14 +360,15 @@ function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAdd }: {
         </>
       ) : (
         <>
+          {/* FatSecret results lead; the Open Food Facts fallback (packaged products only) sits below the built-in foods. */}
+          {loading && <Spinner />}
+          {off && off.length > 0 && off[0].source === 'fatsecret' && section('Foods & brands', off,
+            // FatSecret's free API requires this attribution wherever its data is shown.
+            <a href="https://www.fatsecret.com" target="_blank" rel="noopener noreferrer" className="normal-case tracking-normal text-faint underline-offset-2 hover:underline">Powered by FatSecret</a>)}
           {restHits.length > 0 && restChips(restHits)}
           {menuHits.length > 0 && section('Restaurant menus', menuHits)}
           {local.length > 0 && section('Common foods', local)}
-          {off && off.length > 0 && (off[0].source === 'fatsecret'
-            // FatSecret's free API requires this attribution wherever its data is shown.
-            ? section('Foods & brands', off, <a href="https://www.fatsecret.com" target="_blank" rel="noopener noreferrer" className="normal-case tracking-normal text-faint underline-offset-2 hover:underline">Powered by FatSecret</a>)
-            : section('Packaged foods', off, <span className="normal-case tracking-normal text-faint">Open Food Facts</span>))}
-          {loading && <Spinner />}
+          {off && off.length > 0 && off[0].source !== 'fatsecret' && section('Packaged foods', off, <span className="normal-case tracking-normal text-faint">Open Food Facts</span>)}
           {err && <p className="px-1 text-sm text-muted">{err}</p>}
           {!loading && off && !off.length && !local.length && !menuHits.length && !restHits.length && <p className="px-1 text-sm text-muted">No matches. Try fewer words, or use Quick to type the numbers from the label.</p>}
           {q.trim().length > 0 && q.trim().length < 3 && !local.length && <p className="px-1 text-sm text-muted">Keep typing…</p>}

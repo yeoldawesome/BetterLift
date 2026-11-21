@@ -195,6 +195,19 @@ function protectList(extra: Food[]) {
 
 const FILLER = /^(?:(?:i|we)\s+)?(?:just\s+)?(?:ate|had|have|got|drank|eaten|grabbed|ordered|made)\s+|^(?:then|also|plus|some|a side of|side of|side)\s+/
 
+/** The food words of a part the estimator couldn't match ("2 cups of quinoa salad" → "quinoa salad"), for an online lookup. */
+export function lookupPhrase(seg: string): string {
+  return parseQty(seg.split(/\s+/)).rest.join(' ').trim()
+}
+
+/** Turns a part the estimator couldn't match into an item, using a food found online for it (amount read from the part). */
+export function itemFromLookup(seg: string, food: Food): EstItem {
+  const q = parseQty(seg.split(/\s+/))
+  const res = servingsFor(q, food)
+  if (q.size !== 1) res.servings *= q.size / sizeOfLabel(food.servings[0].label)
+  return { food, servings: Math.max(0.05, Math.round(res.servings * 100) / 100), said: seg, approx: res.approx }
+}
+
 /** Estimates the foods (and amounts) in a plain-English meal description. Uses a restaurant's menu when one is named. */
 export function estimateMeal(text: string, extra: Food[] = []): MealEstimate {
   const rest = findRestaurant(text)

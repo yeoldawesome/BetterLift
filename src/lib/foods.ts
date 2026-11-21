@@ -392,6 +392,24 @@ export async function searchOff(q: string, signal?: AbortSignal): Promise<Food[]
   return dedupe(((await res.json()) as { products?: OffProduct[] }).products ?? [])
 }
 
+const lookups = new Map<string, Promise<Food | null>>()
+/**
+ * Best FatSecret match for a phrase from Describe ("quinoa salad"), or null. Only FatSecret results count (the Open Food
+ * Facts fallback is packaged products, too hit-and-miss to pick one automatically). Cached per phrase for the session
+ * so typing doesn't repeat lookups; failures aren't cached.
+ */
+export function lookupFood(phrase: string): Promise<Food | null> {
+  const k = phrase.trim().toLowerCase()
+  if (k.length < 3) return Promise.resolve(null)
+  let p = lookups.get(k)
+  if (!p) {
+    p = searchOff(k).then((list) => list.find((f) => f.source === 'fatsecret') ?? null)
+    p.catch(() => lookups.delete(k))
+    lookups.set(k, p)
+  }
+  return p
+}
+
 /** Look up a product by barcode. Null when Open Food Facts doesn't know it. */
 export async function lookupBarcode(code: string): Promise<Food | null> {
   const res = await fetch(`${OFF}/api/v2/product/${encodeURIComponent(code)}.json?fields=${FIELDS}`)
