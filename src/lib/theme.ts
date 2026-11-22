@@ -13,7 +13,7 @@ export const BASES: Record<string, Base> = {
 
 export const ACCENTS: [string, string][] = [
   ['#a3e635', 'Lime'], ['#38bdf8', 'Sky'], ['#f43f5e', 'Crimson'], ['#a78bfa', 'Violet'],
-  ['#fb923c', 'Orange'], ['#34d399', 'Mint'], ['#facc15', 'Gold'], ['#f472b6', 'Pink'],
+  ['#fb923c', 'Orange'], ['#34d399', 'Mint'], ['#facc15', 'Gold'], ['#f472b6', 'Pink'], ['#60b077', 'Fern'],
 ]
 
 export const DEFAULT_THEME: Required<Theme> = { base: 'midnight', accent: '#a3e635' }

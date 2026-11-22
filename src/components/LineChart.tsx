@@ -30,23 +30,18 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
     const canvas = css.getPropertyValue('--color-canvas').trim() || '#09090b'
     const surface = css.getPropertyValue('--color-surface-2').trim() || '#27272a'
     const ink = css.getPropertyValue('--color-ink').trim() || '#fafafa'
-    // Soft fill under the line that fades out toward the bottom.
-    const fill = (ctx: { chart: Chart }) => {
-      const { ctx: c, chartArea: a } = ctx.chart
-      if (!a) return `${accent}22`
-      const g = c.createLinearGradient(0, a.top, 0, a.bottom)
-      g.addColorStop(0, `${accent}40`); g.addColorStop(1, `${accent}05`)
-      return g
-    }
-    const dense = values.length > 80
+    // Dot size follows the room each point gets: big on short histories, still a readable dot at ~100 sessions on a phone.
+    const r = (c: { chart: Chart }) => Math.max(2.75, Math.min(5, ((c.chart.chartArea?.width ?? 300) / Math.max(1, values.length)) * 0.95))
     const chart = new Chart(ref.current!, {
       type: 'line',
       data: {
         labels,
         datasets: [
           // Every session is a dot: accent fill with a dark ring so neighbours stay distinct.
-          { label: yTitle || 'Value', data: values, borderColor: accent, backgroundColor: fill, fill: true, tension: 0, borderWidth: 3,
-            pointRadius: dense ? 2.5 : 4.5, pointHoverRadius: 8, pointBackgroundColor: accent, pointBorderColor: canvas, pointBorderWidth: 2,
+          // Flat tinted fill, round joins (no spikes past the dots on sharp turns), dots drawn over the line.
+          { label: yTitle || 'Value', data: values, borderColor: accent, backgroundColor: `${accent}26`, fill: 'start', tension: 0, borderWidth: 2.5,
+            borderJoinStyle: 'round', borderCapStyle: 'round',
+            pointRadius: r, pointHoverRadius: (c: { chart: Chart }) => r(c) + 3, pointBackgroundColor: accent, pointBorderColor: canvas, pointBorderWidth: (c: { chart: Chart }) => Math.max(1.25, r(c) * 0.42),
             pointHoverBackgroundColor: accent, pointHoverBorderColor: canvas, pointHoverBorderWidth: 3 },
           ...(trend ? [{ label: 'Trend', data: trend, borderColor: `${muted}b3`, backgroundColor: `${muted}b3`, borderDash: [9, 7], pointRadius: 0, pointHoverRadius: 0, borderWidth: 2.5, fill: false, tension: 0 }] : []),
         ],

@@ -200,7 +200,7 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
       <div className="relative">
         {empty
           ? <div className="grid h-40 place-items-center text-sm text-muted">No sessions in this period</div>
-          : <LazyChart className="h-40" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat} />}
+          : <LazyChart className="h-52" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat} />}
       </div>
       <CardStats d={s.d} kind={kind} unit={unit} />
     </div>
