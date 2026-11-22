@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useSwipeDismiss } from '../lib/swipe'
-import { BikeIcon, BoltIcon, BurstIcon, CalendarIcon, CloseIcon, DownIcon, FlameIcon, HistoryIcon, InfoIcon, MoonIcon, MuscleIcon, PlateIcon, PuzzleIcon, RepeatIcon, RulerIcon, ScaleIcon, SearchIcon, SleepIcon, SproutIcon, StarIcon, StatsIcon, SunriseIcon, TagIcon, TimerIcon, TrendIcon, WorkoutIcon } from '../components/icons'
+import { BikeIcon, BoltIcon, BurstIcon, CalendarIcon, CloseIcon, DownIcon, FlameIcon, HistoryIcon, InfoIcon, MoonIcon, MuscleIcon, PlateIcon, PuzzleIcon, RepeatIcon, RulerIcon, ScaleIcon, SearchIcon, ShareIcon, SleepIcon, SproutIcon, StarIcon, StatsIcon, SunriseIcon, TagIcon, TimerIcon, TrendIcon, WorkoutIcon } from '../components/icons'
 import { ExerciseInfo } from '../components/ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { LineChart } from '../components/LineChart'
@@ -371,11 +371,12 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
   ]
   const size = (v: string) => (v.length > 20 ? 'text-xs' : v.length > 14 ? 'text-sm' : v.length > 10 ? 'text-base' : 'text-xl')
   return (
-    <details className="group rounded-2xl border border-line bg-surface">
-      <summary className="flex cursor-pointer list-none items-center justify-between p-4 font-extrabold">
-        More Stats <DownIcon width={18} height={18} className="text-muted transition group-open:rotate-180" />
+    <details className="group">
+      <summary className="flex cursor-pointer list-none items-center gap-3 px-1 py-3 text-xl font-extrabold text-accent [&::-webkit-details-marker]:hidden">
+        <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden className="fill-current transition group-open:rotate-90"><path d="M1 1l10 6-10 6z" /></svg>
+        More Stats
       </summary>
-      <div className="grid grid-cols-2 gap-2 px-3 pb-3 sm:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3">
         {items.map(([Icon, value, lbl, date], i) => (
           <div key={i} className="flex flex-col items-center rounded-xl bg-surface-2 p-3 text-center">
             <Icon width={22} height={22} className="text-accent" aria-hidden />
@@ -496,18 +497,18 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
     <section className={embedded ? 'space-y-3' : 'mx-auto max-w-lg space-y-3 px-safe pt-4 sm:max-w-3xl'}>
       <header className="flex items-start justify-between gap-3">
         <div>
-          <h1 className={`${embedded ? 'text-xl' : 'text-[28px]'} font-extrabold leading-tight tracking-tight`}>{self ? 'Your' : `${user.name || user.username}'s`} Lifting Journey</h1>
-          <p className="text-sm text-muted">{snap.totalWorkouts} workouts tracked across {snap.names.length} exercises since {since}</p>
+          <h1 className={`${embedded ? 'text-xl' : 'text-[30px]'} font-black leading-tight tracking-tight text-accent`}>{self ? 'Your' : `${user.name || user.username}'s`} Lifting Journey</h1>
+          <p className="mt-1 text-[15px] text-muted">{snap.totalWorkouts} workouts tracked across {snap.names.length} exercises since {since}</p>
         </div>
-        {self && <button onClick={share} className="mt-1 shrink-0 rounded-xl bg-accent px-3 py-2 text-sm font-bold text-accent-ink">{shared || 'Share'}</button>}
+        {self && <button onClick={share} aria-label="Share your stats" className={`mt-1 flex h-11 shrink-0 items-center justify-center rounded-full bg-accent text-sm font-bold text-accent-ink active:scale-95 ${shared ? 'px-4' : 'w-16'}`}>{shared || <ShareIcon width={22} height={22} strokeWidth={2.2} />}</button>}
       </header>
 
-      <div className="grid grid-cols-3 gap-2 sm:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
         {([[n0(snap.totalWorkouts), 'Total Workouts'], [`${snap.names.length}`, 'Exercises'], [n0(snap.totalVolume), `Total ${unit === 'lb' ? 'Lbs' : 'Kg'} Lifted`],
-          [n0(snap.totalSets), 'Total Sets'], [`${daysSince}`, 'Days Since Start']] as [string, string][]).map(([v, l]) => (
-          <div key={l} className="rounded-2xl border border-line bg-surface p-3 text-center">
-            <p className="num truncate text-xl font-black">{v}</p>
-            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted">{l}</p>
+          [n0(snap.totalSets), 'Total Sets'], [`${daysSince}`, 'Days Since Start']] as [string, string][]).map(([v, l], i) => (
+          <div key={l} className={`rounded-2xl border border-line bg-surface px-2 py-5 text-center ${i === 4 ? 'col-span-2 sm:col-span-1' : ''}`}>
+            <p className={`num truncate font-black tracking-wide text-accent ${v.length > 8 ? 'text-[26px]' : 'text-[32px]'} leading-none`}>{v}</p>
+            <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.14em] text-muted">{l}</p>
           </div>
         ))}
       </div>
@@ -518,8 +519,8 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
 
       <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
         {[['All', snap.names.length] as [string, number], ...muscleCounts].map(([m, c]) => (
-          <button key={m} onClick={() => setMuscle(m)} className={`flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-sm font-semibold ${muscle === m ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>
-            {m === 'All' ? 'All' : label(m)} <span className={`rounded-full px-1.5 text-[11px] ${muscle === m ? 'bg-black/15' : 'bg-canvas/60'}`}>{c}</span>
+          <button key={m} onClick={() => setMuscle(m)} className={`flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[15px] font-bold ${muscle === m ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface text-ink'}`}>
+            {m === 'All' ? 'All' : label(m)} <span className={`num text-sm font-semibold ${muscle === m ? 'opacity-70' : 'text-muted'}`}>{c}</span>
           </button>
         ))}
       </div>
