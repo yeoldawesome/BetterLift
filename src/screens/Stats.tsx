@@ -38,14 +38,14 @@ function Trend({ dir, size = 12 }: { dir: Dir; size?: number }) {
   return <svg width={size + 2} height={6} viewBox="0 0 14 6" aria-label={title}><line x1="1" y1="3" x2="13" y2="3" className="stroke-muted" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
-/** Segmented buttons. `fit` shares the width evenly so every option shows without scrolling (metric choices). */
+/** Segmented buttons. `fit` fits every option on one row: each button is as wide as its label, plus an even share of what's left. */
 function Pills<T extends string | number>({ value, options, onChange, small, fit }: { value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean; fit?: boolean }) {
   return (
     <div className={fit ? 'grid min-w-0 gap-1' : 'flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]'}
-      style={fit ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined} onClick={(e) => e.stopPropagation()}>
+      style={fit ? { gridTemplateColumns: `repeat(${options.length}, auto)` } : undefined} onClick={(e) => e.stopPropagation()}>
       {options.map(([v, l]) => (
         <button key={String(v)} onClick={() => onChange(v)}
-          className={`rounded-lg font-bold leading-tight transition ${fit ? `min-w-0 whitespace-nowrap px-0.5 tracking-tight ${small ? 'h-7 text-[10px]' : 'h-8 text-[11px]'}` : `shrink-0 ${small ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'}`} ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
+          className={`rounded-lg font-bold leading-tight transition ${fit ? `flex min-w-0 items-center justify-center whitespace-nowrap px-1 text-center tracking-tight ${small ? 'h-7 text-[10px]' : 'h-8 text-[11px]'}` : `shrink-0 ${small ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'}`} ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
       ))}
     </div>
   )
