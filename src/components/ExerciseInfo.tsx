@@ -14,6 +14,7 @@ import { trendLine } from '../lib/stats'
 import { BodyMap } from './BodyMap'
 import { EquipmentUsed, equipmentFor } from './Equipment'
 import { TrophyIcon } from './icons'
+import { beatText, prBeat } from '../lib/best'
 // Charts load on demand so chart.js stays out of the app's first download.
 const LineChart = lazy(() => import('./LineChart').then((m) => ({ default: m.LineChart })))
 import { Segmented, Sheet, Spinner } from './ui'
@@ -211,6 +212,7 @@ function StatsTab({ ex, unit, sessions, strongest, own, onOpenSet }: { ex: Exerc
 
   return (
     <>
+      {own && <NextPr ex={ex} unit={unit} sessions={sessions} />}
       {weighted && strongest && strongest.weight_kg > 0 && (
         <div className="rounded-3xl border border-accent/40 bg-accent/10 p-4 text-center">
           <p className="flex items-center justify-center gap-1.5 text-xs font-bold uppercase tracking-wider text-accent"><TrophyIcon width={14} height={14} />Strongest set</p>
@@ -249,6 +251,63 @@ function StatsTab({ ex, unit, sessions, strongest, own, onOpenSet }: { ex: Exerc
         <p className="rounded-2xl bg-surface-2 p-3 text-center text-sm text-muted">Tap “Add effort” under a set to rate how hard it felt (RPE 1–10). It shows up here over time.</p>
       ) : null)}
     </>
+  )
+}
+
+/** Your own stats: what beats your PR next time, and how the last session and this week compare with before. */
+function NextPr({ ex, unit, sessions }: { ex: Exercise; unit: Unit; sessions: Session[] }) {
+  const k = ex.kind
+  if (!sessions.length || k === 'cardio' || (k === 'duration' && isCardio(ex))) return null
+  const top = sessions.reduce((b, x) => (x.bestE1 > b.bestE1 ? x : b))
+  const best = { e1rm: top.bestE1, w: top.bestW, r: top.bestR, maxReps: Math.max(...sessions.map((x) => x.maxReps)), maxSec: Math.max(...sessions.map((x) => x.maxSec)), any: true }
+  const last = sessions[sessions.length - 1], prev = sessions[sessions.length - 2]
+  const beat = prBeat(ex, best, unit, last.maxW > 0 ? Number(fmtW(last.maxW, unit)) : 0)
+
+  const weighted = k === 'weight'
+  const w = (kg: number) => `${fmtW(kg, unit)} ${unit}`
+  const setOf = (x: Session) => (weighted ? `${fmtW(x.bestW, unit)} × ${x.bestR}` : k === 'duration' ? `${x.maxSec}s` : `${x.maxReps} reps`)
+  const scoreOf = (x: Session) => (weighted ? x.bestE1 : k === 'duration' ? x.maxSec : x.maxReps)
+  const fmtDelta = (d: number) => (weighted ? `${d > 0 ? '+' : d < 0 ? '−' : '±'}${w(Math.abs(d))} e1RM` : k === 'duration' ? `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)}s` : `${d > 0 ? '+' : d < 0 ? '−' : '±'}${Math.abs(d)} reps`)
+  const tone = (d: number) => (d > 0.01 ? 'text-accent' : d < -0.01 ? 'text-danger' : 'text-muted')
+
+  // This week (last 7 days) against the 7 days before it.
+  const now = Date.now(), DAY = 864e5
+  const inWeek = (ago: number) => sessions.filter((x) => now - x.date.getTime() >= ago * 7 * DAY && now - x.date.getTime() < (ago + 1) * 7 * DAY)
+  const wk = inWeek(0), lw = inWeek(1)
+  const bestIn = (xs: Session[]) => Math.max(...xs.map(scoreOf))
+  const volIn = (xs: Session[]) => xs.reduce((t, x) => t + (weighted ? x.vol : k === 'duration' ? x.maxSec : x.reps), 0)
+  const volLabel = weighted ? 'Volume' : k === 'duration' ? 'Total hold time' : 'Total reps'
+  const pct = (a: number, b: number) => (b > 0 ? Math.round((a / b - 1) * 100) : 0)
+
+  const row = (label: string, value: string, delta?: { text: string; d: number }) => (
+    <div className="py-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="whitespace-nowrap text-sm text-muted">{label}</span>
+        <span className="num text-right text-sm font-bold">{value}</span>
+      </div>
+      {delta && <p className={`num text-right text-xs font-semibold ${tone(delta.d)}`}>{delta.text}</p>}
+    </div>
+  )
+  return (
+    <div className="space-y-2" data-next-pr>
+      {beat && !beat.hit && !beat.first && (
+        <div className="rounded-2xl border border-line bg-surface-2/60 px-4 py-3">
+          <p className="num text-base"><span className="font-semibold text-muted">Beat PR: </span>{beat.options.map((o, i) => (
+            <span key={i}>{i > 0 && <span className="font-semibold text-muted"> or </span>}<span className="font-extrabold">{beatText(o)}</span></span>
+          ))}</p>
+          <p className="mt-0.5 text-xs text-muted">{weighted ? `Your best is ${fmtW(best.w, unit)} × ${best.r} (est. 1RM ${w(best.e1rm)}). Either set beats it.` : k === 'duration' ? `Your longest hold is ${best.maxSec}s.` : `Your best set is ${best.maxReps} reps.`}</p>
+        </div>
+      )}
+      <div className="rounded-2xl border border-line bg-surface px-4 py-2">
+        <p className="pt-1 text-xs font-bold uppercase tracking-wider text-muted">Progress</p>
+        {row(`Last time · ${last.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, setOf(last),
+          prev ? { text: `${fmtDelta(scoreOf(last) - scoreOf(prev))} vs ${setOf(prev)}`, d: scoreOf(last) - scoreOf(prev) } : undefined)}
+        {wk.length && lw.length ? <>
+          {row('Best set this week', setOf(wk.reduce((b, x) => (scoreOf(x) > scoreOf(b) ? x : b))), { text: `${fmtDelta(bestIn(wk) - bestIn(lw))} vs last week`, d: bestIn(wk) - bestIn(lw) })}
+          {row(`${volLabel} this week`, weighted ? `${Math.round(Number(fmtW(volIn(wk), unit))).toLocaleString()} ${unit}` : k === 'duration' ? `${volIn(wk)}s` : `${volIn(wk)}`, { text: `${pct(volIn(wk), volIn(lw)) >= 0 ? '+' : ''}${pct(volIn(wk), volIn(lw))}% vs last week`, d: volIn(wk) - volIn(lw) })}
+        </> : <p className="py-1.5 text-xs text-muted">{wk.length ? 'Not done last week, so no weekly comparison yet.' : lw.length ? `Not done yet this week. Last week's best: ${setOf(lw.reduce((b, x) => (scoreOf(x) > scoreOf(b) ? x : b)))}.` : 'Do it this week and next to see week-over-week progress.'}</p>}
+      </div>
+    </div>
   )
 }
 

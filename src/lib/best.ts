@@ -62,3 +62,34 @@ export function prLine(ex: Exercise, best: Best | null, reps: number, unit: Unit
   if (ex.kind === 'duration') return liveSec > best.maxSec ? { text: 'New PR!', hit: true } : { text: `Hold for ${best.maxSec + 1}s to PR`, hit: false }
   return null
 }
+
+/**
+ * "Beat PR" options in display units: more reps at the weight you're using, or the next plate step up.
+ * e.g. [{ w: 40, r: 13 }, { w: 45, r: 8 }] → "Beat PR: 40 × 13 or 45 × 8". Bodyweight kinds give reps; holds give seconds.
+ */
+export type Beat = { hit: true } | { hit: false; first?: boolean; options: { w?: number; r?: number; sec?: number }[] }
+export function prBeat(ex: Exercise, best: Best | null, unit: Unit, workingW: number, liveE1rmKg = 0, liveReps = 0, liveSec = 0): Beat | null {
+  if (!best) return null
+  if (!best.any) return { hit: false, first: true, options: [] }
+  if (ex.kind === 'weight') {
+    if (liveE1rmKg > best.e1rm + 0.01) return { hit: true }
+    if (!best.e1rm) return null
+    const step = unit === 'lb' ? 5 : 2.5
+    const w = workingW > 0 ? workingW : Number(toUnit(best.w, unit).toFixed(1))
+    const options: { w: number; r: number }[] = []
+    const r1 = repsToPr(best.e1rm, fromUnit(w, unit))
+    if (r1 && r1 <= 20) options.push({ w, r: r1 })
+    const up = (Math.floor(w / step) + 1) * step
+    const r2 = repsToPr(best.e1rm, fromUnit(up, unit))
+    if (r2 && r2 <= 20) options.push({ w: up, r: r2 })
+    // Working weight is far below your best: show the weight that beats it at your best set's reps instead.
+    if (!options.length) { const r = Math.min(12, best.r || 5); options.push({ w: weightToPr(best.e1rm, r, unit), r }) }
+    return { hit: false, options: options.slice(0, 2) }
+  }
+  if (ex.kind === 'bodyweight' || ex.kind === 'assisted') return liveReps > best.maxReps ? { hit: true } : { hit: false, options: [{ r: best.maxReps + 1 }] }
+  if (ex.kind === 'duration' && isCardio(ex)) return null
+  if (ex.kind === 'duration') return liveSec > best.maxSec ? { hit: true } : { hit: false, options: [{ sec: best.maxSec + 1 }] }
+  return null
+}
+
+export const beatText = (o: { w?: number; r?: number; sec?: number }) => (o.sec ? `${o.sec}s` : o.w !== undefined ? `${o.w} × ${o.r}` : `${o.r} reps`)

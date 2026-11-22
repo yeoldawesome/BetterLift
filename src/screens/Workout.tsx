@@ -8,7 +8,7 @@ import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
 import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
-import { prLine, useBest, clearBestCache } from '../lib/best'
+import { beatText, prBeat, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, num } from '../lib/format'
@@ -442,9 +442,8 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   const liveE1 = Math.max(0, ...done.map((s) => epley(fromUnit(num(s.w), unit), Math.round(num(s.r)))))
   const liveReps = Math.max(0, ...done.map((s) => Math.round(num(s.r))))
   const liveSec = Math.max(0, ...done.map((s) => Math.round(num(s.sec))))
-  const prReps = parseInt(x.target) || Math.round(num(done[done.length - 1]?.r ?? '')) || x.prev[0]?.r || 5
   const workingW = num(done[done.length - 1]?.w ?? '') || num(x.sets.find((s) => s.w)?.w ?? '') || (x.prev[0]?.w ? Number(fmtW(x.prev[0].w, unit)) : 0) || (best?.w ? Number(fmtW(best.w, unit)) : 0)
-  const pr = planning ? null : prLine(x.ex, best, prReps, unit, liveE1, liveReps, liveSec, workingW)
+  const pr = planning ? null : prBeat(x.ex, best, unit, workingW, liveE1, liveReps, liveSec)
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
@@ -477,7 +476,6 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
           {collapsed
             ? <p className="num text-xs font-semibold text-muted">{planning ? `${x.sets.length} set${x.sets.length === 1 ? '' : 's'}` : `${done.length}/${x.sets.length} sets done`}</p>
             : <>
-              {pr && <p className={`num truncate text-xs font-semibold ${pr.hit ? 'text-accent' : 'text-muted'}`}>{pr.text}</p>}
               {x.target && !x.plan?.length && <p className="text-xs text-faint">Target {x.target} reps</p>}
             </>}
         </div>
@@ -501,6 +499,16 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
           </div>
         </div>
       </div>
+      {/* PR band under the header: "Beat PR: 40 × 13 or 45 × 8", or "New PR!" once a checked-off set beats it. */}
+      {pr && !collapsed && (
+        <div className="num border-t border-line bg-surface-2/60 px-4 py-2.5 text-sm" data-pr-band>
+          {pr.hit ? <span className="font-extrabold text-accent">🏆 New PR!</span>
+            : pr.first ? <span className="font-semibold text-muted">First time logging this — every set is a PR</span>
+            : <><span className="font-semibold text-muted">Beat PR: </span>{pr.options.map((o, i) => (
+              <span key={i}>{i > 0 && <span className="font-semibold text-muted"> or </span>}<span className="font-extrabold">{beatText(o)}</span></span>
+            ))}</>}
+        </div>
+      )}
       {x.note !== undefined && (
         <div className="px-3 pb-3">
           <textarea value={x.note} onChange={(e) => setEx(x.key, (ex) => ({ ...ex, note: e.target.value }))} placeholder="Add a note for this exercise…" rows={Math.min(5, Math.max(1, x.note.split('\n').length))}
