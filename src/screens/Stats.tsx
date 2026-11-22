@@ -372,8 +372,8 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
   const size = (v: string) => (v.length > 20 ? 'text-xs' : v.length > 14 ? 'text-sm' : v.length > 10 ? 'text-base' : 'text-xl')
   return (
     <details className="group">
-      <summary className="flex cursor-pointer list-none items-center gap-3 px-1 py-3 text-xl font-extrabold text-accent [&::-webkit-details-marker]:hidden">
-        <svg width="12" height="14" viewBox="0 0 12 14" aria-hidden className="fill-current transition group-open:rotate-90"><path d="M1 1l10 6-10 6z" /></svg>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-1 py-2 text-base font-extrabold text-accent [&::-webkit-details-marker]:hidden">
+        <svg width="9" height="11" viewBox="0 0 12 14" aria-hidden className="fill-current transition group-open:rotate-90"><path d="M1 1l10 6-10 6z" /></svg>
         More Stats
       </summary>
       <div className="grid grid-cols-2 gap-2 pb-1 sm:grid-cols-3">

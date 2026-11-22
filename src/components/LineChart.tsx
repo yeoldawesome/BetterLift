@@ -5,7 +5,7 @@ Chart.register(LineController, LineElement, PointElement, LinearScale, CategoryS
 
 /**
  * Line chart with optional dashed trend line and a per-point tooltip subtitle (e.g. "225 lb × 5").
- * `yTitle` labels the value axis; `yFormat` formats axis ticks and tooltip values (e.g. minutes → "1h 30m").
+ * `yTitle` is the chart's accessible name (not drawn); `yFormat` formats axis ticks and tooltip values (e.g. minutes → "1h 30m").
  * `onPoint` makes points openable: click one with a mouse, or on a phone tap once to see it and again to open it.
  */
 export function LineChart({ labels, values, trend, extras, className = 'h-56', yTitle, yFormat, onPoint, pointAction }: {
@@ -70,12 +70,12 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
           x: { ticks: { color: muted, maxTicksLimit: 5, maxRotation: 0 }, grid: { display: false } },
           y: {
             ticks: { color: muted, maxTicksLimit: 5, ...(yFormat ? { callback: (v) => yFormat(Number(v)) } : {}) }, grid: { color: line },
-            title: { display: !!yTitle, text: yTitle ?? '', color: muted, font: { size: 10, weight: 'bold' } },
           },
         },
       },
     })
     return () => chart.destroy()
   }, [labels, values, trend, extras, yTitle, yFormat, openable])
-  return <div className={className}><canvas ref={ref} /></div>
+  // No axis title on the chart (it crowded small charts); it stays as the accessible name.
+  return <div className={className}><canvas ref={ref} role="img" aria-label={yTitle} /></div>
 }
