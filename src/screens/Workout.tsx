@@ -7,7 +7,7 @@ import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
-import { emptySet, finishWorkout, liveRest, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
+import { emptySet, finishWorkout, liveRest, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type FinishDraft, type Prev } from '../lib/active'
 import { beatText, prBeat, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
@@ -298,19 +298,26 @@ function showUnchecked() {
 }
 
 function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
-  const { active, discard } = useActive()
+  const { active, discard, update } = useActive()
   const unit = useUnit()
   const nav = useNavigate()
   const a = active!
-  const [name, setName] = useState(a.name)
-  const [notes, setNotes] = useState(a.notes)
-  const [visibility, setVisibility] = useState<Visibility>(user.post_visibility || 'public')
-  const [updateRoutine, setUpdateRoutine] = useState<RoutineUpdate>(routineUpdate(user))
-  const [saveRoutine, setSaveRoutine] = useState(user.save_as_routine)
+  // Everything chosen here lives on the workout itself, so closing this screen mid-workout (or the app) keeps it.
+  const f = a.finish ?? {}
+  const setF = (p: Partial<FinishDraft>) => update((w) => ({ ...w, finish: { ...w.finish, ...p } }))
+  const name = a.name, notes = a.notes
+  const setName = (v: string) => update((w) => ({ ...w, name: v }))
+  const setNotes = (v: string) => update((w) => ({ ...w, notes: v }))
+  const visibility: Visibility = f.visibility ?? (user.post_visibility || 'public')
+  const setVisibility = (v: Visibility) => setF({ visibility: v })
+  const updateRoutine: RoutineUpdate = f.routineUpdate ?? routineUpdate(user)
+  const setUpdateRoutine = (v: RoutineUpdate) => setF({ routineUpdate: v })
+  const saveRoutine = f.saveRoutine ?? user.save_as_routine
+  const setSaveRoutine = (v: boolean) => setF({ saveRoutine: v })
   const [routineName, setRoutineName] = useState('')
-  const [bw, setBw] = useState(user.bodyweight_kg ? fmtW(user.bodyweight_kg, unit) : '')
+  const bw = f.bw ?? (user.bodyweight_kg ? fmtW(user.bodyweight_kg, unit) : '')
   // Only a bodyweight you actually typed becomes a Physique reading (the prefilled one is just your last known weight).
-  const [bwTouched, setBwTouched] = useState(false)
+  const bwTouched = !!f.bwTouched
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
 
@@ -368,7 +375,7 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
         {a.routine && routineName && name.trim() !== routineName && <p className="-mt-2 text-xs text-muted">Only this post is renamed — your routine stays “{routineName}”.</p>}
         <Input label="Notes (optional)" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="How did it feel?" />
         <div>
-          <Input label={`Bodyweight today (${unit})`} inputMode="decimal" value={bw} onChange={(e) => { setBw(e.target.value); setBwTouched(true) }} />
+          <Input label={`Bodyweight today (${unit})`} inputMode="decimal" value={bw} onChange={(e) => setF({ bw: e.target.value, bwTouched: true })} />
           <p className="mt-1 text-xs text-muted">Pre-filled with your last weigh-in. Changing it updates your profile.</p>
         </div>
         <div>

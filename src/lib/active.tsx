@@ -5,7 +5,7 @@ import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
 import { idbDel, idbGet, idbSet } from './idb'
 import { scheduleRestPush } from './push'
-import { DEFAULT_REST, liftRestSet, me, newId, pb, restFor, userRest, type Exercise, type PlanSet, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
+import { DEFAULT_REST, liftRestSet, me, newId, pb, restFor, userRest, type Exercise, type PlanSet, type Routine, type RoutineExercise, type RoutineUpdate, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
 export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType; hr?: string; rpe?: number; kcal?: string }
@@ -19,7 +19,9 @@ export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number;
   restSet?: boolean
   /** Last session's sets are still loading (the card shows right away; placeholders fill in when they arrive). */
   prevPending?: boolean }
-export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
+/** Choices made on the Finish screen, kept with the workout so closing that screen (or the app) doesn't reset them. */
+export type FinishDraft = { routineUpdate?: RoutineUpdate; visibility?: Visibility; saveRoutine?: boolean; bw?: string; bwTouched?: boolean }
+export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[]; finish?: FinishDraft }
 type Rest = { end: number; total: number; name?: string } | null
 
 interface Ctx {
