@@ -20,7 +20,7 @@ import { useStatsRows, type StatRow } from '../lib/statsData'
 import { buildStats, strengthIndex, chartable, effectiveMetric, fmtMinutes, fmtPace, isWeighted, lowerIsBetter, metricLabel, metricOptions, paceOf, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot, type StatKind } from '../lib/stats'
 
 const RANGES: [string, number][] = [['15D', 15], ['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
-const METRICS: [Metric, string][] = [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
+const METRICS: [Metric, string][] = [['est1rm', 'Est. 1RM'], ['bestset', 'Best Set'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
 const SORTS: [string, string][] = [['recent', 'Most Recent'], ['trend_up', 'Trending Up'], ['trend_down', 'Trending Down'], ['alpha_asc', 'A → Z'], ['alpha_desc', 'Z → A'], ['sessions', 'Most Sessions'], ['muscle', 'Muscle Group']]
 type Dir = 'up' | 'down' | 'neutral'
 type StatsTab = 'lifting' | 'physique' | 'insights'
@@ -412,7 +412,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
   const [muscle, setMuscle] = useState('All')
   const [q, setQ] = useState('')
   const [days, setDays] = useState(0)
-  const [metric, setMetric] = useState<Metric>('bestset')
+  const [metric, setMetric] = useState<Metric>('est1rm')
   const [sort, setSort] = useState('recent')
   const [open, setOpen] = useState<string | null>(null)
   const [shared, setShared] = useState('')

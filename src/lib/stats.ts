@@ -171,9 +171,9 @@ export const isWeighted = (data: DaySummary[]) => data.some((d) => d.maxWeight >
 /** The chart choices that make sense for each kind of exercise, in pill order. */
 export function metricOptions(kind: StatKind, data: DaySummary[]): [Metric, string][] {
   switch (kind) {
-    case 'weight': return [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
+    case 'weight': return [['est1rm', 'Est. 1RM'], ['bestset', 'Best Set'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
     case 'bodyweight': return isWeighted(data)
-      ? [['maxreps', 'Best Set'], ['added', 'Added Weight'], ...(data.some((d) => d.maxE1rm > 0) ? [['est1rm', 'Est. 1RM'] as [Metric, string]] : []), ['reps', 'Total Reps']]
+      ? [...(data.some((d) => d.maxE1rm > 0) ? [['est1rm', 'Est. 1RM'] as [Metric, string]] : []), ['maxreps', 'Best Set'], ['added', 'Added Weight'], ['reps', 'Total Reps']]
       : [['maxreps', 'Best Set'], ['reps', 'Total Reps']]
     case 'assisted': return [['assist', 'Assistance'], ['maxreps', 'Best Set'], ['reps', 'Total Reps']]
     case 'duration': return [['maxtime', 'Best Hold'], ['time', 'Total Time']]
@@ -190,7 +190,7 @@ export function effectiveMetric(kind: StatKind, metric: Metric, data: DaySummary
   if (options.includes(metric)) return metric
   const totals = metric === 'volume' || metric === 'reps' || metric === 'time'
   switch (kind) {
-    case 'weight': return 'bestset'
+    case 'weight': return 'est1rm'
     case 'bodyweight': return totals ? 'reps' : metric === 'weight' && options.includes('added') ? 'added' : 'maxreps'
     case 'assisted': return totals ? 'reps' : 'assist'
     case 'duration': return totals ? 'time' : 'maxtime'
