@@ -267,17 +267,6 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
     rows.forEach((r, i) => { if (r.ex.id === id && r.e1 > 0 && (best < 0 || r.e1 > rows[best].e1)) best = i })
     if (best >= 0 && rows[best].e1 > (bestPrev.get(id) ?? 0) + 0.01) prs.add(best)
   }
-  // Rep records: more reps than ever at this weight or heavier (135 × 9 → 135 × 10), checked on each lift's top set.
-  await Promise.all(exIds.map(async (id) => {
-    let top = -1
-    rows.forEach((r, i) => { if (r.ex.id === id && r.e1 > 0 && r.kg > 0 && (top < 0 || r.kg > rows[top].kg || (r.kg === rows[top].kg && r.reps > rows[top].reps))) top = i })
-    if (top < 0 || [...prs].some((i) => rows[i].ex.id === id)) return
-    try {
-      const r = await pb.collection('workout_sets').getFirstListItem<WSet>(
-        pb.filter('user = {:u} && exercise = {:e} && completed = true && weight_kg >= {:w}', { u: uid, e: id, w: rows[top].kg - 0.01 }), { sort: '-reps', fields: 'reps' })
-      if (rows[top].reps > r.reps) prs.add(top)
-    } catch { /* never lifted this heavy before: the est. 1RM check above covers it */ }
-  }))
 
   const batch = pb.createBatch()
   batch.collection('workouts').create({

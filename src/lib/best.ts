@@ -62,32 +62,3 @@ export function prLine(ex: Exercise, best: Best | null, reps: number, unit: Unit
   if (ex.kind === 'duration') return liveSec > best.maxSec ? { text: 'New PR!', hit: true } : { text: `Hold for ${best.maxSec + 1}s to PR`, hit: false }
   return null
 }
-
-/** Double progression: the rep range you work in, and how much to add once you hit the top of it. */
-export const PROGRESSION = { min: 8, max: 12, step: { lb: 5, kg: 2.5 } as Record<Unit, number> }
-
-/**
- * Next session's target from last session's top set (heaviest weight, most reps at it): same weight and one more rep
- * until 12, then add weight (5 lb / 2.5 kg) and start back at 8. Weights in display units.
- */
-export function progression(prev: { w: number; r: number }[], unit: Unit): { lastW: number; lastR: number; w: number; r: number; up: boolean } | null {
-  const sets = prev.filter((s) => s.w > 0 && s.r > 0)
-  if (!sets.length) return null
-  const top = sets.reduce((a, b) => (b.w > a.w || (b.w === a.w && b.r > a.r) ? b : a))
-  const step = PROGRESSION.step[unit]
-  const lastW = Math.round(toUnit(top.w, unit) / (step / 2)) * (step / 2)
-  if (top.r >= PROGRESSION.max) return { lastW, lastR: top.r, w: lastW + step, r: PROGRESSION.min, up: true }
-  return { lastW, lastR: top.r, w: lastW, r: top.r + 1, up: false }
-}
-
-/** The progression line under a weighted exercise: last time, today's target, and whether a checked-off set reached it. */
-export function progressionLine(prev: { w: number; r: number }[], unit: Unit, done: { w: number; r: number }[]) {
-  const p = progression(prev, unit)
-  if (!p) return null
-  const hit = done.some((s) => s.w >= p.w - 0.01 && s.r >= p.r)
-  const why = p.up ? `you hit ${PROGRESSION.max} — add ${PROGRESSION.step[unit]} ${unit}` : `same weight, +1 rep (up to ${PROGRESSION.max}, then add weight)`
-  return {
-    hit,
-    text: hit ? `Progressed! ${p.w} ${unit} × ${p.r} done` : `Last ${p.lastW} × ${p.lastR} → today ${p.w} ${unit} × ${p.r} · ${why}`,
-  }
-}
