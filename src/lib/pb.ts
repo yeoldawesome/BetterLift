@@ -101,6 +101,9 @@ export const userRest = (u?: User | null) => (u && u.default_rest_s > 0 ? u.defa
 /** Default rest after finishing an exercise (before the next one); falls back to the between-sets default. */
 export const userRestAfter = (u?: User | null) => (u && u.default_rest_after_s > 0 ? u.default_rest_after_s : userRest(u))
 
+/** Whether this lift has its own rest time (set from its rest menu); otherwise it follows the account defaults. */
+export const liftRestSet = (ex: Pick<Exercise, 'rest_s' | 'rest_after_s'>) => !!ex.rest_s || !!ex.rest_after_s
+
 /** Rest for a lift: its own setting if the user set one, otherwise the account defaults. */
 export function restFor(ex: Pick<Exercise, 'rest_s' | 'rest_after_s'>, u?: User | null) {
   const pick = (v: number | undefined, fallback: number) => (v === -1 ? 0 : v && v > 0 ? v : fallback)

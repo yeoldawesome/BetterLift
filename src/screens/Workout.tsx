@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
-import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, FlameIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, UpIcon } from '../components/icons'
+import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, FlameIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, TrophyIcon, UpIcon } from '../components/icons'
 import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
-import { emptySet, finishWorkout, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
+import { emptySet, finishWorkout, liveRest, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type Prev } from '../lib/active'
 import { beatText, prBeat, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
@@ -204,7 +204,8 @@ function ActiveWorkout() {
       if (group[group.length - 1].key !== x.key) return
       // Last unchecked set of this exercise (or whole superset) → transition rest before the next exercise.
       const finishing = group.every((e) => e.sets.every((t, j) => (e.key === x.key && j === i) || t.done))
-      startRest(finishing ? (x.restAfter ?? x.rest) : x.rest, finishing ? undefined : x.ex.name)
+      const r = liveRest(x, user)
+      startRest(finishing ? r.after : r.rest, finishing ? undefined : x.ex.name)
     } else setSet(x.key, i, { done: false })
   }
 
@@ -417,6 +418,7 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   onReorder: () => void; onReplace: () => void; onRemove: () => void; onSuperset: () => void
   planning?: boolean
 }) {
+  const viewer = useUser()
   const [restOpen, setRestOpen] = useState(false)
   const [infoOpen, setInfoOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
@@ -426,8 +428,9 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   const [undo, setUndo] = useState<{ i: number; set: ASet } | null>(null)
   useEffect(() => { if (!undo) return; const t = setTimeout(() => setUndo(null), 5000); return () => clearTimeout(t) }, [undo])
   const labels = setLabels(x.sets.map((s) => s.type))
+  const lr = liveRest(x, viewer)
   const menu: [string, () => void, boolean?][] = [
-    [`Edit Rest (${restLabel(x.rest)}${(x.restAfter ?? x.rest) !== x.rest ? ` · ${restLabel(x.restAfter ?? x.rest)}` : ''})`, () => setRestOpen(true)],
+    [`Edit Rest (${restLabel(lr.rest)}${lr.after !== lr.rest ? ` · ${restLabel(lr.after)}` : ''})`, () => setRestOpen(true)],
     ['Reorder Exercises', onReorder],
     [x.note !== undefined ? 'Remove Exercise Note' : 'Add Exercise Note', () => setEx(x.key, (e) => ({ ...e, note: e.note !== undefined ? undefined : '' }))],
     ...(planning ? [] : [[x.superset ? 'Remove From Superset' : 'Add To Superset', onSuperset] as [string, () => void]]),
@@ -502,7 +505,7 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
       {/* PR band under the header: "Beat PR: 40 × 13 or 45 × 8", or "New PR!" once a checked-off set beats it. */}
       {pr && !collapsed && (
         <div className="num border-t border-line bg-surface-2/60 px-4 py-2.5 text-sm" data-pr-band>
-          {pr.hit ? <span className="font-extrabold text-accent">🏆 New PR!</span>
+          {pr.hit ? <span className="inline-flex items-center gap-1.5 font-extrabold text-accent"><TrophyIcon width={18} height={18} className="text-yellow-500" />New PR!</span>
             : pr.first ? <span className="font-semibold text-muted">First time logging this — every set is a PR</span>
             : <><span className="font-semibold text-muted">Beat PR: </span>{pr.options.map((o, i) => (
               <span key={i}>{i > 0 && <span className="font-semibold text-muted"> or </span>}<span className="font-extrabold">{beatText(o)}</span></span>
@@ -599,9 +602,9 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
       )}
       {infoOpen && <ExerciseInfo ex={x.ex} initialTab="stats" onClose={() => setInfoOpen(false)} />}
       {restOpen && (
-        <LiftRestSheet name={x.ex.name} rest={x.rest} after={x.restAfter ?? x.rest} onClose={() => setRestOpen(false)}
+        <LiftRestSheet name={x.ex.name} rest={lr.rest} after={lr.after} onClose={() => setRestOpen(false)}
           onSave={(rest, after, remember) => {
-            setEx(x.key, (e) => ({ ...e, rest, restAfter: after }))
+            setEx(x.key, (e) => ({ ...e, rest, restAfter: after, restSet: true }))
             // Stored as -1 when "Off" so it isn't confused with "use my default".
             if (remember) saveLiftRest(x.ex, { rest_s: rest || -1, rest_after_s: after || -1 }).catch(() => {})
           }} />

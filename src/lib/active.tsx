@@ -5,7 +5,7 @@ import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
 import { idbDel, idbGet, idbSet } from './idb'
 import { scheduleRestPush } from './push'
-import { DEFAULT_REST, me, newId, pb, restFor, type Exercise, type PlanSet, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
+import { DEFAULT_REST, liftRestSet, me, newId, pb, restFor, userRest, type Exercise, type PlanSet, type Routine, type RoutineExercise, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
 export type ASet = { w: string; r: string; sec: string; dist: string; done: boolean; type?: SetType; hr?: string; rpe?: number; kcal?: string }
@@ -15,6 +15,8 @@ export type Prev = { w: number; r: number; sec: number; dist: number }
 export type AEx = { key: string; ex: Exercise; rest: number; restAfter?: number; target: string; sets: ASet[]; prev: Prev[]; note?: string; superset?: string; collapsed?: boolean
   /** Planned weight (kg) and reps per set, saved on the routine. Used before `prev` for placeholders / one-tap fill. */
   plan?: PlanSet[]
+  /** Rest was set on purpose (this lift's own rest, or edited for this workout/routine). If not, the timer follows Settings live. */
+  restSet?: boolean
   /** Last session's sets are still loading (the card shows right away; placeholders fill in when they arrive). */
   prevPending?: boolean }
 export type Active = { id: string; name: string; routine: string; startedAt: string; notes: string; exercises: AEx[] }
@@ -134,8 +136,25 @@ export async function prevFor(exId: string, before?: string): Promise<WSet[]> {
 }
 
 /** A new exercise card. Its previous sets aren't fetched here (that waited on the network): the workout loads them after it shows. */
-export async function makeEx(ex: Exercise, sets = 1, rest = DEFAULT_REST, target = '', restAfter = rest): Promise<AEx> {
-  return { key: newId(), ex, rest, restAfter, target, sets: Array.from({ length: Math.max(1, sets) }, emptySet), prev: [], prevPending: true }
+export async function makeEx(ex: Exercise, sets = 1, rest = DEFAULT_REST, target = '', restAfter = rest, restSet = liftRestSet(ex)): Promise<AEx> {
+  return { key: newId(), ex, rest, restAfter, target, restSet, sets: Array.from({ length: Math.max(1, sets) }, emptySet), prev: [], prevPending: true }
+}
+
+/** The rest to use right now: a rest set on purpose stays; otherwise it's whatever Settings (or the lift) says now, so changes apply mid-workout. */
+export function liveRest(x: AEx, u?: User | null): { rest: number; after: number } {
+  if (x.restSet) return { rest: x.rest, after: x.restAfter ?? x.rest }
+  const r = restFor(x.ex, u)
+  return { rest: r.rest, after: r.after }
+}
+
+/**
+ * A routine row's rest: rows saved as "follow Settings" store 0. Older routines stored the default at the time,
+ * so a value equal to today's default (or the built-in 90 s) also counts as following Settings.
+ */
+function routineRest(rowRest: number, ex: Exercise, u: User | null) {
+  const own = rowRest > 0 && rowRest !== userRest(u) && rowRest !== DEFAULT_REST
+  const r = restFor(ex, u)
+  return { rest: own ? rowRest : r.rest, after: r.after, restSet: own || liftRestSet(ex) }
 }
 
 export async function routineExercises(routineId: string): Promise<AEx[]> {
@@ -149,7 +168,8 @@ export async function routineExercises(routineId: string): Promise<AEx[]> {
     const ex = lib.get(i.exercise) ?? i.expand!.exercise!
     const plan = Array.isArray(i.sets) ? i.sets.filter(Boolean) : []
     const timed = ex.kind === 'cardio' || ex.kind === 'duration'
-    return makeEx(ex, plan.length || i.target_sets || 1, i.rest_s, i.reps && !timed ? `${i.reps}` : '', restFor(ex, u).after).then((x) => ({
+    const rr = routineRest(i.rest_s, ex, u)
+    return makeEx(ex, plan.length || i.target_sets || 1, rr.rest, i.reps && !timed ? `${i.reps}` : '', rr.after, rr.restSet).then((x) => ({
       ...x,
       // Planned values show as placeholders (one tap fills them); set types (warm-up, failure…) carry over as-is.
       sets: x.sets.map((st, j) => (plan[j]?.type && plan[j].type !== 'normal' ? { ...st, type: plan[j].type as SetType } : st)),
@@ -167,7 +187,8 @@ export async function routineDraft(routineId: string, unit: Unit): Promise<AEx[]
   const u = pb.authStore.record as User | null
   return Promise.all(items.filter((i) => i.expand?.exercise).map(async (i) => {
     const ex = lib.get(i.exercise) ?? i.expand!.exercise!
-    const x = await makeEx(ex, 1, i.rest_s, '', restFor(ex, u).after)
+    const rr = routineRest(i.rest_s, ex, u)
+    const x = await makeEx(ex, 1, rr.rest, '', rr.after, rr.restSet)
     const plan = Array.isArray(i.sets) && i.sets.length ? i.sets
       : Array.from({ length: Math.max(1, i.target_sets || 1) }, () => ({ w: 0, r: ex.kind === 'cardio' || ex.kind === 'duration' ? 0 : i.reps || 0 }))
     return { ...x, key: i.id, note: i.note ? i.note : undefined, sets: plan.map((p) => planToSet(p, unit)) }
@@ -192,7 +213,8 @@ function routineRow(x: AEx, sets: ASet[], unit: Unit) {
   const plan = sets.map((s) => setToPlan(s, unit))
   const timed = x.ex.kind === 'cardio' || x.ex.kind === 'duration'
   const reps = timed ? 0 : mode(plan.filter((p) => p.type !== 'warmup' && p.type !== 'cooldown').map((p) => p.r).filter((r) => r > 0)) || parseInt(x.target) || 0
-  return { exercise: x.ex.id, target_sets: Math.max(1, plan.length), reps, rest_s: x.rest, sets: plan.length ? plan : null, note: (x.note ?? '').trim() }
+  // 0 = follow the Settings default (so changing it later updates this routine too).
+  return { exercise: x.ex.id, target_sets: Math.max(1, plan.length), reps, rest_s: x.restSet ? x.rest : 0, sets: plan.length ? plan : null, note: (x.note ?? '').trim() }
 }
 
 /**
