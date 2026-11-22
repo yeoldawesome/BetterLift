@@ -255,15 +255,20 @@ function useRemembered(key: string, initial: boolean): [boolean, (v: boolean) =>
 /** Overall strength index (start = 100) across every weighted lift, week by week. */
 function StrengthCard({ snap }: { snap: Snapshot }) {
   const s = useMemo(() => strengthIndex(snap), [snap])
+  const [open, setOpen] = useRemembered('bl.strengthOpen', true)
   if (!s) return null
   const pct = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(Math.round(x * 100))}%`
   const tone = (x: number) => (x > 0.005 ? 'text-accent' : x < -0.005 ? 'text-danger' : 'text-muted')
   return (
     <div className="space-y-2 rounded-2xl border border-line bg-surface p-4" data-strength>
-      <div className="flex items-baseline justify-between gap-2">
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 text-left">
         <h2 className="font-extrabold">Overall strength</h2>
-        <span className="text-xs text-muted">{s.lifts} lift{s.lifts === 1 ? '' : 's'}</span>
-      </div>
+        <span className="flex items-center gap-1.5 text-xs text-muted">
+          {open ? `${s.lifts} lift${s.lifts === 1 ? '' : 's'}` : <span className={`num font-bold ${tone(s.total)}`}>{pct(s.total)} since start</span>}
+          <DownIcon width={18} height={18} className={`transition ${open ? 'rotate-180' : ''}`} />
+        </span>
+      </button>
+      {open && <>
       <div className="grid grid-cols-2 gap-2 text-center">
         <div className="rounded-xl bg-surface-2 py-2"><p className={`num text-xl font-black ${tone(s.total)}`}>{pct(s.total)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Since you started</p></div>
         <div className="rounded-xl bg-surface-2 py-2"><p className={`num text-xl font-black ${tone(s.recent)}`}>{pct(s.recent)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Last 3 months</p></div>
@@ -272,6 +277,7 @@ function StrengthCard({ snap }: { snap: Snapshot }) {
         labels={s.labels.map((d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }))}
         extras={s.values.map((v) => `${pct(v / 100 - 1)} vs start`)} />
       <p className="text-[11px] text-faint">Your est. 1RMs across all weighted lifts, combined into one line that starts at 100. Each lift counts its best from the last 6 weeks, so adding or dropping an exercise doesn't skew it.</p>
+      </>}
     </div>
   )
 }
