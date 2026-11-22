@@ -86,7 +86,8 @@ export function RestInline() {
   const btn = 'h-8 shrink-0 rounded-lg px-2 text-xs font-bold'
   return (
     <div className="relative min-w-0 flex-1 overflow-hidden rounded-xl border border-line bg-surface-2" data-rest-inline>
-      <div className="absolute inset-y-0 left-0 bg-accent/20 transition-[width] duration-200" style={{ width: `${pct * 100}%` }} />
+      {/* Time left drains along the bottom edge, clear of the buttons. */}
+      <div className="absolute bottom-0 left-0 h-[3px] rounded-r-full bg-accent transition-[width] duration-200" style={{ width: `${pct * 100}%` }} />
       <div className="relative flex items-center gap-1 p-1">
         <span className="num min-w-0 flex-1 truncate pl-1.5 text-lg font-black">{left > 0 ? fmtClock(left) : 'Go!'}</span>
         <button onClick={() => adjustRest(-15)} className={`${btn} bg-canvas/60`}>−15</button>
