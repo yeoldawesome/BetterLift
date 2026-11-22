@@ -8,6 +8,7 @@ import { errMsg, useUser } from '../../lib/pb'
 import { createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
 import { RESTAURANTS, type Restaurant } from '../../lib/restaurants'
+import { labelMacros, readLabel } from '../../lib/labelOcr'
 import { fmtK, MacroLine, MealChips, NumField, Stepper } from './bits'
 
 const Scanner = lazy(() => import('./Scanner'))
@@ -17,7 +18,7 @@ const TABS: [Tab, string, typeof SparkIcon][] = [['describe', 'Describe', SparkI
 const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
 const total = (ms: Macros[]) => ms.reduce((t, m) => ({ kcal: t.kcal + m.kcal, p: t.p + m.p, c: t.c + m.c, f: t.f + m.f }), { kcal: 0, p: 0, c: 0, f: 0 })
 
-type QuickPrefill = { name?: string; macros?: Macros; barcode?: string; source?: Source }
+type QuickPrefill = { name?: string; macros?: Macros; barcode?: string; source?: Source; note?: string }
 
 /** Full-screen "log food" sheet: describe it, search, scan a barcode, or type macros. */
 export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onAdded, collect, title = 'Log food' }: {
@@ -93,9 +94,10 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
           <Search q={q} setQ={setQ} rest={rest} setRest={setRest} recent={recent} meal={meal} onPick={(food) => setPicked({ food, source: food.source === 'recent' ? 'recent' : 'search' })}
             onAdd={(d) => save([d], false)} />
         ) : tab === 'scan' ? (
-          <Scan key={scanKey} onFound={(food) => setPicked({ food, source: 'barcode' })} onManual={(barcode) => { setQuick({ barcode, source: 'barcode' }); go('quick') }} />
+          <Scan key={scanKey} onFound={(food) => setPicked({ food, source: 'barcode' })} onManual={(barcode) => { setQuick({ barcode, source: 'barcode' }); go('quick') }}
+            onLabel={(p) => { setQuick(p); go('quick') }} />
         ) : (
-          <Quick key={JSON.stringify(quick)} prefill={quick} meal={meal} onSave={(d) => save([d], true)} />
+          <Quick key={JSON.stringify(quick)} prefill={quick} meal={meal} onSave={(d) => save([d], true)} onLabel={(p) => setQuick((q) => ({ ...p, barcode: q.barcode ?? p.barcode, source: q.source ?? p.source }))} />
         )}
       </div>
     </Sheet>
@@ -431,7 +433,33 @@ function FoodDetail({ food, source, meal, onBack, onAdd }: { food: Food; source:
 
 // ---------- Scan ----------
 
-function Scan({ onFound, onManual }: { onFound: (f: Food) => void; onManual: (barcode: string) => void }) {
+/** Photo of a Nutrition Facts panel → numbers for Quick (read on the phone with Tesseract OCR, nothing uploaded). */
+export function LabelScan({ barcode, onRead }: { barcode?: string; onRead: (p: QuickPrefill) => void }) {
+  const [pct, setPct] = useState<number | null>(null)
+  const [err, setErr] = useState('')
+  const pick = async (file: File | undefined) => {
+    if (!file) return
+    setErr(''); setPct(0)
+    try {
+      const r = await readLabel(file, setPct)
+      const found = [r.kcal, r.p, r.c, r.f].filter((v) => v !== undefined).length
+      if (!found) { setErr("Couldn't read the label. Get closer so the Nutrition Facts fill the photo, in good light, and try again."); return }
+      onRead({ macros: labelMacros(r), barcode, source: barcode ? 'barcode' : undefined,
+        note: `Read from the label${r.serving ? ` (per serving: ${r.serving})` : ''}${found < 4 ? '. Some values were missing' : ''}. Check the numbers before logging.` })
+    } catch (e) { setErr(errMsg(e)) } finally { setPct(null) }
+  }
+  return (
+    <div className="space-y-1.5">
+      <label className={`flex h-12 cursor-pointer items-center justify-center gap-2 rounded-2xl border border-dashed border-accent/60 bg-accent/10 text-sm font-bold text-accent active:scale-[0.98] ${pct !== null ? 'pointer-events-none opacity-70' : ''}`} data-label-scan>
+        <input type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => { pick(e.target.files?.[0]); e.target.value = '' }} />
+        {pct !== null ? `Reading label… ${Math.round(pct * 100)}%` : 'Scan nutrition label'}
+      </label>
+      <ErrorText>{err}</ErrorText>
+    </div>
+  )
+}
+
+function Scan({ onFound, onManual, onLabel }: { onFound: (f: Food) => void; onManual: (barcode: string) => void; onLabel: (p: QuickPrefill) => void }) {
   const [code, setCode] = useState('')
   const [state, setState] = useState<{ k: 'scan' } | { k: 'looking'; code: string } | { k: 'missing'; code: string } | { k: 'error'; msg: string }>({ k: 'scan' })
   const look = async (c: string) => {
@@ -453,7 +481,8 @@ function Scan({ onFound, onManual }: { onFound: (f: Food) => void; onManual: (ba
       ) : (
         <div className="space-y-3 rounded-2xl border border-line bg-surface p-4 text-center">
           <p className="font-bold">{state.k === 'missing' ? `No nutrition info for ${state.code}` : state.msg}</p>
-          {state.k === 'missing' && <p className="text-sm text-muted">This product isn't in Open Food Facts yet. Type the numbers from its label instead.</p>}
+          {state.k === 'missing' && <p className="text-sm text-muted">This product isn't in Open Food Facts yet. Scan its nutrition label, or type the numbers in.</p>}
+          {state.k === 'missing' && <LabelScan barcode={state.code} onRead={onLabel} />}
           <div className="grid grid-cols-2 gap-2">
             <Button variant="ghost" onClick={() => setState({ k: 'scan' })}>Scan again</Button>
             <Button onClick={() => onManual(state.k === 'missing' ? state.code : '')}>Enter label</Button>
@@ -466,13 +495,14 @@ function Scan({ onFound, onManual }: { onFound: (f: Food) => void; onManual: (ba
         <Button size="sm" className="h-12 px-4" disabled={code.length < 6}>Look up</Button>
       </form>
       <p className="text-xs text-muted">Product data from Open Food Facts, a free and open food database.</p>
+      {state.k !== 'missing' && <div className="space-y-1.5 border-t border-line pt-3"><p className="text-xs font-bold uppercase tracking-wider text-muted">No barcode?</p><LabelScan onRead={onLabel} /></div>}
     </div>
   )
 }
 
 // ---------- Quick: type the macros ----------
 
-function Quick({ prefill, meal, onSave }: { prefill: QuickPrefill; meal: Meal; onSave: (d: Draft) => Promise<void> }) {
+function Quick({ prefill, meal, onSave, onLabel }: { prefill: QuickPrefill; meal: Meal; onSave: (d: Draft) => Promise<void>; onLabel: (p: QuickPrefill) => void }) {
   const m = prefill.macros
   const s = (v?: number) => (v ? `${Math.round(v * 10) / 10}` : '')
   const [name, setName] = useState(prefill.name ?? '')
@@ -485,6 +515,7 @@ function Quick({ prefill, meal, onSave }: { prefill: QuickPrefill; meal: Meal; o
   const eff = kcal.trim() ? Math.round(num(kcal)) : calc
   return (
     <div className="space-y-3">
+      {prefill.note ? <p className="rounded-xl bg-accent/15 px-3 py-2 text-sm font-semibold text-accent">{prefill.note}</p> : <LabelScan barcode={prefill.barcode} onRead={onLabel} />}
       <Input label="Name (optional)" placeholder={prefill.barcode ? `Barcode ${prefill.barcode}` : 'Quick add'} value={name} onChange={(e) => setName(e.target.value)} maxLength={80} />
       <div className="grid grid-cols-3 gap-2">
         <NumField label="Protein" value={p} onChange={setP} suffix="g" dot="#0ea5e9" placeholder="0" />

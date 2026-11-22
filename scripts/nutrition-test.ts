@@ -1,4 +1,5 @@
 // Pure-logic tests for nutrition: parsers, food matching, energy and targets. Run: npm run test:nutrition
+import { parseLabel } from '../src/lib/labelOcr'
 import { estimateMeal, mealIn, parseMacros, parseWeight } from '../src/lib/foodParse'
 import { fromOff, LOCAL_FOODS, searchLocal } from '../src/lib/foods'
 import { bmr, estimateCardio, estimateLifting, isCardio, liftingSession, type Person } from '../src/lib/energy'
@@ -156,6 +157,19 @@ ok(applied.tdeeAdjust === 150 && applied.lastCheckAt === now, 'apply shifts expe
 ok(applyPace({ ...bulk, kcalOverride: 2500 }, -150, now).kcalOverride === 2350, 'apply shifts fixed calories when set')
 ok(computeTargets({ ...bulk, goal: 'track' }, man, 0).goalDelta === 0, 'track mode has no surplus/deficit')
 ok(['breakfast', 'lunch', 'dinner', 'snack'].includes(mealNow()), 'mealNow')
+
+// ---- Nutrition label OCR parsing
+{
+  const a = parseLabel(`Nutrition Facts\n8 servings per container\nServing size 2/3 cup (55g)\nAmount per serving\nCalories 230\n% Daily Value*\nTotal Fat 8g 10%\nSaturated Fat 1g 5%\nTrans Fat 0g\nCholesterol 0mg 0%\nSodium 160mg 7%\nTotal Carbohydrate 37g 13%\nDietary Fiber 4g 14%\nTotal Sugars 12g\nProtein 3g\n* The % Daily Value tells you... 2,000 calories a day`)
+  ok(a.kcal === 230 && a.f === 8 && a.c === 37 && a.p === 3 && a.serving === '2/3 cup (55g)', `label parse (${JSON.stringify({ ...a, text: undefined })})`)
+  const b = parseLabel(`Calories\n190\nTotal Fat 3.5g\nTotal Carbohydrate 129\nProtein 219`)
+  ok(b.kcal === 190 && b.c === 12 && b.p === 21 && b.f === 3.5, `"g" misread as 9 is fixed by the calorie check (${JSON.stringify({ ...b, text: undefined })})`)
+  // Real Tesseract output from a photographed label: "37g" → "379", "(55g)" → "(559)".
+  const real = parseLabel(`Nutrition Facts\n8 servings per container\nServing size 213 cup (559)\nI\nAmount per serving\n\nCalories 230\nTotal Fat 8g 10%\nSodium 160mg\n\nTotal Carbohydrate 379 13%\nTotal Sugars 129\n\nProtein 3g`)
+  ok(real.kcal === 230 && real.f === 8 && real.c === 37 && real.p === 3, `real OCR text (${JSON.stringify({ ...real, text: undefined })})`)
+  const c = parseLabel(`Calories 11O\nTotal Fat Og\nTotal Carb. 2g\nProtein 25g`)
+  ok(c.kcal === 110 && c.f === 0 && c.c === 2 && c.p === 25, `O read as 0 (${JSON.stringify({ ...c, text: undefined })})`)
+}
 
 console.log(fails ? `\n${fails} FAILED` : '\nAll nutrition tests passed')
 process.exit(fails ? 1 : 0)
