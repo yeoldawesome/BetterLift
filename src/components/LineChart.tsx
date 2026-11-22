@@ -31,7 +31,7 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
     const surface = css.getPropertyValue('--color-surface-2').trim() || '#27272a'
     const ink = css.getPropertyValue('--color-ink').trim() || '#fafafa'
     // Dot size follows the room each point gets: big on short histories, still a readable dot at ~100 sessions on a phone.
-    const r = (c: { chart: Chart }) => Math.max(2.75, Math.min(5, ((c.chart.chartArea?.width ?? 300) / Math.max(1, values.length)) * 0.95))
+    const r = (c: { chart: Chart }) => Math.max(2, Math.min(3.5, ((c.chart.chartArea?.width ?? 300) / Math.max(1, values.length)) * 0.7))
     const chart = new Chart(ref.current!, {
       type: 'line',
       data: {
@@ -41,7 +41,7 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
           // Flat tinted fill, round joins (no spikes past the dots on sharp turns), dots drawn over the line.
           { label: yTitle || 'Value', data: values, borderColor: accent, backgroundColor: `${accent}26`, fill: 'start', tension: 0, borderWidth: 2.5,
             borderJoinStyle: 'round', borderCapStyle: 'round',
-            pointRadius: r, pointHoverRadius: (c: { chart: Chart }) => r(c) + 3, pointBackgroundColor: accent, pointBorderColor: canvas, pointBorderWidth: (c: { chart: Chart }) => Math.max(1.25, r(c) * 0.42),
+            pointRadius: r, pointHoverRadius: (c: { chart: Chart }) => r(c) + 3, pointBackgroundColor: accent, pointBorderColor: canvas, pointBorderWidth: (c: { chart: Chart }) => Math.max(1, r(c) * 0.4),
             pointHoverBackgroundColor: accent, pointHoverBorderColor: canvas, pointHoverBorderWidth: 3 },
           ...(trend ? [{ label: 'Trend', data: trend, borderColor: `${muted}b3`, backgroundColor: `${muted}b3`, borderDash: [9, 7], pointRadius: 0, pointHoverRadius: 0, borderWidth: 2.5, fill: false, tension: 0 }] : []),
         ],
