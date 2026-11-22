@@ -38,12 +38,14 @@ function Trend({ dir, size = 12 }: { dir: Dir; size?: number }) {
   return <svg width={size + 2} height={6} viewBox="0 0 14 6" aria-label={title}><line x1="1" y1="3" x2="13" y2="3" className="stroke-muted" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
-function Pills<T extends string | number>({ value, options, onChange, small }: { value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean }) {
+/** Segmented buttons. `fit` shares the width evenly so every option shows without scrolling (metric choices). */
+function Pills<T extends string | number>({ value, options, onChange, small, fit }: { value: T; options: [T, string][]; onChange: (v: T) => void; small?: boolean; fit?: boolean }) {
   return (
-    <div className="flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]" onClick={(e) => e.stopPropagation()}>
+    <div className={fit ? 'grid min-w-0 gap-1' : 'flex min-w-0 gap-1 overflow-x-auto overscroll-x-contain [scrollbar-width:none]'}
+      style={fit ? { gridTemplateColumns: `repeat(${options.length}, minmax(0, 1fr))` } : undefined} onClick={(e) => e.stopPropagation()}>
       {options.map(([v, l]) => (
         <button key={String(v)} onClick={() => onChange(v)}
-          className={`shrink-0 rounded-lg font-bold transition ${small ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'} ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
+          className={`rounded-lg font-bold leading-tight transition ${fit ? `min-w-0 whitespace-nowrap px-0.5 tracking-tight ${small ? 'h-7 text-[10px]' : 'h-8 text-[11px]'}` : `shrink-0 ${small ? 'h-7 px-2 text-[11px]' : 'h-8 px-3 text-xs'}`} ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
       ))}
     </div>
   )
@@ -196,7 +198,7 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
         <div className="pt-1.5"><Trend dir={s.dir} /></div>
       </div>
       <Pills small value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
-      {options.length > 1 && <Pills small value={s.m} options={options} onChange={setMetric} />}
+      {options.length > 1 && <Pills small fit value={s.m} options={options} onChange={setMetric} />}
       <div className="relative">
         {empty
           ? <div className="grid h-40 place-items-center text-sm text-muted">No sessions in this period</div>
@@ -231,7 +233,7 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
           <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
         </div>
         <Pills value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
-        {options.length > 1 && <Pills value={s.m} options={options} onChange={setMetric} />}
+        {options.length > 1 && <Pills fit value={s.m} options={options} onChange={setMetric} />}
         <p className="text-xs font-bold text-muted">{metricLabel(s.m, unit, distLabel(unit))}</p>
         {s.d.length
           ? <LineChart className="h-[50vh] max-h-96" labels={s.labels} values={s.v} trend={s.trend} extras={s.extras} yTitle={s.yTitle} yFormat={s.yFormat}
@@ -534,7 +536,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
         <span className="text-xs font-bold uppercase tracking-wider text-muted">Range</span>
         <Pills value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
       </div>
-      <Pills value={metric} options={METRICS} onChange={setMetric} />
+      <Pills fit value={metric} options={METRICS} onChange={setMetric} />
 
       <div className="flex items-center justify-between gap-3">
         <div className="flex items-center gap-3 text-sm font-bold">
