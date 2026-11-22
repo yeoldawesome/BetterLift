@@ -27,13 +27,28 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
     const accent = css.getPropertyValue('--color-accent').trim() || '#a3e635'
     const muted = css.getPropertyValue('--color-muted').trim() || '#a1a1aa'
     const line = css.getPropertyValue('--color-line').trim() || '#27272a'
+    const canvas = css.getPropertyValue('--color-canvas').trim() || '#09090b'
+    const surface = css.getPropertyValue('--color-surface-2').trim() || '#27272a'
+    const ink = css.getPropertyValue('--color-ink').trim() || '#fafafa'
+    // Soft fill under the line that fades out toward the bottom.
+    const fill = (ctx: { chart: Chart }) => {
+      const { ctx: c, chartArea: a } = ctx.chart
+      if (!a) return `${accent}22`
+      const g = c.createLinearGradient(0, a.top, 0, a.bottom)
+      g.addColorStop(0, `${accent}40`); g.addColorStop(1, `${accent}05`)
+      return g
+    }
+    const dense = values.length > 80
     const chart = new Chart(ref.current!, {
       type: 'line',
       data: {
         labels,
         datasets: [
-          { data: values, borderColor: accent, backgroundColor: `${accent}22`, fill: true, tension: 0.3, pointRadius: values.length > 40 ? 0 : 3, pointBackgroundColor: accent, borderWidth: 2.5 },
-          ...(trend ? [{ data: trend, borderColor: `${muted}99`, borderDash: [6, 4], pointRadius: 0, pointHoverRadius: 0, borderWidth: 1.5, fill: false, tension: 0 }] : []),
+          // Every session is a dot: accent fill with a dark ring so neighbours stay distinct.
+          { label: yTitle || 'Value', data: values, borderColor: accent, backgroundColor: fill, fill: true, tension: 0, borderWidth: 3,
+            pointRadius: dense ? 2.5 : 4.5, pointHoverRadius: 8, pointBackgroundColor: accent, pointBorderColor: canvas, pointBorderWidth: 2,
+            pointHoverBackgroundColor: accent, pointHoverBorderColor: canvas, pointHoverBorderWidth: 3 },
+          ...(trend ? [{ label: 'Trend', data: trend, borderColor: `${muted}b3`, backgroundColor: `${muted}b3`, borderDash: [9, 7], pointRadius: 0, pointHoverRadius: 0, borderWidth: 2.5, fill: false, tension: 0 }] : []),
         ],
       },
       options: {
@@ -53,10 +68,16 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
           // Legend is registered globally by MultiChart; single-series charts don't want it.
           legend: { display: false },
           tooltip: {
-            filter: (i) => i.datasetIndex === 0,
+            backgroundColor: surface, borderColor: accent, borderWidth: 1.5, cornerRadius: 12, padding: 12, caretSize: 7,
+            titleColor: ink, titleFont: { size: 14, weight: 'bold' }, bodyColor: ink, bodyFont: { size: 13 }, bodySpacing: 5,
+            usePointStyle: true, boxPadding: 5,
             callbacks: {
-              label: (i) => (yFormat ? yFormat(Number(i.raw)) : String(i.formattedValue)),
-              afterLabel: (i) => (extras?.[i.dataIndex] ? extras[i.dataIndex] : ''),
+              label: (i) => {
+                const v = yFormat ? yFormat(Number(i.raw)) : String(i.formattedValue)
+                return i.datasetIndex === 0 ? (yTitle ? `${yTitle}: ${v}` : v) : `Trend: ${v}`
+              },
+              afterLabel: (i) => (i.datasetIndex === 0 && extras?.[i.dataIndex] ? extras[i.dataIndex] : ''),
+              labelColor: (i) => (i.datasetIndex === 0 ? { borderColor: canvas, backgroundColor: accent, borderWidth: 2 } : { borderColor: `${muted}b3`, backgroundColor: `${muted}b3`, borderWidth: 0 }),
               footer: (items) => {
                 if (!openable) return ''
                 const what = (items[0] && action.current?.(items[0].dataIndex)) || 'open workout'
@@ -67,9 +88,9 @@ export function LineChart({ labels, values, trend, extras, className = 'h-56', y
           },
         },
         scales: {
-          x: { ticks: { color: muted, maxTicksLimit: 5, maxRotation: 0 }, grid: { display: false } },
+          x: { ticks: { color: muted, maxTicksLimit: 7, maxRotation: 0 }, grid: { color: `${line}cc`, drawTicks: true, tickLength: 6 }, border: { color: line } },
           y: {
-            ticks: { color: muted, maxTicksLimit: 5, ...(yFormat ? { callback: (v) => yFormat(Number(v)) } : {}) }, grid: { color: line },
+            ticks: { color: muted, maxTicksLimit: 5, ...(yFormat ? { callback: (v) => yFormat(Number(v)) } : {}) }, grid: { color: `${line}cc` }, border: { display: false },
           },
         },
       },

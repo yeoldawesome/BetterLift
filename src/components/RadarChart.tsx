@@ -17,7 +17,7 @@ export function RadarChart({ labels, values, unit = 'sets', className = 'h-72' }
       data: { labels, datasets: [{ data: values, borderColor: accent, backgroundColor: `${accent}40`, pointBackgroundColor: accent, pointRadius: 3, borderWidth: 2 }] },
       options: {
         responsive: true, maintainAspectRatio: false, animation: false,
-        plugins: { tooltip: { callbacks: { label: (i) => ` ${Math.round(Number(i.raw) * 10) / 10} ${unit}` } } },
+        plugins: { legend: { display: false }, tooltip: { callbacks: { label: (i) => ` ${Math.round(Number(i.raw) * 10) / 10} ${unit}` } } },
         scales: {
           r: {
             min: 0, suggestedMax: Math.ceil(max * 1.1),
