@@ -258,3 +258,33 @@ export function trendDirection(v: number[]): 'up' | 'down' | 'neutral' {
   const rel = (t[t.length - 1] - t[0]) / avg
   return rel > 0.01 ? 'up' : rel < -0.01 ? 'down' : 'neutral'
 }
+
+/**
+ * Overall strength over time, as one index (start = 100). Each week, every lift you've trained in the last 6 weeks
+ * has a "current strength" (its best est. 1RM in that window). The index moves by the average week-over-week change
+ * of the lifts present in both weeks, so adding a new exercise or dropping one doesn't jump the line.
+ */
+export function strengthIndex(snap: Pick<Snapshot, 'names' | 'summaries'>, now = new Date()) {
+  const WEEK = 7 * 86400000, WINDOW = 6
+  const monday = (d: Date) => { const x = new Date(d.getFullYear(), d.getMonth(), d.getDate()); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.getTime() }
+  const lifts = snap.names.map((n) => snap.summaries.get(n)!.filter((d) => d.maxE1rm > 0)).filter((d) => d.length)
+  if (!lifts.length) return null
+  const start = Math.min(...lifts.map((d) => monday(d[0].date)))
+  const weeks = Math.floor((monday(now) - start) / WEEK) + 1
+  if (weeks < 2) return null
+  // Best est. 1RM per lift per week.
+  const per = lifts.map((d) => {
+    const w: number[] = new Array(weeks).fill(0)
+    for (const x of d) { const k = Math.round((monday(x.date) - start) / WEEK); if (k >= 0 && k < weeks) w[k] = Math.max(w[k], x.maxE1rm) }
+    return w.map((_, k) => Math.max(...w.slice(Math.max(0, k - WINDOW + 1), k + 1)))
+  })
+  const values = [100], labels = [new Date(start)]
+  for (let k = 1; k < weeks; k++) {
+    const r = per.filter((w) => w[k] > 0 && w[k - 1] > 0).map((w) => Math.log(w[k] / w[k - 1]))
+    values.push(values[k - 1] * Math.exp(r.length ? r.reduce((a, b) => a + b, 0) / r.length : 0))
+    labels.push(new Date(start + k * WEEK))
+  }
+  const last = values[values.length - 1]
+  const ago = (n: number) => values[Math.max(0, values.length - 1 - n)]
+  return { labels, values: values.map((v) => Math.round(v * 10) / 10), lifts: lifts.length, total: last / 100 - 1, recent: last / ago(13) - 1, weeks }
+}

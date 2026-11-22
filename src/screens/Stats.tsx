@@ -17,7 +17,7 @@ import { bmi, distLabel, fmtW, toDist, toUnit } from '../lib/format'
 import { isCardio } from '../lib/energy'
 import { me, useUnit, useUser, type Exercise, type Unit, type User } from '../lib/pb'
 import { useStatsRows, type StatRow } from '../lib/statsData'
-import { buildStats, chartable, effectiveMetric, fmtMinutes, fmtPace, isWeighted, lowerIsBetter, metricLabel, metricOptions, paceOf, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot, type StatKind } from '../lib/stats'
+import { buildStats, strengthIndex, chartable, effectiveMetric, fmtMinutes, fmtPace, isWeighted, lowerIsBetter, metricLabel, metricOptions, paceOf, trendDirection, trendLine, values, type DaySummary, type FlatSet, type Metric, type Snapshot, type StatKind } from '../lib/stats'
 
 const RANGES: [string, number][] = [['15D', 15], ['30D', 30], ['90D', 90], ['6M', 180], ['1Y', 365], ['All', 0]]
 const METRICS: [Metric, string][] = [['bestset', 'Best Set'], ['est1rm', 'Est. 1RM'], ['weight', 'Max Weight'], ['volume', 'Volume'], ['reps', 'Total Reps']]
@@ -246,7 +246,38 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
 type MuscleRange = '7d' | 'lastweek' | 'all'
 
 /** Which muscles you trained in a period: body graph + radar "skills" chart of weighted sets per muscle group. */
+/** Open/closed state that survives closing the app (per device). */
+function useRemembered(key: string, initial: boolean): [boolean, (v: boolean) => void] {
+  const [v, setV] = useState(() => { try { const s = localStorage.getItem(key); return s === null ? initial : s === '1' } catch { return initial } })
+  return [v, (next) => { setV(next); try { localStorage.setItem(key, next ? '1' : '0') } catch { /* private mode */ } }]
+}
+
+/** Overall strength index (start = 100) across every weighted lift, week by week. */
+function StrengthCard({ snap }: { snap: Snapshot }) {
+  const s = useMemo(() => strengthIndex(snap), [snap])
+  if (!s) return null
+  const pct = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(Math.round(x * 100))}%`
+  const tone = (x: number) => (x > 0.005 ? 'text-accent' : x < -0.005 ? 'text-danger' : 'text-muted')
+  return (
+    <div className="space-y-2 rounded-2xl border border-line bg-surface p-4" data-strength>
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="font-extrabold">Overall strength</h2>
+        <span className="text-xs text-muted">{s.lifts} lift{s.lifts === 1 ? '' : 's'}</span>
+      </div>
+      <div className="grid grid-cols-2 gap-2 text-center">
+        <div className="rounded-xl bg-surface-2 py-2"><p className={`num text-xl font-black ${tone(s.total)}`}>{pct(s.total)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Since you started</p></div>
+        <div className="rounded-xl bg-surface-2 py-2"><p className={`num text-xl font-black ${tone(s.recent)}`}>{pct(s.recent)}</p><p className="text-[10px] font-semibold uppercase tracking-wide text-muted">Last 3 months</p></div>
+      </div>
+      <LineChart className="h-44" yTitle="Strength index" yFormat={(v) => `${Math.round(v)}`} values={s.values}
+        labels={s.labels.map((d) => d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' }))}
+        extras={s.values.map((v) => `${pct(v / 100 - 1)} vs start`)} />
+      <p className="text-[11px] text-faint">Your est. 1RMs across all weighted lifts, combined into one line that starts at 100. Each lift counts its best from the last 6 weeks, so adding or dropping an exercise doesn't skew it.</p>
+    </div>
+  )
+}
+
 function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
+  const [open, setOpen] = useRemembered('bl.musclesOpen', true)
   const [range, setRange] = useState<MuscleRange>('7d')
   const { counts, byGroup, cardio, sets, label: rangeLabel } = useMemo(() => {
     const now = new Date()
@@ -272,11 +303,12 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
   const ranked = groups.filter((m) => all[m] > 0).sort((a, b) => all[b] - all[a])
   const untrained = groups.filter((m) => !all[m])
   return (
-    <div className="space-y-3 rounded-2xl border border-line bg-surface p-4">
-      <div className="flex items-baseline justify-between gap-2">
+    <div className="space-y-3 rounded-2xl border border-line bg-surface p-4" data-muscles>
+      <button onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 text-left">
         <h2 className="font-extrabold">Muscles trained</h2>
-        <span className="text-xs text-muted">{rangeLabel} · {sets} sets</span>
-      </div>
+        <span className="flex items-center gap-1.5 text-xs text-muted">{rangeLabel} · {sets} sets<DownIcon width={18} height={18} className={`transition ${open ? 'rotate-180' : ''}`} /></span>
+      </button>
+      {open && <>
       <div className="flex rounded-xl bg-surface-2 p-1">
         {([['7d', 'Last 7 days'], ['lastweek', 'Last week'], ['all', 'All time']] as [MuscleRange, string][]).map(([v, l]) => (
           <button key={v} onClick={() => setRange(v)} className={`h-8 flex-1 rounded-lg text-xs font-bold transition ${range === v ? 'bg-accent text-accent-ink' : 'text-muted'}`}>{l}</button>
@@ -299,6 +331,7 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
           <p className="text-[11px] text-faint">Sets per muscle group — secondary muscles count as half a set. Cardio lights up the heart.</p>
         </>
       )}
+      </>}
     </div>
   )
 }
@@ -473,6 +506,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
         ))}
       </div>
 
+      <StrengthCard snap={snap} />
       {rows && <MusclesCard rows={rows} sex={user.sex} />}
       <MoreStats snap={snap} unit={unit} bw={user.bodyweight_kg} height={user.height_cm} />
 
