@@ -445,7 +445,7 @@ export function LabelScan({ barcode, onRead }: { barcode?: string; onRead: (p: Q
       const found = [r.kcal, r.p, r.c, r.f].filter((v) => v !== undefined).length
       if (!found) { setErr("Couldn't read the label. Get closer so the Nutrition Facts fill the photo, in good light, and try again."); return }
       onRead({ macros: labelMacros(r), barcode, source: barcode ? 'barcode' : undefined,
-        note: `Read from the label${r.serving ? ` (per serving: ${r.serving})` : ''}${found < 4 ? '. Some values were missing' : ''}. Check the numbers before logging.` })
+        note: `Read from the label${r.serving ? ` (per serving: ${r.serving})` : ''}${found < 4 ? '. Some values were missing' : ''}${r.inferred ? `. ${({ p: 'Protein', c: 'Carbs', f: 'Fat' } as const)[r.inferred]} was hard to read, so it was worked out from the calories` : ''}. Check the numbers before logging.` })
     } catch (e) { setErr(errMsg(e)) } finally { setPct(null) }
   }
   return (

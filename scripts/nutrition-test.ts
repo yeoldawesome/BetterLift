@@ -167,6 +167,13 @@ ok(['breakfast', 'lunch', 'dinner', 'snack'].includes(mealNow()), 'mealNow')
   // Real Tesseract output from a photographed label: "37g" → "379", "(55g)" → "(559)".
   const real = parseLabel(`Nutrition Facts\n8 servings per container\nServing size 213 cup (559)\nI\nAmount per serving\n\nCalories 230\nTotal Fat 8g 10%\nSodium 160mg\n\nTotal Carbohydrate 379 13%\nTotal Sugars 129\n\nProtein 3g`)
   ok(real.kcal === 230 && real.f === 8 && real.c === 37 && real.p === 3, `real OCR text (${JSON.stringify({ ...real, text: undefined })})`)
+  // Two-column label (per serving / per container), as Tesseract read real photos: "0.59" = 0.5g, "239" = 23g, "Protein 39 9g".
+  const two = parseLabel(`3 servings per container\nServing size 3 pretzels (28g)\nPer serving Per container\nCalories 110 330\nTotal Fat 0.59 1%150 an\nSaturated Fat 0g 0% 0g 0%\nTotal Carb, 239 8% 69 24%\nProtein 39 9g`)
+  ok(two.kcal === 110 && two.f === 0.5 && two.c === 23 && two.p === 3, `two-column label, per-serving column (${JSON.stringify({ ...two, text: undefined })})`)
+  const gg = parseLabel(`Calories 230\nTotal Fat gg 10%\nTotal Carbohydrate 37g 13%\nProtein 3g`)
+  ok(gg.f === 8 && gg.inferred === 'f', `unreadable fat worked out from calories, never the % column (${JSON.stringify({ ...gg, text: undefined })})`)
+  const g3 = parseLabel(`Calories 230\nTotal Fat 83 10%\nTotal Carbohydrate 370 13%\nProtein 3`)
+  ok(g3.f === 8 && g3.c === 37 && g3.p === 3, `"g" read as 3 or 0 (${JSON.stringify({ ...g3, text: undefined })})`)
   const c = parseLabel(`Calories 11O\nTotal Fat Og\nTotal Carb. 2g\nProtein 25g`)
   ok(c.kcal === 110 && c.f === 0 && c.c === 2 && c.p === 25, `O read as 0 (${JSON.stringify({ ...c, text: undefined })})`)
 }
