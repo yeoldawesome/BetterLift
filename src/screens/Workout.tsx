@@ -8,7 +8,7 @@ import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
 import { SET_TYPES, setLabels, type SetType } from '../lib/setTypes'
 import { emptySet, finishWorkout, liveRest, makeEx, repairActive, routineExercises, saveAsRoutine, syncRoutine, useActive, type AEx, type ASet, type FinishDraft, type Prev } from '../lib/active'
-import { beatText, prBeat, useBest, clearBestCache } from '../lib/best'
+import { beatText, paceOf, prBeat, useBest, clearBestCache } from '../lib/best'
 import { fmtCountdown, loadStreak, streakText, type Streak } from '../lib/streak'
 import { invalidateStats } from '../lib/statsData'
 import { distLabel, epley, fmtClock, fmtDist, fmtVol, fmtW, fromDist, fromUnit, num } from '../lib/format'
@@ -182,7 +182,7 @@ function ActiveWorkout() {
 
   const add = async (exs: Exercise[]) => {
     setPicking(false)
-    const made = await Promise.all(exs.map((e) => { const r = restFor(e, user); return makeEx(e, 3, r.rest, '', r.after) }))
+    const made = await Promise.all(exs.map((e) => { const r = restFor(e, user); return makeEx(e, 1, r.rest, '', r.after) }))
     update((w) => ({ ...w, exercises: [...w.exercises, ...made] }))
   }
 
@@ -447,13 +447,15 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   const k = x.ex.kind
   const cardio = isCardio(x.ex)
   // "To PR" line: compare this session's checked-off sets against the all-time best.
-  const best = useBest(x.ex.id)
+  const best = useBest(x.ex.id, undefined, k === 'cardio')
   const done = x.sets.filter((s) => s.done)
   const liveE1 = Math.max(0, ...done.map((s) => epley(fromUnit(num(s.w), unit), Math.round(num(s.r)))))
   const liveReps = Math.max(0, ...done.map((s) => Math.round(num(s.r))))
   const liveSec = Math.max(0, ...done.map((s) => Math.round(num(s.sec))))
   const workingW = num(done[done.length - 1]?.w ?? '') || num(x.sets.find((s) => s.w)?.w ?? '') || (x.prev[0]?.w ? Number(fmtW(x.prev[0].w, unit)) : 0) || (best?.w ? Number(fmtW(best.w, unit)) : 0)
-  const pr = planning ? null : prBeat(x.ex, best, unit, workingW, liveE1, liveReps, liveSec)
+  // Fastest checked-off run/ride long enough to count (seconds per km).
+  const livePace = k === 'cardio' ? done.reduce((b, s) => { const p = paceOf(fromDist(num(s.dist), unit), num(s.sec)); return p && (!b || p < b) ? p : b }, 0) : 0
+  const pr = planning ? null : prBeat(x.ex, best, unit, workingW, liveE1, liveReps, liveSec, livePace)
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')

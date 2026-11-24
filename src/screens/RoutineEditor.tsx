@@ -87,7 +87,7 @@ export default function RoutineEditor() {
     setPicking(false)
     const made = await Promise.all(exs.map(async (e) => {
       const rest = liftRest(e, user)
-      const x = await makeEx(e, 3, rest.rest, '', rest.after)
+      const x = await makeEx(e, 1, rest.rest, '', rest.after)
       const timed = e.kind === 'duration' || e.kind === 'cardio'
       return { ...x, sets: x.sets.map((s) => (timed ? s : { ...s, r: '10' })) }
     }))

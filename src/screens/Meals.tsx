@@ -4,7 +4,8 @@ import { ask } from '../components/Dialog'
 import { BookIcon, CheckIcon, PlusIcon } from '../components/icons'
 import { fmtK, MacroLine } from '../components/nutrition/bits'
 import { ItemsEditor } from '../components/nutrition/ItemsEditor'
-import { BottomSheet, Button, Card, Empty, ErrorText, Input, Screen, Segmented, Spinner } from '../components/ui'
+import { SwipeRow } from '../components/SwipeRow'
+import { BottomSheet, Button, Empty, ErrorText, Input, Screen, Segmented, Spinner } from '../components/ui'
 import { createSaved, deleteSaved, itemsTotal, loadSaved, logSaved, updateSaved, type SavedMeal } from '../lib/meals'
 import { mealNow, MEALS, today, type Meal, type MealItem } from '../lib/nutrition'
 import { errMsg } from '../lib/pb'
@@ -20,6 +21,18 @@ export default function Meals() {
   const [logging, setLogging] = useState<SavedMeal | null>(null)
   const [toast, setToast] = useState('')
   const [err, setErr] = useState('')
+  // Swiped away: gone at once, with a few seconds to put it back.
+  const [undo, setUndo] = useState<SavedMeal | null>(null)
+  useEffect(() => { if (!undo) return; const t = setTimeout(() => setUndo(null), 5000); return () => clearTimeout(t) }, [undo])
+  const swipeDelete = (m: SavedMeal) => {
+    setList((l) => l?.filter((x) => x.id !== m.id) ?? l)
+    setUndo(m)
+    deleteSaved(m.id).catch((e) => { setErr(errMsg(e)); setUndo(null); reload() })
+  }
+  const undoDelete = async (m: SavedMeal) => {
+    setUndo(null)
+    try { await createSaved(m.name, m.kind, m.items ?? []); reload() } catch (e) { setErr(errMsg(e)) }
+  }
   const reload = () => loadSaved().then(setList).catch((e) => { setErr(errMsg(e)); setList((l) => l ?? []) })
   useEffect(() => { reload() }, [])
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2500); return () => clearTimeout(t) }, [toast])
@@ -44,10 +57,11 @@ export default function Meals() {
           body={kind === 'meal' ? 'Save the meals you eat often, like a burrito bowl with all its toppings, and log them in one tap.' : 'Save single foods with your usual amount for one-tap logging.'}>
           <Button onClick={() => setEditing({ new: true, kind })}>Create {kind}</Button>
         </Empty>
-      ) : shown.map((m) => {
+      ) : <div className="grid grid-cols-1 gap-3">{shown.map((m) => {
         const t = itemsTotal(m.items ?? [])
         return (
-          <Card key={m.id} className="flex items-center gap-3 !p-3" data-saved={m.name}>
+          <SwipeRow key={m.id} label={`Delete ${m.name}`} onDelete={() => swipeDelete(m)} round="rounded-2xl" rowClass="rounded-2xl border border-line bg-surface">
+          <div className="flex items-center gap-3 p-3" data-saved={m.name}>
             <button onClick={() => setEditing(m)} className="flex min-w-0 flex-1 items-center gap-3 text-left">
               <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-accent/15 text-accent"><BookIcon width={22} height={22} /></span>
               <span className="min-w-0 flex-1">
@@ -59,9 +73,18 @@ export default function Meals() {
             <button onClick={() => setLogging(m)} aria-label={`Log ${m.name}`} className="grid size-10 shrink-0 place-items-center rounded-full bg-accent text-accent-ink active:scale-95">
               <PlusIcon width={20} height={20} />
             </button>
-          </Card>
+          </div>
+          </SwipeRow>
         )
-      })}
+      })}</div>}
+      {undo && (
+        <div className="fixed inset-x-0 bottom-[calc(env(safe-area-inset-bottom)+4.75rem)] z-40 mx-auto flex max-w-lg px-safe">
+          <div className="flex w-full items-center gap-3 rounded-2xl border border-line bg-surface-2 p-2 pl-4 shadow-2xl">
+            <span className="min-w-0 flex-1 truncate text-sm">Deleted <span className="font-bold">{undo.name}</span></span>
+            <button onClick={() => undoDelete(undo)} className="h-9 shrink-0 rounded-xl px-3 text-sm font-bold text-accent">Undo</button>
+          </div>
+        </div>
+      )}
 
       {logging && (
         <BottomSheet title={`Log ${logging.name}`} onClose={() => setLogging(null)}>

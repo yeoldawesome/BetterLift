@@ -14,7 +14,7 @@ import { trendLine } from '../lib/stats'
 import { BodyMap } from './BodyMap'
 import { EquipmentUsed, equipmentFor } from './Equipment'
 import { TrophyIcon } from './icons'
-import { beatText, prBeat } from '../lib/best'
+import { beatText, fmtPacePerUnit, paceOf, prBeat } from '../lib/best'
 // Charts load on demand so chart.js stays out of the app's first download.
 const LineChart = lazy(() => import('./LineChart').then((m) => ({ default: m.LineChart })))
 import { Segmented, Sheet, Spinner } from './ui'
@@ -257,7 +257,8 @@ function StatsTab({ ex, unit, sessions, strongest, own, onOpenSet }: { ex: Exerc
 /** Your own stats: what beats your PR next time, and how the last session and this week compare with before. */
 function NextPr({ ex, unit, sessions }: { ex: Exercise; unit: Unit; sessions: Session[] }) {
   const k = ex.kind
-  if (!sessions.length || k === 'cardio' || (k === 'duration' && isCardio(ex))) return null
+  if (!sessions.length || (k === 'duration' && isCardio(ex))) return null
+  if (k === 'cardio') return <CardioPr unit={unit} sessions={sessions} />
   const top = sessions.reduce((b, x) => (x.bestE1 > b.bestE1 ? x : b))
   const best = { e1rm: top.bestE1, w: top.bestW, r: top.bestR, maxReps: Math.max(...sessions.map((x) => x.maxReps)), maxSec: Math.max(...sessions.map((x) => x.maxSec)), any: true }
   const last = sessions[sessions.length - 1], prev = sessions[sessions.length - 2]
@@ -306,6 +307,52 @@ function NextPr({ ex, unit, sessions }: { ex: Exercise; unit: Unit; sessions: Se
           {row('Best set this week', setOf(wk.reduce((b, x) => (scoreOf(x) > scoreOf(b) ? x : b))), { text: `${fmtDelta(bestIn(wk) - bestIn(lw))} vs last week`, d: bestIn(wk) - bestIn(lw) })}
           {row(`${volLabel} this week`, weighted ? `${Math.round(Number(fmtW(volIn(wk), unit))).toLocaleString()} ${unit}` : k === 'duration' ? `${volIn(wk)}s` : `${volIn(wk)}`, { text: `${pct(volIn(wk), volIn(lw)) >= 0 ? '+' : ''}${pct(volIn(wk), volIn(lw))}% vs last week`, d: volIn(wk) - volIn(lw) })}
         </> : <p className="py-1.5 text-xs text-muted">{wk.length ? 'Not done last week, so no weekly comparison yet.' : lw.length ? `Not done yet this week. Last week's best: ${setOf(lw.reduce((b, x) => (scoreOf(x) > scoreOf(b) ? x : b)))}.` : 'Do it this week and next to see week-over-week progress.'}</p>}
+      </div>
+    </div>
+  )
+}
+
+/** Runs, rides, rows: your best pace to beat, and how the last session and this week compare. */
+function CardioPr({ unit, sessions }: { unit: Unit; sessions: Session[] }) {
+  const paceIn = (x: Session) => x.sets.reduce((b, s) => { const p = paceOf(s.distance_km, s.seconds); return p && (!b || p < b) ? p : b }, 0)
+  const paced = sessions.filter((x) => paceIn(x) > 0)
+  if (!paced.length) return null
+  const best = Math.min(...paced.map(paceIn))
+  const last = paced[paced.length - 1], prev = paced[paced.length - 2]
+  const now = Date.now(), DAY = 864e5
+  const inWeek = (ago: number) => sessions.filter((x) => now - x.date.getTime() >= ago * 7 * DAY && now - x.date.getTime() < (ago + 1) * 7 * DAY)
+  const wk = inWeek(0), lw = inWeek(1)
+  const bestIn = (xs: Session[]) => { const ps = xs.map(paceIn).filter(Boolean); return ps.length ? Math.min(...ps) : 0 }
+  const distIn = (xs: Session[]) => xs.reduce((t, x) => t + x.dist, 0)
+  const per = unit === 'lb' ? 1.609344 : 1
+  // Pace change in seconds per mile/km; negative = faster (good).
+  const diff = (a: number, b: number) => Math.round((a - b) * per)
+  const diffText = (d: number) => (d === 0 ? 'same pace' : `${Math.abs(d)}s ${d < 0 ? 'faster' : 'slower'}`)
+  const tone = (d: number) => (d < 0 ? 'text-accent' : d > 0 ? 'text-danger' : 'text-muted')
+  const row = (label: string, value: string, delta?: { text: string; cls: string }) => (
+    <div className="py-1.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <span className="whitespace-nowrap text-sm text-muted">{label}</span>
+        <span className="num text-right text-sm font-bold">{value}</span>
+      </div>
+      {delta && <p className={`num text-right text-xs font-semibold ${delta.cls}`}>{delta.text}</p>}
+    </div>
+  )
+  const wkBest = bestIn(wk), lwBest = bestIn(lw)
+  return (
+    <div className="space-y-2" data-next-pr>
+      <div className="rounded-2xl border border-line bg-surface-2/60 px-4 py-3">
+        <p className="num text-base"><span className="font-semibold text-muted">Beat PR: </span><span className="font-extrabold">faster than {fmtPacePerUnit(best, unit)}</span></p>
+        <p className="mt-0.5 text-xs text-muted">Your fastest pace on a session of at least {unit === 'lb' ? '0.25 mi' : '0.4 km'}.</p>
+      </div>
+      <div className="rounded-2xl border border-line bg-surface px-4 py-2">
+        <p className="pt-1 text-xs font-bold uppercase tracking-wider text-muted">Progress</p>
+        {row(`Last time · ${last.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`, fmtPacePerUnit(paceIn(last), unit),
+          prev ? { text: `${diffText(diff(paceIn(last), paceIn(prev)))} than the time before`, cls: tone(diff(paceIn(last), paceIn(prev))) } : undefined)}
+        {wkBest && lwBest ? <>
+          {row('Best pace this week', fmtPacePerUnit(wkBest, unit), { text: `${diffText(diff(wkBest, lwBest))} than last week`, cls: tone(diff(wkBest, lwBest)) })}
+          {row('Distance this week', `${fmtDist(distIn(wk), unit)} ${distLabel(unit)}`, { text: `${fmtDist(Math.abs(distIn(wk) - distIn(lw)), unit)} ${distLabel(unit)} ${distIn(wk) >= distIn(lw) ? 'more' : 'less'} than last week`, cls: distIn(wk) >= distIn(lw) ? 'text-accent' : 'text-danger' })}
+        </> : <p className="py-1.5 text-xs text-muted">{wkBest ? 'Not done last week, so no weekly comparison yet.' : lwBest ? `Not done yet this week. Last week's best: ${fmtPacePerUnit(lwBest, unit)}.` : 'Do it this week and next to see week-over-week progress.'}</p>}
       </div>
     </div>
   )

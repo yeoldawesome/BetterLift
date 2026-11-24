@@ -9,12 +9,14 @@ import { TrashIcon } from './icons'
  * Touch uses touch events (not pointer events): the browser fires pointercancel as soon as a finger that started on a
  * text input moves, which used to kill the swipe on unchecked sets. With touchmove we can preventDefault and keep it.
  */
-export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-surface', flush = false }: {
+export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-surface', flush = false, round = 'rounded-lg' }: {
   onDelete: () => void; children: ReactNode; label?: string
   /** Background/padding of the sliding row (must be opaque so the delete layer stays hidden). */
   rowClass?: string
   /** Square edges, for rows that run edge to edge. */
   flush?: boolean
+  /** Corner radius of the row and its delete layer (match the card it wraps). */
+  round?: string
 }) {
   const wrap = useRef<HTMLDivElement>(null)
   const row = useRef<HTMLDivElement>(null)
@@ -125,9 +127,9 @@ export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-
   }, [])
 
   return (
-    <div ref={wrap} className={`relative col-span-full grid grid-cols-subgrid overflow-hidden ${flush ? '' : 'rounded-lg'}`}>
+    <div ref={wrap} className={`relative col-span-full grid grid-cols-subgrid overflow-hidden ${flush ? '' : round}`}>
       <div ref={bg} aria-hidden style={{ opacity: 0 }}
-        className={`group absolute inset-0 flex items-center gap-2 ${flush ? '' : 'rounded-lg'} bg-danger px-4 text-sm font-bold text-white`}>
+        className={`group absolute inset-0 flex items-center gap-2 ${flush ? '' : round} bg-danger px-4 text-sm font-bold text-white`}>
         <TrashIcon width={18} height={18} className="transition-transform group-data-[past=1]:scale-125" />{label}
       </div>
       <div ref={row} data-swipe-row

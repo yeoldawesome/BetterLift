@@ -4,26 +4,42 @@ import { epley, fromUnit, toUnit } from './format'
 import { me, pb, type Exercise, type Unit, type WSet } from './pb'
 
 /** A user's all-time best set for an exercise: strongest by est. 1RM, plus max reps / longest hold for non-weighted kinds. */
-export interface Best { e1rm: number; w: number; r: number; maxReps: number; maxSec: number; any: boolean }
+export interface Best { e1rm: number; w: number; r: number; maxReps: number; maxSec: number; any: boolean
+  /** Fastest pace on a run/ride of at least PACE_MIN_KM, in seconds per km (0 = none yet). Only loaded for cardio. */
+  pace?: number }
+
+/** Shortest distance that counts for a pace PR, so a quick 100 m doesn't set an unbeatable pace. */
+export const PACE_MIN_KM = 0.4
+/** Seconds per km for a set, or 0 when it doesn't count (too short, or no time). */
+export const paceOf = (km: number, sec: number) => (km >= PACE_MIN_KM && sec > 0 ? sec / km : 0)
+
+/** Your fastest pace for a cardio exercise (seconds per km), from every logged set long enough to count. */
+export async function bestPace(exId: string, userId = me()): Promise<number> {
+  const sets = await pb.collection('workout_sets').getFullList<WSet>({
+    filter: pb.filter('user = {:u} && exercise = {:e} && completed = true && distance_km >= {:d} && seconds > 0', { u: userId, e: exId, d: PACE_MIN_KM }),
+    fields: 'distance_km,seconds', batch: 1000,
+  })
+  return sets.reduce((b, x) => { const p = paceOf(x.distance_km, x.seconds); return p && (!b || p < b) ? p : b }, 0)
+}
 
 const cache = new Map<string, Promise<Best>>()
 export const clearBestCache = () => cache.clear()
 
-export function loadBest(exId: string, userId = me()): Promise<Best> {
-  const key = `${userId}:${exId}`
+export function loadBest(exId: string, userId = me(), withPace = false): Promise<Best> {
+  const key = `${userId}:${exId}:${withPace ? 'pace' : ''}`
   if (!cache.has(key)) {
     const base = pb.filter('user = {:u} && exercise = {:e} && completed = true', { u: userId, e: exId })
     const top = (sort: string) => pb.collection('workout_sets').getList<WSet>(1, 1, { filter: base, sort, fields: 'weight_kg,reps,seconds,e1rm_kg' }).then((r) => r.items[0])
-    cache.set(key, Promise.all([top('-e1rm_kg,-weight_kg'), top('-reps'), top('-seconds')]).then(([b, r, s]) => ({
-      e1rm: b?.e1rm_kg ?? 0, w: b?.weight_kg ?? 0, r: b?.reps ?? 0, maxReps: r?.reps ?? 0, maxSec: s?.seconds ?? 0, any: !!(b || r || s),
+    cache.set(key, Promise.all([top('-e1rm_kg,-weight_kg'), top('-reps'), top('-seconds'), withPace ? bestPace(exId, userId) : 0]).then(([b, r, s, pace]) => ({
+      e1rm: b?.e1rm_kg ?? 0, w: b?.weight_kg ?? 0, r: b?.reps ?? 0, maxReps: r?.reps ?? 0, maxSec: s?.seconds ?? 0, any: !!(b || r || s), pace,
     })).catch((e) => { cache.delete(key); throw e }))
   }
   return cache.get(key)!
 }
 
-export function useBest(exId: string, userId?: string) {
+export function useBest(exId: string, userId?: string, withPace = false) {
   const [best, setBest] = useState<Best | null>(null)
-  useEffect(() => { let on = true; loadBest(exId, userId).then((b) => on && setBest(b)).catch(() => {}); return () => { on = false } }, [exId, userId])
+  useEffect(() => { let on = true; loadBest(exId, userId, withPace).then((b) => on && setBest(b)).catch(() => {}); return () => { on = false } }, [exId, userId, withPace])
   return best
 }
 
@@ -67,9 +83,21 @@ export function prLine(ex: Exercise, best: Best | null, reps: number, unit: Unit
  * "Beat PR" options in display units: more reps at the weight you're using, or the next plate step up.
  * e.g. [{ w: 40, r: 13 }, { w: 45, r: 8 }] → "Beat PR: 40 × 13 or 45 × 8". Bodyweight kinds give reps; holds give seconds.
  */
-export type Beat = { hit: true } | { hit: false; first?: boolean; options: { w?: number; r?: number; sec?: number }[] }
-export function prBeat(ex: Exercise, best: Best | null, unit: Unit, workingW: number, liveE1rmKg = 0, liveReps = 0, liveSec = 0): Beat | null {
+export type Beat = { hit: true } | { hit: false; first?: boolean; options: { w?: number; r?: number; sec?: number; text?: string }[] }
+/** "8:15 /mi" from seconds per km. */
+export const fmtPacePerUnit = (secPerKm: number, unit: Unit) => {
+  const s = Math.round(unit === 'lb' ? secPerKm * KM_PER_MI : secPerKm)
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')} /${unit === 'lb' ? 'mi' : 'km'}`
+}
+const KM_PER_MI = 1.609344
+export function prBeat(ex: Exercise, best: Best | null, unit: Unit, workingW: number, liveE1rmKg = 0, liveReps = 0, liveSec = 0, livePace = 0): Beat | null {
   if (!best) return null
+  // Runs, rides, rows: a faster pace is the PR.
+  if (ex.kind === 'cardio') {
+    if (!best.pace) return livePace ? { hit: true } : null
+    if (livePace && livePace < best.pace - 0.5) return { hit: true }
+    return { hit: false, options: [{ text: `faster than ${fmtPacePerUnit(best.pace, unit)}` }] }
+  }
   if (!best.any) return { hit: false, first: true, options: [] }
   if (ex.kind === 'weight') {
     if (liveE1rmKg > best.e1rm + 0.01) return { hit: true }
@@ -92,4 +120,4 @@ export function prBeat(ex: Exercise, best: Best | null, unit: Unit, workingW: nu
   return null
 }
 
-export const beatText = (o: { w?: number; r?: number; sec?: number }) => (o.sec ? `${o.sec}s` : o.w !== undefined ? `${o.w} × ${o.r}` : `${o.r} reps`)
+export const beatText = (o: { w?: number; r?: number; sec?: number; text?: string }) => (o.text ? o.text : o.sec ? `${o.sec}s` : o.w !== undefined ? `${o.w} × ${o.r}` : `${o.r} reps`)

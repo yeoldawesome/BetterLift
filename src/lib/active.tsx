@@ -5,6 +5,7 @@ import { loadExercises, matchOfficial, nameKey } from './exercises'
 import { myAccent } from './theme'
 import { idbDel, idbGet, idbSet } from './idb'
 import { scheduleRestPush } from './push'
+import { bestPace, paceOf } from './best'
 import { DEFAULT_REST, liftRestSet, me, newId, pb, restFor, userRest, type Exercise, type PlanSet, type Routine, type RoutineExercise, type RoutineUpdate, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
@@ -291,6 +292,14 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
     rows.forEach((r, i) => { if (r.ex.id === id && r.e1 > 0 && (best < 0 || r.e1 > rows[best].e1)) best = i })
     if (best >= 0 && rows[best].e1 > (bestPrev.get(id) ?? 0) + 0.01) prs.add(best)
   }
+  // Cardio (runs, rides, rows): the fastest set long enough to count is a PR if it beats your best pace.
+  await Promise.all(exIds.filter((id) => rows.some((r) => r.ex.id === id && r.ex.kind === 'cardio')).map(async (id) => {
+    let fast = -1
+    rows.forEach((r, i) => { if (r.ex.id === id && r.type !== 'warmup' && r.type !== 'cooldown' && paceOf(r.dist, r.sec) && (fast < 0 || paceOf(r.dist, r.sec) < paceOf(rows[fast].dist, rows[fast].sec))) fast = i })
+    if (fast < 0) return
+    const prev = await bestPace(id, uid).catch(() => -1)
+    if (prev >= 0 && (!prev || paceOf(rows[fast].dist, rows[fast].sec) < prev - 0.5)) prs.add(fast)
+  }))
 
   const batch = pb.createBatch()
   batch.collection('workouts').create({
