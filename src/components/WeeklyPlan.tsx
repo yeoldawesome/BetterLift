@@ -29,7 +29,7 @@ export function WeeklyPlan({ routines }: { routines: Routine[] }) {
         <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>{cycle.length ? 'Edit' : 'Set up'}</Button>
       </div>
       {cycle.length ? (
-        <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+        <div className="bleed-x flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
           {cycle.map((s, i) => (
             <div key={i} className={`flex shrink-0 flex-col items-center gap-1 rounded-xl border px-3 py-2 ${i === current ? 'border-accent bg-accent/15' : 'border-line bg-surface-2'}`}>
               <span className="text-[10px] font-bold uppercase tracking-wider text-faint">Day {i + 1}</span>

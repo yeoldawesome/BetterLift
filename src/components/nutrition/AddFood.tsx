@@ -60,7 +60,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
         {!collect && !picked && saved.length > 0 && (
           <div>
             <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">My meals</p>
-            <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+            <div className="bleed-x flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
               {saved.map((sm) => (
                 <button key={sm.id} onClick={async () => {
                   try { onAdded?.(await logSaved(sm, meal, day)); setToast(`Added ${sm.name} · ${fmtK(itemsTotal(sm.items ?? []).kcal)} kcal`) } catch (e) { setToast(errMsg(e)) }

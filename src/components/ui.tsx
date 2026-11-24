@@ -65,7 +65,7 @@ export function Segmented<T extends string>({ value, options, onChange }: { valu
 
 export function Chips({ value, options, onChange }: { value: string; options: [string, string][]; onChange: (v: string) => void }) {
   return (
-    <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+    <div className="bleed-x flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
       {options.map(([v, l]) => (
         <button key={v} onClick={() => onChange(v)} className={`h-8 shrink-0 rounded-full px-3 text-sm font-semibold ${value === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{l}</button>
       ))}
@@ -149,7 +149,8 @@ export function BottomSheet({ title, onClose, children }: { title: string; onClo
         <div className="mx-auto mt-2 h-1 w-10 rounded-full bg-line" />
         <div className="relative px-safe py-3 text-center">
           <h2 className="text-lg font-extrabold">{title}</h2>
-          <button onClick={onClose} className="absolute right-3 top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-full text-muted" aria-label="Close"><CloseIcon width={18} height={18} /></button>
+          {/* Clear of a right-edge inset (the foldable iPhone's cover-screen status pill). */}
+          <button onClick={onClose} className="absolute right-[max(0.75rem,env(safe-area-inset-right))] top-1/2 grid size-9 -translate-y-1/2 place-items-center rounded-full text-muted" aria-label="Close"><CloseIcon width={18} height={18} /></button>
         </div>
         <div className="max-h-[70vh] overflow-y-auto px-safe pb-4">{children}</div>
       </div>

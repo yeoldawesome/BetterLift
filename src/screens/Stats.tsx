@@ -221,16 +221,17 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
   const backdrop = useRef<HTMLDivElement>(null)
   useSwipeDismiss(card, onClose, { axes: ['x', 'y'], fade: backdrop }) // swipe right or down to close
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center p-3" onClick={onClose}>
+    // Kept inside the safe areas: on the foldable iPhone's cover screen the status pill sits on the right edge.
+    <div className="fixed inset-0 z-[70] flex items-center justify-center pb-[max(0.75rem,env(safe-area-inset-bottom))] pl-[max(0.75rem,env(safe-area-inset-left))] pr-[max(0.75rem,env(safe-area-inset-right))] pt-[max(0.75rem,env(safe-area-inset-top))]" onClick={onClose}>
       <div ref={backdrop} className="absolute inset-0 bg-black/70" />
-      <div ref={card} onClick={(e) => e.stopPropagation()} className="relative w-full max-w-2xl space-y-3 rounded-3xl border border-line bg-surface p-4">
+      <div ref={card} onClick={(e) => e.stopPropagation()} className="relative max-h-full w-full max-w-2xl space-y-3 overflow-y-auto overscroll-contain rounded-3xl border border-line bg-surface p-4" data-fullscreen-chart>
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-xl font-extrabold"><span className="min-w-0">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
             <span className="inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label(muscle)}</span>
           </div>
           <div className="pt-2"><Trend dir={s.dir} size={14} /></div>
-          <button onClick={onClose} className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
+          <button onClick={onClose} aria-label="Close" className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
         </div>
         <Pills value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
         {options.length > 1 && <Pills fit value={s.m} options={options} onChange={setMetric} />}
@@ -519,7 +520,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
       {rows && <MusclesCard rows={rows} sex={user.sex} />}
       <MoreStats snap={snap} unit={unit} bw={user.bodyweight_kg} height={user.height_cm} />
 
-      <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none]">
+      <div className="bleed-x flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
         {[['All', snap.names.length] as [string, number], ...muscleCounts].map(([m, c]) => (
           <button key={m} onClick={() => setMuscle(m)} className={`flex h-10 shrink-0 items-center gap-2 rounded-full border px-4 text-[15px] font-bold ${muscle === m ? 'border-accent bg-accent text-accent-ink' : 'border-line bg-surface text-ink'}`}>
             {m === 'All' ? 'All' : label(m)} <span className={`num text-sm font-semibold ${muscle === m ? 'opacity-70' : 'text-muted'}`}>{c}</span>

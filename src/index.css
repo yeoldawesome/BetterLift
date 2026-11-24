@@ -21,6 +21,14 @@
   padding-left: max(1rem, env(safe-area-inset-left));
   padding-right: max(1rem, env(safe-area-inset-right));
 }
+/* Sideways-scrolling rows run out to the screen edge (past the page's 1rem margin), but not into a safe-area inset
+   such as the foldable iPhone's cover-screen status pill. Replaces "-mx-4 px-4". */
+@utility bleed-x {
+  margin-left: calc(-1 * max(0px, 1rem - env(safe-area-inset-left)));
+  margin-right: calc(-1 * max(0px, 1rem - env(safe-area-inset-right)));
+  padding-left: max(0px, 1rem - env(safe-area-inset-left));
+  padding-right: max(0px, 1rem - env(safe-area-inset-right));
+}
 @utility num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum"; }
 
 /* Unchecked sets flash when you tap "N sets not checked off" on the finish screen. */

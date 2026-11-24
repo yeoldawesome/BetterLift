@@ -15,12 +15,17 @@ import { defineConfig } from '@playwright/test'
 const API = process.env.VITE_API_URL || 'http://127.0.0.1:8090'
 const PORT = 4174
 
-export type Duo = { insets: { top: number; right: number; bottom: number; left: number } }
+export type Duo = {
+  /** What iOS reports as safe-area insets (env(safe-area-inset-*)). */
+  insets: { top: number; right: number; bottom: number; left: number }
+  /** The cover screen's status pill at the top of the right edge: nothing tappable may sit under it. */
+  pill?: { width: number; height: number }
+}
 
 export default defineConfig<Duo>({
   testDir: '.',
   outputDir: './.results',
-  globalSetup: '../iphone/global-setup.ts',
+  globalSetup: './global-setup.ts',
   globalTeardown: '../iphone/global-teardown.ts',
   fullyParallel: false,
   workers: 1,
@@ -34,7 +39,7 @@ export default defineConfig<Duo>({
     ...(process.env.PW_CHROMIUM ? { launchOptions: { executablePath: process.env.PW_CHROMIUM } } : {}),
   },
   projects: [
-    { name: 'iPhone Duo closed', use: { browserName: 'chromium', viewport: { width: 458, height: 667 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, insets: { top: 0, right: 83, bottom: 20, left: 0 } } },
+    { name: 'iPhone Duo closed', use: { browserName: 'chromium', viewport: { width: 458, height: 667 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, insets: { top: 0, right: 83, bottom: 20, left: 0 }, pill: { width: 83, height: 250 } } },
     { name: 'iPhone Duo open', use: { browserName: 'chromium', viewport: { width: 790, height: 1000 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, insets: { top: 24, right: 0, bottom: 20, left: 0 } } },
   ],
   webServer: {
