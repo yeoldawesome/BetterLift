@@ -12,3 +12,6 @@ pb/pocketbase.exe
 tests/iphone/.auth/
 tests/iphone/.results/
 tests/iphone/.report/
+
+# iPhone Duo test run output
+tests/duo/.results/
