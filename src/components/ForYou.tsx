@@ -2,15 +2,15 @@ import { useEffect, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ask } from './Dialog'
 import { BodyMap } from './BodyMap'
-import { BedIcon, ChevronIcon, RepeatIcon, TrendIcon } from './icons'
+import { BedIcon, ChevronIcon, PlusIcon, RepeatIcon, TrendIcon } from './icons'
 import { BottomSheet, Button, Card, Spinner } from './ui'
 import { LineChart } from './LineChart'
 import { routineExercises, useActive } from '../lib/active'
 import { liftingSession } from '../lib/energy'
-import { fmtVol, fmtW, toUnit } from '../lib/format'
-import { loadWeight } from '../lib/nutrition'
+import { fmtVol, fmtW, fromUnit, toUnit } from '../lib/format'
+import { loadWeight, logWeighIn } from '../lib/nutrition'
 import { MAP_MUSCLES } from '../lib/muscles'
-import { me, nutritionOn, pb, useUser, type Routine, type RoutineExercise, type User, type WSet, type Workout } from '../lib/pb'
+import { errMsg, me, nutritionOn, pb, useUser, type Routine, type RoutineExercise, type User, type WSet, type Workout } from '../lib/pb'
 import { nextUp, savePlan, userPlan, type NextUp } from '../lib/plan'
 import { recovery, RECOVERY_WINDOW_H, recoverySummary } from '../lib/recovery'
 
@@ -256,6 +256,17 @@ function RecordsSheet({ workouts, unit, onClose }: { workouts: Workout[]; unit: 
 /** Logged bodyweight over the last 14 days: weigh-ins, plus the bodyweight saved with each workout. */
 function WeightSheet({ workouts, unit, onClose }: { workouts: Workout[]; unit: 'kg' | 'lb'; onClose: () => void }) {
   const [pts, setPts] = useState<{ t: number; kg: number }[] | null>(null)
+  const [adding, setAdding] = useState(false)
+  const [val, setVal] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [reload, setReload] = useState(0)
+  const save = async () => {
+    const v = parseFloat(val.replace(',', '.'))
+    if (!(v > 0)) return
+    setBusy(true); setErr('')
+    try { await logWeighIn(fromUnit(v, unit)); setAdding(false); setVal(''); setReload((n) => n + 1) } catch (e) { setErr(errMsg(e)) } finally { setBusy(false) }
+  }
   useEffect(() => {
     const since = Date.now() - 14 * 864e5
     loadWeight(true).catch(() => null).then((w) => {
@@ -268,21 +279,41 @@ function WeightSheet({ workouts, unit, onClose }: { workouts: Workout[]; unit: '
       for (const p of weighIns) byDay.set(day(p.t), p)
       setPts([...byDay.values()].sort((a, b) => a.t - b.t))
     })
-  }, [workouts])
+  }, [workouts, reload])
   const vals = pts?.map((p) => Math.round(toUnit(p.kg, unit) * 10) / 10) ?? []
   const delta = vals.length > 1 ? vals[vals.length - 1] - vals[0] : 0
   return (
     <BottomSheet title="Bodyweight · last 14 days" onClose={onClose}>
-      {!pts ? <Spinner /> : !pts.length ? <p className="py-6 text-center text-sm text-muted">No weight logged in the last 14 days. Log a weigh-in on Physique or when you finish a workout.</p> : (
+      <div>
+      {!pts ? <Spinner /> : !pts.length ? <p className="py-6 text-center text-sm text-muted">No weight logged in the last 14 days. Tap + to log today's weight.</p> : (
         <div className="space-y-3" data-weight-chart>
           <div className="flex items-end justify-between">
             <p className="num text-3xl font-black">{vals[vals.length - 1]} <span className="text-base font-bold">{unit}</span></p>
             {vals.length > 1 && <p className={`num text-sm font-bold ${Math.abs(delta) < 0.1 ? 'text-muted' : 'text-accent'}`}>{delta > 0 ? '+' : ''}{Math.round(delta * 10) / 10} {unit} · {vals.length} readings</p>}
           </div>
           <LineChart className="h-56" labels={pts.map((p) => new Date(p.t).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }))} values={vals} yTitle={unit} />
-          <Link to="/profile" onClick={onClose} className="block text-center text-sm font-semibold text-accent">See all on Profile</Link>
         </div>
       )}
+      {adding ? (
+        <form className="mt-3 space-y-2" onSubmit={(e) => { e.preventDefault(); save() }} data-weigh-in>
+          <div className="flex gap-2">
+            <input autoFocus value={val} onChange={(e) => setVal(e.target.value)} inputMode="decimal" placeholder={`Today's weight (${unit})`}
+              className="num h-12 min-w-0 flex-1 rounded-xl border border-line bg-surface-2 px-3 text-base outline-none placeholder:text-faint focus:border-accent" />
+            <Button className="!w-auto px-5" disabled={busy || !(parseFloat(val.replace(',', '.')) > 0)}>{busy ? 'Saving…' : 'Save'}</Button>
+          </div>
+          {err && <p className="text-sm font-semibold text-danger">{err}</p>}
+          <button type="button" onClick={() => { setAdding(false); setErr('') }} className="w-full text-center text-sm font-semibold text-muted">Cancel</button>
+        </form>
+      ) : (
+        <div className="mt-3 flex items-center justify-between gap-3">
+          <Link to="/profile" onClick={onClose} className="text-sm font-semibold text-accent">See all on Profile</Link>
+          <button onClick={() => setAdding(true)} aria-label="Log today's weight" data-add-weight
+            className="grid size-12 shrink-0 place-items-center rounded-full bg-accent text-accent-ink shadow-lg active:scale-95">
+            <PlusIcon width={24} height={24} />
+          </button>
+        </div>
+      )}
+      </div>
     </BottomSheet>
   )
 }
