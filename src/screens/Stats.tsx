@@ -31,10 +31,15 @@ const day = (d: Date | null) => (d ? d.toLocaleDateString(undefined, { month: 's
 const clock = (d: Date | null) => (d ? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' }) : '-')
 const inRange = (data: DaySummary[], days: number) => (days ? data.filter((d) => d.date.getTime() >= Date.now() - days * 86400000) : data)
 
-function Trend({ dir, size = 12 }: { dir: Dir; size?: number }) {
-  const title = dir === 'up' ? 'Trending up' : dir === 'down' ? 'Trending down' : 'No change'
-  if (dir === 'up') return <svg width={size} height={size * 0.92} viewBox="0 0 12 11" aria-label={title}><polygon points="6,0 12,11 0,11" className="fill-accent" /></svg>
-  if (dir === 'down') return <svg width={size} height={size * 0.92} viewBox="0 0 12 11" aria-label={title}><polygon points="0,0 12,0 6,11" className="fill-danger" /></svg>
+/**
+ * Trend arrow. `dir` is how the line moves (the arrow's direction); `good` is whether that's an improvement (green)
+ * or not (red). They differ for pace, where going down means getting faster: a green arrow pointing down.
+ */
+function Trend({ dir, good = dir, size = 12 }: { dir: Dir; good?: Dir; size?: number }) {
+  const fill = good === 'up' ? 'fill-accent' : 'fill-danger'
+  const title = `${dir === 'up' ? 'Trending up' : dir === 'down' ? 'Trending down' : 'No change'}${dir !== 'neutral' ? (good === 'up' ? ' (improving)' : ' (getting worse)') : ''}`
+  if (dir === 'up') return <svg width={size} height={size * 0.92} viewBox="0 0 12 11" aria-label={title}><polygon points="6,0 12,11 0,11" className={fill} /></svg>
+  if (dir === 'down') return <svg width={size} height={size * 0.92} viewBox="0 0 12 11" aria-label={title}><polygon points="0,0 12,0 6,11" className={fill} /></svg>
   return <svg width={size + 2} height={6} viewBox="0 0 14 6" aria-label={title}><line x1="1" y1="3" x2="13" y2="3" className="stroke-muted" strokeWidth="2" strokeLinecap="round" /></svg>
 }
 
@@ -72,6 +77,8 @@ function series(data: DaySummary[], kind: StatKind, metric: Metric, days: number
     d: all, m, v, ...axis(m, unit),
     trend: v.length >= 2 ? trendLine(v) : undefined,
     dir,
+    /** Which way the line actually moves (for the arrow's direction); `dir` says whether that's better. */
+    raw,
     labels: d.map((x) => x.date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: '2-digit' })),
     extras: extras.some(Boolean) ? extras : undefined,
     /** Where each chart point came from (same order as the points). */
@@ -195,7 +202,7 @@ function ExerciseCard({ name, kind, muscle, data, globalMetric, globalDays, unit
           <p className="flex items-center gap-1.5 font-extrabold" title={name}><span className="truncate">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
           <span className="mt-0.5 inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label(muscle)}</span>
         </div>
-        <div className="pt-1.5"><Trend dir={s.dir} /></div>
+        <div className="pt-1.5"><Trend dir={s.raw} good={s.dir} /></div>
       </div>
       <Pills small value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
       {options.length > 1 && <Pills small fit value={s.m} options={options} onChange={setMetric} />}
@@ -230,7 +237,7 @@ function Fullscreen({ name, kind, muscle, data, metric0, days0, unit, onClose, o
             <p className="flex items-center gap-1.5 text-xl font-extrabold"><span className="min-w-0">{name}</span><InfoButton name={name} onInfo={onInfo} /></p>
             <span className="inline-block rounded-md bg-surface-2 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-muted">{label(muscle)}</span>
           </div>
-          <div className="pt-2"><Trend dir={s.dir} size={14} /></div>
+          <div className="pt-2"><Trend dir={s.raw} good={s.dir} size={14} /></div>
           <button onClick={onClose} aria-label="Close" className="grid size-9 place-items-center rounded-full bg-surface-2"><CloseIcon width={18} height={18} /></button>
         </div>
         <Pills value={days} options={RANGES.map(([l, d]) => [d, l] as [number, string])} onChange={setDays} />
