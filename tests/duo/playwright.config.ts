@@ -7,8 +7,8 @@ import { defineConfig } from '@playwright/test'
  *
  * WebKit can't simulate safe-area insets, so these run in Chromium with the insets set through DevTools
  * (Emulation.setSafeAreaInsetsOverride); the iPhone suite covers WebKit itself.
- * Sizes: closed = measured from real screenshots (458×667 pt, ~83 pt pill on the right). Open = 790 pt wide
- * (published estimates; update once measured on a device).
+ * Sizes measured from real screenshots (3× scale): closed = 458×667 pt with the status pill ~83 pt wide down the top
+ * 250 pt of the right edge; open = 951×669 pt with the pill ~72 pt wide down the top ~283 pt of the right edge.
  *
  * Same local setup as the iPhone suite (PocketBase on :8090, admin login in .env.development.local). Run: npm run test:duo
  */
@@ -40,7 +40,7 @@ export default defineConfig<Duo>({
   },
   projects: [
     { name: 'iPhone Duo closed', use: { browserName: 'chromium', viewport: { width: 458, height: 667 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, insets: { top: 0, right: 83, bottom: 20, left: 0 }, pill: { width: 83, height: 250 } } },
-    { name: 'iPhone Duo open', use: { browserName: 'chromium', viewport: { width: 790, height: 1000 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, insets: { top: 24, right: 0, bottom: 20, left: 0 } } },
+    { name: 'iPhone Duo open', use: { browserName: 'chromium', viewport: { width: 951, height: 669 }, deviceScaleFactor: 3, isMobile: true, hasTouch: true, insets: { top: 0, right: 76, bottom: 20, left: 0 }, pill: { width: 76, height: 290 } } },
   ],
   webServer: {
     command: `npx vite build --mode production && npx vite preview --port ${PORT} --strictPort`,

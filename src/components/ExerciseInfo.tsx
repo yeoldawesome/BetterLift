@@ -182,7 +182,8 @@ function StatsTab({ ex, unit, sessions, strongest, own, onOpenSet }: { ex: Exerc
     : k === 'cardio' ? { yTitle: `Distance (${dist})`, yFormat: (v) => `${v} ${dist}` }
     : k === 'bodyweight' && weighted ? { yTitle: `Added (${unit})`, yFormat: (v) => `+${v} ${unit}` }
     : weighted ? { yTitle: `Weight (${unit})`, yFormat: (v) => `${v} ${unit}` } : { yTitle: 'Reps', yFormat: (v) => `${Math.round(v)} reps` }
-  const paces = sessions.filter((s) => s.dist > 0 && secs(s) > 0).map((s) => secs(s) / 60 / toDist(s.dist, unit))
+  // Fastest run long enough to count (same rule as pace PRs), in min per mi/km.
+  const paces = sessions.flatMap((s) => s.sets).map((x) => paceOf(x.distance_km, x.seconds)).filter(Boolean).map((sk) => sk / 60 / toDist(1, unit))
   const allSets = sessions.flatMap((s) => s.sets)
   const tiles: [string, string][] = weighted
     ? [[`${fmtW(Math.max(...sessions.map((s) => s.bestE1)), unit)} ${unit}`, 'Best est. 1RM'], [`${fmtW(Math.max(...sessions.map((s) => s.maxW)), unit)} ${unit}`, 'Heaviest weight'],

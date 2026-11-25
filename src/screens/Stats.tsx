@@ -432,7 +432,7 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
     const recs: FlatSet[] = rows.map(({ set: s, ex, workoutName, durationS }) => ({
       date: new Date(s.performed_at), workoutId: s.workout, setId: s.id, durationS, workoutName,
       exercise: ex.name, muscle: ex.muscle, kind: (ex.kind === 'duration' && isCardio(ex) ? 'timed' : ex.kind) as StatKind,
-      weight: toUnit(s.weight_kg, unit), reps: s.reps, distance: toDist(s.distance_km, unit), seconds: s.seconds, bw,
+      weight: toUnit(s.weight_kg, unit), reps: s.reps, distance: toDist(s.distance_km, unit), km: s.distance_km, seconds: s.seconds, bw,
     }))
     return buildStats(recs)
   }, [rows, unit, bw])

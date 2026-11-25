@@ -1,6 +1,7 @@
 // Stats engine. Ported from LiftX StatsEngine (github.com/JacobG122503/LiftX), used with permission.
 // All weights here are already in the viewer's display unit.
 import { epley } from './format'
+import { PACE_MIN_KM } from './best'
 import type { Kind } from './pb'
 
 /**
@@ -10,12 +11,16 @@ import type { Kind } from './pb'
 export type StatKind = Kind | 'timed'
 
 export interface FlatSet { date: Date; workoutId: string; setId?: string; durationS: number; workoutName: string; exercise: string; muscle: string; weight: number; reps: number; distance: number; seconds: number; kind: StatKind
+  /** Distance in km (for the pace rule: only sets of at least PACE_MIN_KM count, same as pace PRs). */
+  km?: number
   /** Viewer's bodyweight (display unit), so weighted pull-ups/dips can count bodyweight + added weight. */
   bw?: number }
 
 export interface DaySummary {
   date: Date; maxWeight: number; minWeight: number; totalVolume: number; totalReps: number; maxReps: number; totalSets: number
   maxE1rm: number; bestWeight: number; bestReps: number; totalSeconds: number; maxSeconds: number; totalDistance: number
+  /** Fastest set's pace that day (min per distance unit), from sets long enough to count; 0 = none. */
+  bestPace: number
   maxDistance: number
   /** The day's top set (and its workout), so tapping the chart point can open it. */
   workoutId?: string; setId?: string
@@ -69,6 +74,11 @@ function summarize(sets: FlatSet[]): DaySummary[] {
       bestWeight: best.weight, bestReps: best.reps,
       totalSeconds: sum(g, (r) => r.seconds), maxSeconds: Math.max(...g.map((r) => r.seconds)),
       totalDistance: sum(g, (r) => r.distance), maxDistance: Math.max(...g.map((r) => r.distance)),
+      bestPace: g.reduce((b, r) => {
+        const ok = r.distance > 0 && r.seconds > 0 && (r.km === undefined || r.km >= PACE_MIN_KM)
+        const p = ok ? r.seconds / 60 / r.distance : 0
+        return p && (!b || p < b) ? p : b
+      }, 0),
     }
   }).sort((a, b) => a.date.getTime() - b.date.getTime())
 }
@@ -199,11 +209,11 @@ export function effectiveMetric(kind: StatKind, metric: Metric, data: DaySummary
   }
 }
 
-/** Pace in minutes per distance unit (0 when there's no distance). */
-export const paceOf = (d: DaySummary) => (d.totalDistance > 0 ? d.totalSeconds / 60 / d.totalDistance : 0)
+/** A day's pace in minutes per distance unit: its fastest set long enough to count (0 when none). Matches pace PRs. */
+export const paceOf = (d: DaySummary) => d.bestPace
 
 /** Sessions a metric can be charted for (pace needs a distance). */
-export const chartable = (data: DaySummary[], m: Metric) => (m === 'pace' ? data.filter((d) => d.totalDistance > 0 && d.totalSeconds > 0) : data)
+export const chartable = (data: DaySummary[], m: Metric) => (m === 'pace' ? data.filter((d) => d.bestPace > 0) : data)
 
 export function values(data: DaySummary[], m: Metric): number[] {
   const r1 = (n: number) => Math.round(n * 10) / 10
