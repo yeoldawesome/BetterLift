@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
@@ -122,6 +122,13 @@ function StreakDetail({ s }: { s: Streak }) {
     </div>
   )
 }
+
+/** Where each PR sparkle flies (px from the check's center): a ring of 10, uneven so it looks thrown, not stamped. */
+const SPARKS: [number, number][] = Array.from({ length: 10 }, (_, i) => {
+  const a = (i / 10) * Math.PI * 2 + (i % 2 ? 0.25 : 0)
+  const r = i % 3 === 0 ? 30 : i % 3 === 1 ? 24 : 34 // stays inside the row (it clips)
+  return [Math.round(Math.cos(a) * r), Math.round(Math.sin(a) * r)]
+})
 
 function Elapsed({ since }: { since: string }) {
   const [now, setNow] = useState(Date.now())
@@ -456,6 +463,29 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
   // Fastest checked-off run/ride long enough to count (seconds per km).
   const livePace = k === 'cardio' ? done.reduce((b, s) => { const p = paceOf(fromDist(num(s.dist), unit), num(s.sec)); return p && (!b || p < b) ? p : b }, 0) : 0
   const pr = planning ? null : prBeat(x.ex, best, unit, workingW, liveE1, liveReps, liveSec, livePace)
+  // Checked-off sets that beat your all-time best (warm-ups and cool-downs never count) light up gold.
+  const isPr = (s: ASet) => {
+    if (planning || !s.done || !best?.any || s.type === 'warmup' || s.type === 'cooldown') return false
+    if (k === 'weight') return best.e1rm > 0 && epley(fromUnit(num(s.w), unit), Math.round(num(s.r))) > best.e1rm + 0.01
+    if (k === 'bodyweight' || k === 'assisted') return Math.round(num(s.r)) > best.maxReps
+    if (k === 'cardio') { const p = paceOf(fromDist(num(s.dist), unit), num(s.sec)); return !!best.pace && !!p && p < best.pace - 0.5 }
+    if (k === 'duration' && !cardio) return Math.round(num(s.sec)) > best.maxSec
+    return false
+  }
+  const prRows = x.sets.map(isPr)
+  // A set that just became a PR gets the celebration (shimmer, pop, sparkles) once; it stays gold after.
+  const wasPr = useRef<boolean[] | null>(null)
+  const [burst, setBurst] = useState<number[]>([])
+  useEffect(() => {
+    const before = wasPr.current
+    wasPr.current = prRows
+    if (!before) return // first render (or a restored workout): no fireworks for sets already logged
+    const fresh = prRows.map((v, i) => (v && !before[i] ? i : -1)).filter((i) => i >= 0)
+    if (!fresh.length) return
+    setBurst((b) => [...b, ...fresh])
+    try { navigator.vibrate?.([30, 40, 60]) } catch { /* unsupported */ }
+    setTimeout(() => setBurst((b) => b.filter((i) => !fresh.includes(i))), 1300)
+  }, [prRows.join()]) // eslint-disable-line react-hooks/exhaustive-deps
   // Timed cardio (basketball, jump rope…) is entered in minutes; holds like planks stay in seconds.
   const cols = k === 'duration' ? [cardio ? 'Min' : 'Sec'] : k === 'cardio' ? [distLabel(unit), 'Min'] : [k === 'assisted' ? `−${unit}` : k === 'bodyweight' ? `+${unit}` : unit, 'Reps']
   const field = (c: string): keyof ASet => (c === 'Reps' ? 'r' : c === 'Sec' || c === 'Min' ? 'sec' : c === distLabel(unit) ? 'dist' : 'w')
@@ -539,28 +569,32 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
         {/* Each set is one row: swipe it left or right to delete. Checked-off rows light up. */}
         {x.sets.map((s, i) => {
           const p = x.prev[i]
+          const gold = prRows[i], popping = burst.includes(i)
+          // Cell background: gold on a PR, accent tint when done, plain otherwise.
+          const cell = gold ? 'pr-cell' : s.done ? 'bg-accent/10' : 'bg-surface-2'
           return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} flush
-            rowClass={`py-1.5 ${s.done ? 'bg-[color-mix(in_srgb,var(--color-accent)_13%,var(--color-surface))]' : 'bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]'}`}
+            rowClass={`py-1.5 ${gold ? `pr-row ${popping ? 'pr-burst' : ''}` : s.done ? 'bg-[color-mix(in_srgb,var(--color-accent)_13%,var(--color-surface))]' : 'bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]'}`}
             onDelete={() => { setUndo({ i, set: x.sets[i] }); setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) })) }}>{[
             <span key={`l${i}`} />,
-            <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num ${box} text-xl font-extrabold active:opacity-70 ${s.done ? 'bg-accent/10' : 'bg-surface-2'} ${labels[i].color || ''}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
+            <button key={`n${i}`} onClick={() => setTypeFor(i)} className={`num ${box} text-xl font-extrabold active:opacity-70 ${cell} ${labels[i].color || ''}`} aria-label={`Set ${i + 1} type`}>{labels[i].text}</button>,
             // Tap the previous-session value to copy it into this set (doesn't check it off).
             p ? (
               <button key={`p${i}`} type="button" onClick={() => setSet(x.key, i, {
                 w: p.w ? fmtW(p.w, unit) : s.w, r: p.r ? `${p.r}` : s.r, sec: p.sec ? `${p.sec}` : s.sec, dist: p.dist ? fmtDist(p.dist, unit) : s.dist,
-              })} className={`num ${box} min-w-0 truncate px-1 text-sm font-medium text-muted active:opacity-70 ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`}
+              })} className={`num ${box} min-w-0 truncate px-1 text-sm font-medium text-muted active:opacity-70 ${cell}`}
                 aria-label={`Use previous: ${prevText(p, x, unit)}`}>{prevText(p, x, unit).replace('×', ' × ')}</button>
-            ) : <span key={`p${i}`} className={`num grid ${box} place-items-center text-sm text-faint ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`}>–</span>,
+            ) : <span key={`p${i}`} className={`num grid ${box} place-items-center text-sm text-faint ${cell}`}>–</span>,
             ...cols.map((c) => (
               <input key={`${c}${i}`} data-undone={!s.done || undefined} inputMode={c === 'Reps' || c === 'Sec' ? 'numeric' : 'decimal'} value={getVal(s, c)} placeholder={placeholder(p, c, i)} onFocus={selectAll}
                 onChange={(e) => setVal(i, c, c === 'Reps' || c === 'Sec' ? e.target.value.replace(/\D/g, '') : e.target.value)}
-                className={`num ${box} w-full min-w-0 text-center text-xl font-extrabold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${s.done ? 'bg-accent/10' : 'bg-surface-2'}`} />
+                className={`num ${box} w-full min-w-0 text-center text-xl font-extrabold outline-none placeholder:text-faint focus:ring-2 focus:ring-accent ${cell}`} />
             )),
-            planning ? <span key={`d${i}`} /> : <div key={`d${i}`} className="grid place-items-center">
-              <button data-undone={!s.done || undefined} aria-label={s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)}
-                className={`grid size-12 place-items-center rounded-full transition-colors active:translate-y-0.5 ${s.done
+            planning ? <span key={`d${i}`} /> : <div key={`d${i}`} className="relative grid place-items-center">
+              <button data-undone={!s.done || undefined} aria-label={gold ? `Set ${i + 1} done, new PR` : s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)}
+                className={`grid size-12 place-items-center rounded-full transition-colors active:translate-y-0.5 ${gold ? 'pr-check' : ''} ${s.done
                   ? 'bg-accent text-accent-ink shadow-[0_3px_0_color-mix(in_srgb,var(--color-accent)_60%,black)]'
                   : 'bg-surface-2 text-muted shadow-[0_3px_0_color-mix(in_srgb,var(--color-surface-2)_50%,black)]'}`}><CheckIcon width={24} height={24} strokeWidth={2.75} /></button>
+              {popping && SPARKS.map(([dx, dy], j) => <span key={j} className="pr-spark" style={{ '--dx': `${dx}px`, '--dy': `${dy}px`, animationDelay: `${j * 18}ms` } as CSSProperties} />)}
             </div>,
             <span key={`r${i}`} />,
             // Cardio: effort (RPE / heart rate / watch calories) and the estimated burn, under the set.
