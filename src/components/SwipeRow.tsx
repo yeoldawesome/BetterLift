@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react'
 import { TrashIcon } from './icons'
 
 /**
@@ -9,10 +9,12 @@ import { TrashIcon } from './icons'
  * Touch uses touch events (not pointer events): the browser fires pointercancel as soon as a finger that started on a
  * text input moves, which used to kill the swipe on unchecked sets. With touchmove we can preventDefault and keep it.
  */
-export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-surface', flush = false, round = 'rounded-lg' }: {
+export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-surface', rowStyle, flush = false, round = 'rounded-lg' }: {
   onDelete: () => void; children: ReactNode; label?: string
   /** Background/padding of the sliding row (must be opaque so the delete layer stays hidden). */
   rowClass?: string
+  /** Extra inline style for the sliding row (e.g. CSS variables). */
+  rowStyle?: CSSProperties
   /** Square edges, for rows that run edge to edge. */
   flush?: boolean
   /** Corner radius of the row and its delete layer (match the card it wraps). */
@@ -134,7 +136,7 @@ export function SwipeRow({ onDelete, children, label = 'Delete', rowClass = 'bg-
       </div>
       <div ref={row} data-swipe-row
         className={`relative col-span-full grid grid-cols-subgrid gap-y-1.5 transition-colors ${rowClass}`}
-        style={{ touchAction: 'pan-y' }}
+        style={{ touchAction: 'pan-y', ...rowStyle }}
         // A swipe shouldn't also count as a tap (or focus an input) on whatever it started on.
         onClickCapture={(e) => { if (Date.now() - swipedAt.current < 350) { e.stopPropagation(); e.preventDefault() } }}>
         {children}

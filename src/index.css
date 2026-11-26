@@ -60,29 +60,37 @@ body {
 }
 
 /* ---------- PR sets: gold row, shimmer sweep, gold check that pops and throws sparkles ---------- */
+/* Soft olive gold that brightens toward the check, like a trophy catching the light. */
 .pr-row {
   position: relative;
   overflow: hidden;
-  background: linear-gradient(90deg, color-mix(in srgb, #f5b82e 22%, var(--color-surface)), color-mix(in srgb, #f5b82e 34%, var(--color-surface))) !important;
+  background: linear-gradient(90deg, color-mix(in srgb, #b8952f 30%, #16140c) 0%, color-mix(in srgb, #c9a84a 48%, #16140c) 55%, color-mix(in srgb, #d9c280 64%, #16140c) 100%) !important;
 }
-/* Cells in a PR row: gold tint, gold numbers (darker gold on light themes, since it mixes with the text color). */
-.pr-cell { background-color: color-mix(in srgb, #f5b82e 24%, transparent) !important; color: color-mix(in srgb, #f5b82e 72%, var(--color-ink)) !important; }
+/* Cells: a translucent gold layer; numbers in pale gold (pulled toward the text color so light themes stay readable). */
+.pr-cell { background-color: rgb(214 176 72 / .26) !important; color: color-mix(in srgb, #f9d977 90%, var(--color-ink)) !important; }
+/* Pale gold check, dark tick, deeper gold raised edge, soft glow. */
 .pr-check {
-  background: radial-gradient(circle at 35% 30%, #fff3c4 0%, #fcd34d 38%, #f2a516 78%, #c27803 100%) !important;
-  color: #3d2a00 !important;
-  /* Same raised 3D edge as the other check buttons (darker gold), plus a soft glow that doesn't cover it. */
-  box-shadow: 0 3px 0 #92520a, 0 6px 14px -4px color-mix(in srgb, #fbbf24 60%, transparent) !important;
+  background: radial-gradient(circle at 40% 35%, #fbeaa9 0%, #f4d983 50%, #e9c460 100%) !important;
+  color: #3a2d0c !important;
+  box-shadow: 0 4px 0 #b88a2e, 0 0 14px 1px rgb(244 210 110 / .45) !important;
 }
-
-/* The moment it becomes a PR: a light sweep across the row, the check pops, sparkles fly out. */
-.pr-burst::after {
+/* Every so often a soft shine runs across a PR row (each row a little out of step with the others). */
+.pr-row::after {
   content: '';
   position: absolute;
   inset: 0;
   pointer-events: none;
-  background: linear-gradient(105deg, transparent 25%, rgb(255 240 190 / .55) 45%, rgb(255 255 255 / .75) 50%, rgb(255 240 190 / .55) 55%, transparent 75%);
+  background: linear-gradient(105deg, transparent 30%, rgb(255 246 214 / .28) 46%, rgb(255 255 255 / .38) 50%, rgb(255 246 214 / .28) 54%, transparent 70%);
   transform: translateX(-110%);
+  animation: pr-shine 7s ease-in-out infinite;
+  animation-delay: var(--shine-delay, 2.5s);
+}
+@keyframes pr-shine { 0% { transform: translateX(-110%) } 16% { transform: translateX(110%) } 100% { transform: translateX(110%) } }
+/* The moment it becomes a PR: a light sweep across the row, the check pops, sparkles fly out. */
+.pr-burst::after {
+  background: linear-gradient(105deg, transparent 25%, rgb(255 240 190 / .55) 45%, rgb(255 255 255 / .75) 50%, rgb(255 240 190 / .55) 55%, transparent 75%);
   animation: pr-sweep 1.1s cubic-bezier(.3, .6, .3, 1) forwards;
+  animation-delay: 0s;
 }
 @keyframes pr-sweep { to { transform: translateX(110%) } }
 .pr-burst .pr-check { animation: pr-pop .65s cubic-bezier(.2, 1.7, .4, 1); }
@@ -107,6 +115,6 @@ body {
   100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0 }
 }
 @media (prefers-reduced-motion: reduce) {
-  .pr-burst::after, .pr-spark { display: none; }
+  .pr-row::after, .pr-burst::after, .pr-spark { display: none; }
   .pr-burst .pr-check { animation: none; }
 }

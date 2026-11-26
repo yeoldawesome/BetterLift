@@ -572,7 +572,7 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
           const gold = prRows[i], popping = burst.includes(i)
           // Cell background: gold on a PR, accent tint when done, plain otherwise.
           const cell = gold ? 'pr-cell' : s.done ? 'bg-accent/10' : 'bg-surface-2'
-          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} flush
+          return <SwipeRow key={`row${i}`} label={`Delete set ${i + 1}`} flush rowStyle={gold ? { '--shine-delay': `${2.5 + i * 1.3}s` } as CSSProperties : undefined}
             rowClass={`py-1.5 ${gold ? `pr-row ${popping ? 'pr-burst' : ''}` : s.done ? 'bg-[color-mix(in_srgb,var(--color-accent)_13%,var(--color-surface))]' : 'bg-[color-mix(in_srgb,var(--color-canvas)_35%,var(--color-surface))]'}`}
             onDelete={() => { setUndo({ i, set: x.sets[i] }); setEx(x.key, (e) => ({ ...e, sets: e.sets.filter((_, j) => j !== i) })) }}>{[
             <span key={`l${i}`} />,
