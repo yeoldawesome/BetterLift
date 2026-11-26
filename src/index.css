@@ -70,7 +70,8 @@ body {
 .pr-check {
   background: radial-gradient(circle at 35% 30%, #fff3c4 0%, #fcd34d 38%, #f2a516 78%, #c27803 100%) !important;
   color: #3d2a00 !important;
-  box-shadow: 0 3px 0 #a16207, 0 0 16px color-mix(in srgb, #fbbf24 55%, transparent) !important;
+  /* Same raised 3D edge as the other check buttons (darker gold), plus a soft glow that doesn't cover it. */
+  box-shadow: 0 3px 0 #92520a, 0 6px 14px -4px color-mix(in srgb, #fbbf24 60%, transparent) !important;
 }
 
 /* The moment it becomes a PR: a light sweep across the row, the check pops, sparkles fly out. */
