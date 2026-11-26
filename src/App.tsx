@@ -12,6 +12,7 @@ import ResetPassword from './screens/ResetPassword'
 import Feed from './screens/Feed'
 import ProfileEdit from './screens/ProfileEdit'
 import { TAB_DEFS, userTabs } from './lib/tabs'
+import { prefetchCalendar } from './lib/calendarData'
 import Workout from './screens/Workout'
 
 // Only the usual first screens ship in the main download; the rest load when opened (and are cached offline).
@@ -69,6 +70,14 @@ export default function App() {
     const t = setTimeout(() => { for (const load of PREFETCH) load().catch(() => {}) }, 1500)
     return () => clearTimeout(t)
   }, [])
+
+  // Calendar data (and its screen) loads quietly in the background a little after you sign in / open the app.
+  const verified = !!user?.verified || !user?.email
+  useEffect(() => {
+    if (!user?.id || !verified) return
+    const t = setTimeout(prefetchCalendar, 2500)
+    return () => clearTimeout(t)
+  }, [user?.id, verified])
 
   // Hidden admin console: reachable only by typing #/admin, with its own superuser sign-in.
   if (loc.pathname.startsWith('/admin')) return <main className="h-full overflow-y-auto"><Suspense fallback={<Spinner />}><Admin /></Suspense></main>

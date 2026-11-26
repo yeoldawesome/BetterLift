@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { freshExercises, loadExercises } from './exercises'
 import { idbGet, idbSet } from './idb'
+import { invalidateCalendar } from './calendarData'
 import { pb, type Exercise, type Workout, type WSet } from './pb'
 
 /** Raw rows behind the Stats page, joined in memory (much lighter than expanding exercise + workout on every set). */
@@ -11,7 +12,8 @@ const inflight = new Map<string, Promise<StatRow[]>>()
 const FRESH_MS = 60_000
 
 export const cachedStats = (userId: string) => cache.get(userId)?.rows ?? null
-export const invalidateStats = (userId?: string) => (userId ? cache.delete(userId) : cache.clear())
+// Workouts changed (finished, edited, deleted, imported…): Stats and the Calendar both refetch on next open.
+export const invalidateStats = (userId?: string) => { invalidateCalendar(); return userId ? cache.delete(userId) : cache.clear() }
 
 // On-device copy (IndexedDB) so Stats, Insights and the exercise picker render instantly on the next app open.
 type Packed = { v: 1; sets: [exercise: string, workout: string, at: string, kg: number, reps: number, sec: number, km: number][]; workouts: [id: string, name: string, dur: number][] }

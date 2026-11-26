@@ -1,14 +1,14 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BodyMap } from '../components/BodyMap'
 import { ChevronIcon, TrophyIcon } from '../components/icons'
 import { Card, Empty, Screen, Spinner } from '../components/ui'
 import { fmtDur } from '../lib/format'
 import { intensityFromSets, type Intensity } from '../lib/muscles'
-import { me, pb, useUser, type Exercise, type Workout } from '../lib/pb'
+import { useUser } from '../lib/pb'
+import { useCalendarData, type CalWorkout } from '../lib/calendarData'
 
-type W = Pick<Workout, 'id' | 'name' | 'started_at' | 'duration_s' | 'accent' | 'pr_count'>
-type SetRow = { workout: string; expand?: { exercise?: Pick<Exercise, 'muscle' | 'primaries' | 'secondary' | 'kind'> } }
+type W = CalWorkout
 type Day = { ws: W[]; intensity: Intensity; accent: string }
 
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
@@ -26,33 +26,22 @@ export const calendarLink = (d: Date, unit: 'day' | 'week' | 'month') => unit ==
 export default function Calendar() {
   const user = useUser()!
   const [params] = useSearchParams()
-  const [days, setDays] = useState<Map<string, Day> | null>(null)
-  const [first, setFirst] = useState<Date | null>(null)
+  const data = useCalendarData()
   const [picked, setPicked] = useState<string | null>(params.get('d'))
   const target = useRef<HTMLDivElement>(null)
 
-  useEffect(() => {
-    let live = true
-    const u = { u: me() }
-    Promise.all([
-      pb.collection('workouts').getFullList<W>({ filter: pb.filter('user = {:u}', u), sort: 'started_at', fields: 'id,name,started_at,duration_s,accent,pr_count', batch: 1000 }),
-      pb.collection('workout_sets').getFullList<SetRow>({ filter: pb.filter('user = {:u} && completed = true', u), expand: 'exercise', fields: 'workout,expand.exercise.muscle,expand.exercise.secondary,expand.exercise.primaries,expand.exercise.kind', batch: 2000 }),
-    ]).then(([ws, sets]) => {
-      if (!live) return
-      const byWorkout = new Map<string, SetRow[]>()
-      sets.forEach((s) => byWorkout.set(s.workout, [...(byWorkout.get(s.workout) ?? []), s]))
-      const groups = new Map<string, W[]>()
-      ws.forEach((w) => { const k = dayKey(new Date(w.started_at)); groups.set(k, [...(groups.get(k) ?? []), w]) })
-      const out = new Map<string, Day>()
-      for (const [k, list] of groups) {
-        const daySets = list.flatMap((w) => byWorkout.get(w.id) ?? []).map((s) => ({ ex: s.expand?.exercise }))
-        out.set(k, { ws: list, intensity: intensityFromSets(daySets), accent: list[list.length - 1].accent })
-      }
-      setFirst(ws[0] ? new Date(ws[0].started_at) : null)
-      setDays(out)
-    }).catch(() => live && setDays(new Map()))
-    return () => { live = false }
-  }, [])
+  // Workouts grouped by day, each day with a mini body graph of what it hit.
+  const { days, first } = useMemo(() => {
+    if (!data) return { days: null, first: null }
+    const groups = new Map<string, W[]>()
+    data.workouts.forEach((w) => { const k = dayKey(new Date(w.started_at)); groups.set(k, [...(groups.get(k) ?? []), w]) })
+    const out = new Map<string, Day>()
+    for (const [k, list] of groups) {
+      const daySets = list.flatMap((w) => data.exercisesOf.get(w.id) ?? []).map((ex) => ({ ex }))
+      out.set(k, { ws: list, intensity: intensityFromSets(daySets), accent: list[list.length - 1].accent })
+    }
+    return { days: out, first: data.workouts[0] ? new Date(data.workouts[0].started_at) : null }
+  }, [data])
 
   // Months from the first workout's month through this month.
   const months = useMemo(() => {
@@ -64,7 +53,13 @@ export default function Calendar() {
 
   // Which month to land on: the one asked for in the link, else the current month.
   const wanted = params.get('d')?.replace(/-\d+$/, '') ?? params.get('m') ?? monthKey(new Date())
-  useLayoutEffect(() => { if (days) target.current?.scrollIntoView({ block: params.get('d') ? 'center' : 'start' }) }, [days])
+  // Only once: the fresh copy arriving after the saved one mustn't yank the page back while you scroll.
+  const scrolled = useRef(false)
+  useLayoutEffect(() => {
+    if (!days || scrolled.current) return
+    scrolled.current = true
+    target.current?.scrollIntoView({ block: params.get('d') ? 'center' : 'start' })
+  }, [days]) // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!days) return <Screen title="Calendar" back><Spinner /></Screen>
   if (!months.length) return <Screen title="Calendar" back><Empty title="No workouts yet" body="Every day you train shows up here with a mini body graph." /></Screen>

@@ -69,11 +69,11 @@ body {
 .pr-cell { background-color: color-mix(in srgb, #f5b82e 24%, transparent) !important; color: color-mix(in srgb, #f5b82e 72%, var(--color-ink)) !important; }
 /* The check becomes a gold trophy on a dark, gold-rimmed button. */
 .pr-check {
-  background: radial-gradient(circle at 50% 40%, #4a3500 0%, #2b1f00 70%, #1d1500 100%) !important;
-  border: 1.5px solid #f5b82e;
-  box-shadow: 0 3px 0 #6b4a00, 0 0 16px color-mix(in srgb, #fbbf24 50%, transparent) !important;
+  background: #2b2000 !important;
+  border: 1.5px solid #fbbf24;
+  box-shadow: 0 3px 0 #6b4a00 !important;
 }
-.pr-check svg { filter: drop-shadow(0 0 4px rgb(251 191 36 / .55)); }
+
 /* The moment it becomes a PR: a light sweep across the row, the check pops, sparkles fly out. */
 .pr-burst::after {
   content: '';
