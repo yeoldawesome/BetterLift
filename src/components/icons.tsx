@@ -18,6 +18,24 @@ export const CloseIcon = (p: P) => <svg {...base(p)}><path d="M6 6l12 12M18 6L6 
 export const TrashIcon = (p: P) => <svg {...base(p)}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5a1.5 1.5 0 001.5 1.5h7a1.5 1.5 0 001.5-1.5L18 7M9 7V4.5h6V7" /></svg>
 export const UpIcon = (p: P) => <svg {...base(p)}><path d="M6 15l6-6 6 6" /></svg>
 export const DownIcon = (p: P) => <svg {...base(p)}><path d="M6 9l6 6 6-6" /></svg>
+/** A solid gold trophy (shaded, with a shine) for PR moments. Same shape as TrophyIcon. */
+export const GoldTrophyIcon = ({ width = 30, height = 30, ...p }: P) => (
+  <svg viewBox="0 0 24 24" width={width} height={height} aria-hidden {...p}>
+    <defs>
+      <linearGradient id="gt-gold" x1="0" y1="0" x2="1" y2="1">
+        <stop offset="0" stopColor="#fff4c2" /><stop offset=".35" stopColor="#fcd34d" /><stop offset=".7" stopColor="#f2a516" /><stop offset="1" stopColor="#b86e04" />
+      </linearGradient>
+    </defs>
+    <g stroke="#8a5a00" strokeWidth=".7" strokeLinejoin="round">
+      <path d="M7.3 5.6H4.6a.6.6 0 0 0-.6.7 4 4 0 0 0 3.9 3.9" fill="none" stroke="url(#gt-gold)" strokeWidth="1.9" strokeLinecap="round" />
+      <path d="M16.7 5.6h2.7a.6.6 0 0 1 .6.7 4 4 0 0 1-3.9 3.9" fill="none" stroke="url(#gt-gold)" strokeWidth="1.9" strokeLinecap="round" />
+      <path d="M6.8 3.2h10.4v5.6a5.2 5.2 0 0 1-10.4 0z" fill="url(#gt-gold)" />
+      <path d="M10.7 13.7h2.6v3.4h-2.6z" fill="url(#gt-gold)" />
+      <rect x="7.3" y="17" width="9.4" height="3.6" rx="1.1" fill="url(#gt-gold)" />
+    </g>
+    <path d="M8.9 4.8v3.8a3.2 3.2 0 0 0 1.4 2.6" fill="none" stroke="#fffbe8" strokeOpacity=".8" strokeWidth="1.1" strokeLinecap="round" />
+  </svg>
+)
 export const TrophyIcon = (p: P) => <svg {...base(p)}><path d="M8 4h8v5a4 4 0 01-8 0zM8 6H4.5a3 3 0 003.5 4M16 6h3.5a3 3 0 01-3.5 4M12 13v4M8.5 20h7M10 17h4" /></svg>
 export const SearchIcon = (p: P) => <svg {...base(p)}><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
 export const ShareIcon = (p: P) => <svg {...base(p)}><circle cx="18" cy="5.5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="18.5" r="2.5" /><path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1" /></svg>

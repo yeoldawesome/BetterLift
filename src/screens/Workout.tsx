@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ExerciseList, ExercisePicker } from '../components/ExerciseList'
 import { ExerciseInfo } from '../components/ExerciseInfo'
-import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, FlameIcon, GlobeIcon, LockIcon, PlusIcon, TimerIcon, TrophyIcon, UpIcon } from '../components/icons'
+import { CheckIcon, ChevronIcon, DotsIcon, DownIcon, FlameIcon, GlobeIcon, GoldTrophyIcon, LockIcon, PlusIcon, TimerIcon, TrophyIcon, UpIcon } from '../components/icons'
 import { LiftRestSheet, restLabel } from '../components/RestPicker'
 import { saveLiftRest } from '../lib/exercises'
 import { BottomSheet, Button, Card, ErrorText, Input, Screen, Sheet, Stat, Toggle } from '../components/ui'
@@ -593,7 +593,7 @@ export function ExerciseBlock({ x, unit, setEx, setSet, toggle, onReorder, onRep
               <button data-undone={!s.done || undefined} aria-label={gold ? `Set ${i + 1} done, new PR` : s.done ? `Set ${i + 1} done` : `Mark set ${i + 1} done`} onClick={() => toggle(x, i)}
                 className={`grid size-12 place-items-center rounded-full transition-colors active:translate-y-0.5 ${gold ? 'pr-check' : ''} ${s.done
                   ? 'bg-accent text-accent-ink shadow-[0_3px_0_color-mix(in_srgb,var(--color-accent)_60%,black)]'
-                  : 'bg-surface-2 text-muted shadow-[0_3px_0_color-mix(in_srgb,var(--color-surface-2)_50%,black)]'}`}><CheckIcon width={24} height={24} strokeWidth={2.75} /></button>
+                  : 'bg-surface-2 text-muted shadow-[0_3px_0_color-mix(in_srgb,var(--color-surface-2)_50%,black)]'}`}>{gold ? <GoldTrophyIcon width={36} height={36} /> : <CheckIcon width={24} height={24} strokeWidth={2.75} />}</button>
               {popping && SPARKS.map(([dx, dy], j) => <span key={j} className="pr-spark" style={{ '--dx': `${dx}px`, '--dy': `${dy}px`, animationDelay: `${j * 18}ms` } as CSSProperties} />)}
             </div>,
             <span key={`r${i}`} />,
