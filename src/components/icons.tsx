@@ -18,17 +18,6 @@ export const CloseIcon = (p: P) => <svg {...base(p)}><path d="M6 6l12 12M18 6L6 
 export const TrashIcon = (p: P) => <svg {...base(p)}><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12.5a1.5 1.5 0 001.5 1.5h7a1.5 1.5 0 001.5-1.5L18 7M9 7V4.5h6V7" /></svg>
 export const UpIcon = (p: P) => <svg {...base(p)}><path d="M6 15l6-6 6 6" /></svg>
 export const DownIcon = (p: P) => <svg {...base(p)}><path d="M6 9l6 6 6-6" /></svg>
-/** A plain gold trophy for PR moments: one flat color, same shape as TrophyIcon. */
-export const GoldTrophyIcon = ({ width = 30, height = 30, ...p }: P) => (
-  <svg viewBox="0 0 24 24" width={width} height={height} aria-hidden {...p}>
-    <g fill="#fbbf24">
-      <path d="M7 3h10v6a5 5 0 0 1-10 0z" />
-      <rect x="10.75" y="13.5" width="2.5" height="3.5" />
-      <rect x="7.5" y="17" width="9" height="3.5" rx="1" />
-    </g>
-    <path d="M7 5.5H4.5a3 3 0 0 0 3 4.5M17 5.5h2.5a3 3 0 0 1-3 4.5" fill="none" stroke="#fbbf24" strokeWidth="2" strokeLinecap="round" />
-  </svg>
-)
 export const TrophyIcon = (p: P) => <svg {...base(p)}><path d="M8 4h8v5a4 4 0 01-8 0zM8 6H4.5a3 3 0 003.5 4M16 6h3.5a3 3 0 01-3.5 4M12 13v4M8.5 20h7M10 17h4" /></svg>
 export const SearchIcon = (p: P) => <svg {...base(p)}><circle cx="11" cy="11" r="6.5" /><path d="M16 16l4 4" /></svg>
 export const ShareIcon = (p: P) => <svg {...base(p)}><circle cx="18" cy="5.5" r="2.5" /><circle cx="6" cy="12" r="2.5" /><circle cx="18" cy="18.5" r="2.5" /><path d="M8.2 10.8l7.6-4.1M8.2 13.2l7.6 4.1" /></svg>
