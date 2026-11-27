@@ -1,7 +1,9 @@
 import type { RecordModel } from 'pocketbase'
 import { useEffect, useState } from 'react'
 import { bmr, type Person } from './energy'
-import { me, pb, type User } from './pb'
+import { idbGet, idbSet } from './idb'
+import { me, newId, pb, type User } from './pb'
+import { enqueue, pending as pendingOps } from './outbox'
 
 // ---------- Days ----------
 
@@ -70,33 +72,111 @@ const toRecord = (d: Draft, day: string) => ({
   items: d.items?.length ? d.items : null, saved_meal: d.savedMeal ?? '',
 })
 
-export const loadLogs = (from: string, to: string) =>
-  pb.collection('food_logs').getFullList<FoodLog>({ filter: pb.filter('user = {:u} && day >= {:a} && day <= {:b}', { u: me(), a: from, b: to }), sort: 'day,created', batch: 1000 })
+// ---------- Food logs: on the device first, uploaded in the background (works offline) ----------
 
-export async function addLogs(drafts: Draft[], day: string): Promise<FoodLog[]> {
-  if (drafts.length === 1) return [await pb.collection('food_logs').create<FoodLog>(toRecord(drafts[0], day))]
-  const b = pb.createBatch()
-  drafts.forEach((d) => b.collection('food_logs').create(toRecord(d, day)))
-  return (await b.send()).map((r) => r.body as FoodLog)
-}
-export const updateLog = (id: string, d: Draft, day: string) => {
-  const { user: _u, ...rest } = toRecord(d, day)
-  return pb.collection('food_logs').update<FoodLog>(id, rest)
-}
-export const deleteLog = (id: string) => pb.collection('food_logs').delete(id)
-
-/** Recently logged foods (newest first), one per name + serving, for quick re-logging. */
-export async function recentFoods(limit = 60): Promise<FoodLog[]> {
-  const res = await pb.collection('food_logs').getList<FoodLog>(1, 300, { filter: pb.filter('user = {:u}', { u: me() }), sort: '-created' })
-  const seen = new Set<string>(), out: FoodLog[] = []
-  for (const l of res.items) {
-    const k = `${l.name.toLowerCase()}|${l.base?.label ?? l.kcal}`
-    // Unnamed entries ("Quick add", from Quick or a typed macro sentence) aren't useful to re-pick.
-    if (seen.has(k) || l.name === 'Quick add') continue
-    seen.add(k); out.push(l)
-    if (out.length >= limit) break
+/** Every food log this device has seen, by id (memory + IndexedDB), so days open instantly and logging works offline. */
+let store: Map<string, FoodLog> | null = null
+let storeFor = ''
+const storeKey = (u: string) => `foodlogs:${u}`
+async function logStore() {
+  const u = me()
+  if (!store || storeFor !== u) {
+    storeFor = u
+    store = new Map(((await idbGet<FoodLog[]>(storeKey(u))) ?? []).map((l) => [l.id, l]))
   }
-  return out
+  return store
+}
+let saveT: ReturnType<typeof setTimeout> | undefined
+const saveStore = () => { clearTimeout(saveT); saveT = setTimeout(() => { if (store) idbSet(storeKey(storeFor), [...store.values()]) }, 200) }
+const byDay = (a: FoodLog, b: FoodLog) => a.day.localeCompare(b.day) || (a.created ?? '').localeCompare(b.created ?? '')
+
+/** Lay changes that haven't uploaded yet over what the server sent. */
+async function overlay(server: FoodLog[]) {
+  const ops = await pendingOps('food_logs')
+  const out = new Map(server.map((l) => [l.id, l]))
+  const st = await logStore()
+  for (const op of ops) {
+    if (op.kind === 'delete') out.delete(op.id)
+    else if (op.kind === 'create') { const l = st.get(op.id); if (l) out.set(op.id, l) }
+    else { const l = out.get(op.id) ?? st.get(op.id); if (l) out.set(op.id, { ...l, ...op.body } as FoodLog) }
+  }
+  return [...out.values()]
+}
+
+/** Logs on this device for a range of days (instant; may be out of date until loadLogs refreshes). */
+export async function cachedLogs(from: string, to: string): Promise<FoodLog[]> {
+  const st = await logStore()
+  return [...st.values()].filter((l) => l.day >= from && l.day <= to).sort(byDay)
+}
+
+/** Logs for a range of days from the server (plus anything not uploaded yet). Offline: the device's copy. */
+export async function loadLogs(from: string, to: string): Promise<FoodLog[]> {
+  let server: FoodLog[]
+  try {
+    server = await pb.collection('food_logs').getFullList<FoodLog>({ filter: pb.filter('user = {:u} && day >= {:a} && day <= {:b}', { u: me(), a: from, b: to }), sort: 'day,created', batch: 1000, requestKey: null })
+  } catch (e) {
+    if ((e as { status?: number })?.status === 0) return cachedLogs(from, to)
+    throw e
+  }
+  const merged = await overlay(server)
+  const st = await logStore()
+  for (const [id, l] of st) if (l.day >= from && l.day <= to) st.delete(id)
+  for (const l of merged) st.set(l.id, l)
+  saveStore()
+  return merged.sort(byDay)
+}
+
+const localLog = (d: Draft, day: string): FoodLog => {
+  const now = new Date().toISOString().replace('T', ' ')
+  return { ...toRecord(d, day), id: newId(), collectionId: '', collectionName: 'food_logs', created: now, updated: now } as unknown as FoodLog
+}
+
+/** Log foods: saved on the device and shown at once; uploaded when there's a connection. */
+export async function addLogs(drafts: Draft[], day: string): Promise<FoodLog[]> {
+  const st = await logStore()
+  const logs = drafts.map((d) => localLog(d, day))
+  for (const l of logs) {
+    st.set(l.id, l)
+    const { id, collectionId: _c, collectionName: _n, created: _cr, updated: _u, ...body } = l
+    enqueue({ kind: 'create', coll: 'food_logs', id, body })
+  }
+  saveStore()
+  return logs
+}
+export async function updateLog(id: string, d: Draft, day: string) {
+  const { user: _u, ...rest } = toRecord(d, day)
+  const st = await logStore()
+  const cur = st.get(id)
+  const next = { ...(cur ?? {}), ...rest, id } as FoodLog
+  st.set(id, next); saveStore()
+  enqueue({ kind: 'update', coll: 'food_logs', id, body: rest })
+  return next
+}
+export async function deleteLog(id: string) {
+  const st = await logStore()
+  st.delete(id); saveStore()
+  enqueue({ kind: 'delete', coll: 'food_logs', id })
+}
+
+/** Recently logged foods (newest first), one per name + serving, for quick re-logging. From the device (instant); refreshed in the background. */
+export async function recentFoods(limit = 60): Promise<FoodLog[]> {
+  const st = await logStore()
+  const pick = (ls: FoodLog[]) => {
+    const seen = new Set<string>(), out: FoodLog[] = []
+    for (const l of ls) {
+      const k = `${l.name.toLowerCase()}|${l.base?.label ?? l.kcal}`
+      // Unnamed entries ("Quick add", from Quick or a typed macro sentence) aren't useful to re-pick.
+      if (seen.has(k) || l.name === 'Quick add') continue
+      seen.add(k); out.push(l)
+      if (out.length >= limit) break
+    }
+    return out
+  }
+  const fetchRecent = () => pb.collection('food_logs').getList<FoodLog>(1, 300, { filter: pb.filter('user = {:u}', { u: me() }), sort: '-created', requestKey: null })
+    .then((r) => { for (const l of r.items) if (!st.has(l.id)) st.set(l.id, l); saveStore(); return r.items })
+  const local = [...st.values()].sort((a, b) => (b.created ?? '').localeCompare(a.created ?? ''))
+  if (local.length >= 20) { fetchRecent().catch(() => {}); return pick(local) }
+  try { return pick(await fetchRecent()) } catch { return pick(local) }
 }
 
 // ---------- Goals ----------
@@ -198,10 +278,16 @@ export function loadSettings(force = false): Promise<{ id: string; s: Settings }
   if (cache && !force) return Promise.resolve(cache)
   if (pending && !force) return pending
   const uid = me()
-  pending = pb.collection('nutrition_profiles').getFirstListItem<Profile>(pb.filter('user = {:u}', { u: uid }))
+  pending = pb.collection('nutrition_profiles').getFirstListItem<Profile>(pb.filter('user = {:u}', { u: uid }), { requestKey: null })
     .then((r) => ({ id: r.id, s: { ...DEFAULT_SETTINGS, ...(r.settings ?? {}) } }))
-    .catch((e) => { if (e?.status === 404) return { id: '', s: { ...DEFAULT_SETTINGS } }; throw e })
-    .then((v) => { if (me() === uid) { cache = v; emit() } return v })
+    .catch(async (e) => {
+      if (e?.status === 404) return { id: '', s: { ...DEFAULT_SETTINGS } }
+      // Offline: the copy saved on this device.
+      const saved = e?.status === 0 ? await idbGet<{ id: string; s: Settings }>(`nutrition:${uid}`) : undefined
+      if (saved) return { id: saved.id, s: { ...DEFAULT_SETTINGS, ...saved.s } }
+      throw e
+    })
+    .then((v) => { if (me() === uid) { cache = v; idbSet(`nutrition:${uid}`, v); emit() } return v })
     .finally(() => { pending = null })
   return pending
 }
@@ -209,12 +295,11 @@ export function loadSettings(force = false): Promise<{ id: string; s: Settings }
 export async function saveSettings(patch: Partial<Settings>): Promise<Settings> {
   const cur = cache ?? await loadSettings()
   const s = { ...cur.s, ...patch, setUp: true }
-  cache = { ...cur, s }; emit()
-  if (cur.id) await pb.collection('nutrition_profiles').update(cur.id, { settings: s })
-  else {
-    const r = await pb.collection('nutrition_profiles').create<Profile>({ user: me(), settings: s })
-    cache = { id: r.id, s }
-  }
+  // Saved on the device at once; uploaded when there's a connection (a first save creates the profile with its id).
+  const id = cur.id || newId()
+  cache = { id, s }; idbSet(`nutrition:${me()}`, cache); emit()
+  if (cur.id) enqueue({ kind: 'update', coll: 'nutrition_profiles', id, body: { settings: s } })
+  else enqueue({ kind: 'create', coll: 'nutrition_profiles', id, body: { user: me(), settings: s } })
   return s
 }
 
@@ -253,10 +338,22 @@ let weightCache: WeightInfo | null = null
 export async function loadWeight(force = false): Promise<WeightInfo | null> {
   if (weightCache && !force) return weightCache
   const since = new Date(Date.now() - 120 * 864e5)
-  const rows = await pb.collection('body_metrics').getFullList<Weigh>({
-    filter: pb.filter('user = {:u} && measured_at >= {:s} && weight_kg > 0', { u: me(), s: since }), fields: 'measured_at,weight_kg', sort: 'measured_at',
-  })
-  const weighIns = rows.map((r) => ({ t: new Date(r.measured_at).getTime(), kg: r.weight_kg }))
+  const u = me()
+  let weighIns: { t: number; kg: number }[]
+  try {
+    const rows = await pb.collection('body_metrics').getFullList<Weigh>({
+      filter: pb.filter('user = {:u} && measured_at >= {:s} && weight_kg > 0', { u, s: since }), fields: 'id,measured_at,weight_kg', sort: 'measured_at', requestKey: null,
+    })
+    // Weigh-ins logged on this device that haven't uploaded yet still count.
+    const ids = new Set(rows.map((r) => (r as Weigh & { id: string }).id))
+    const waiting = (await pendingOps('body_metrics'))
+      .flatMap((o) => (o.kind === 'create' && !ids.has(o.id) ? [{ t: new Date(String(o.body.measured_at)).getTime(), kg: Number(o.body.weight_kg) }] : []))
+    weighIns = [...rows.map((r) => ({ t: new Date(r.measured_at).getTime(), kg: r.weight_kg })), ...waiting].sort((a, b) => a.t - b.t)
+    idbSet(`weighins:${u}`, weighIns)
+  } catch (e) {
+    if ((e as { status?: number })?.status !== 0) throw e
+    weighIns = weightCache?.weighIns ?? (await idbGet<{ t: number; kg: number }[]>(`weighins:${u}`)) ?? []
+  }
   // Smooth day-to-day water swings: average of the last week's readings, if there are any in the last two weeks.
   const last = weighIns[weighIns.length - 1]
   let kg = 0
@@ -279,10 +376,23 @@ export async function logWeighIn(kg: number, day?: string, time?: string) {
   const when = Number.isFinite(h) && time
     ? new Date(parseDay(day ?? today()).getTime() + (h * 60 + (m || 0)) * 60e3)
     : !day || day === today() ? new Date() : new Date(parseDay(day).getTime() + 8 * 3600e3)
-  await pb.collection('body_metrics').create({ user: me(), measured_at: when.toISOString(), weight_kg: r, source: 'manual' })
-  const newest = !weightCache?.weighIns.length || when.getTime() >= weightCache.weighIns[weightCache.weighIns.length - 1].t
-  if (newest) await pb.collection('users').update(me(), { bodyweight_kg: r })
-  await loadWeight(true)
+  // Saved on the device and shown at once; uploaded when there's a connection.
+  enqueue({ kind: 'create', coll: 'body_metrics', id: newId(), body: { user: me(), measured_at: when.toISOString(), weight_kg: r, source: 'manual' } })
+  const prev = weightCache?.weighIns ?? []
+  const newest = !prev.length || when.getTime() >= prev[prev.length - 1].t
+  if (newest) {
+    enqueue({ kind: 'update', coll: 'users', id: me(), body: { bodyweight_kg: r } })
+    // Your profile bodyweight updates right away on this device too.
+    const rec = pb.authStore.record
+    if (rec) pb.authStore.save(pb.authStore.token, { ...rec, bodyweight_kg: r })
+  }
+  const weighIns = [...prev, { t: when.getTime(), kg: r }].sort((a, b) => a.t - b.t)
+  const last = weighIns[weighIns.length - 1]
+  const week = weighIns.filter((w) => w.t > last.t - 7 * 864e5)
+  weightCache = { kg: week.reduce((t, w) => t + w.kg, 0) / week.length, from: 'scale', weighIns }
+  idbSet(`weighins:${me()}`, weighIns)
+  emit()
+  loadWeight(true).catch(() => {})
 }
 
 export const ageOf = (s: Settings) => (s.birthYear > 1900 ? new Date().getFullYear() - s.birthYear : 0)

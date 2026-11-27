@@ -9,7 +9,7 @@ import { BackIcon, BarcodeIcon, CalendarIcon, ChevronIcon, FlameIcon, PlusIcon, 
 import { Card, ErrorText, Screen, Spinner } from '../components/ui'
 import { loadBurn, type DayBurn } from '../lib/energy'
 import {
-  ACTIVITY, addDays, addLogs, applyPace, computeTargets, dayLabel, deleteLog, goalProgress, isDay, loadLogs, logMacros, mealNow, MEALS, paceCheck, parseDay, saveSettings, sumLogs, today,
+  ACTIVITY, addDays, addLogs, applyPace, cachedLogs, computeTargets, dayLabel, deleteLog, goalProgress, isDay, loadLogs, logMacros, mealNow, MEALS, paceCheck, parseDay, saveSettings, sumLogs, today,
   useNutrition, type FoodLog, type Macros, type Meal, type Settings, type Targets,
 } from '../lib/nutrition'
 import { errMsg, useUser } from '../lib/pb'
@@ -45,8 +45,11 @@ export default function Nutrition() {
   useEffect(() => {
     let live = true
     setErr2('')
+    // The device's copy shows at once (works offline); the server's copy replaces it when it arrives.
+    let fresh = false
+    cachedLogs(addDays(ws, -1), addDays(ws, 6)).then((l) => { if (live && !fresh && (l.length || !navigator.onLine)) setLogs(l) })
     // On failure show the error with an empty day rather than spinning forever.
-    loadLogs(addDays(ws, -1), addDays(ws, 6)).then((l) => live && setLogs(l)).catch((e) => { if (live) { setErr2(errMsg(e)); setLogs((l) => l ?? []) } })
+    loadLogs(addDays(ws, -1), addDays(ws, 6)).then((l) => { fresh = true; if (live) setLogs(l) }).catch((e) => { if (live) { setErr2(errMsg(e)); setLogs((l) => l ?? []) } })
     return () => { live = false }
   }, [ws, tick])
   // Workouts (lifting + cardio) logged on these days, from the workout tracker.

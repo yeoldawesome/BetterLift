@@ -4,7 +4,7 @@ import { fmtK } from '../components/nutrition/bits'
 import { BackIcon, ChevronIcon } from '../components/icons'
 import { Card, ErrorText, Screen, Spinner, Stat } from '../components/ui'
 import { loadBurn, type DayBurn } from '../lib/energy'
-import { addDays, computeTargets, dayStr, loadLogs, sumLogs, today, useNutrition, type FoodLog } from '../lib/nutrition'
+import { addDays, cachedLogs, computeTargets, dayStr, loadLogs, sumLogs, today, useNutrition, type FoodLog } from '../lib/nutrition'
 import { errMsg, useUser } from '../lib/pb'
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
@@ -33,8 +33,9 @@ export default function NutritionCalendar() {
 
   useEffect(() => {
     let live = true
-    setLogs(null)
-    loadLogs(from, to).then((l) => live && setLogs(l)).catch((e) => live && setErr(errMsg(e)))
+    let fresh = false
+    cachedLogs(from, to).then((l) => { if (live && !fresh) setLogs(l) })
+    loadLogs(from, to).then((l) => { fresh = true; if (live) setLogs(l) }).catch((e) => live && setErr(errMsg(e)))
     return () => { live = false }
   }, [from, to])
   useEffect(() => {

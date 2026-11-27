@@ -1,6 +1,7 @@
 import { Suspense, lazy, useEffect, useLayoutEffect, useRef } from 'react'
 import { Navigate, Route, Routes, useLocation, useNavigationType } from 'react-router-dom'
 import { RestBar } from './components/RestBar'
+import { SyncPill } from './components/SyncPill'
 import { PushWelcome } from './components/PushPrompt'
 import { Spinner } from './components/ui'
 import TabBar from './components/TabBar'
@@ -135,6 +136,7 @@ export default function App() {
         </Suspense>
       </main>
       <RestBar />
+      <SyncPill />
       <PushWelcome user={user} />
       <TabBar />
     </div>

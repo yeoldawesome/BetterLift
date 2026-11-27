@@ -5,7 +5,7 @@ import { estimateMeal, itemFromLookup, lookupPhrase, mealIn, parseMacros, parseW
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, lookupFood, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
 import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
-import { createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
+import { cachedSaved, createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
 import { RESTAURANTS, type Restaurant } from '../../lib/restaurants'
 import { labelMacros, readLabel } from '../../lib/labelOcr'
@@ -38,7 +38,11 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
   const [scanKey, setScanKey] = useState(0)
   const [saved, setSaved] = useState<SavedMeal[]>([])
 
-  useEffect(() => { if (!collect) loadSaved().then(setSaved).catch(() => {}) }, [collect])
+  useEffect(() => {
+    if (collect) return
+    cachedSaved().then((l) => setSaved((cur) => (cur.length ? cur : l)))
+    loadSaved().then(setSaved).catch(() => {})
+  }, [collect])
   useEffect(() => { recentFoods().then((ls) => setRecent(ls.map(foodFromLog))).catch(() => {}) }, [])
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2500); return () => clearTimeout(t) }, [toast])
 

@@ -6,7 +6,7 @@ import { fmtK, MacroLine } from '../components/nutrition/bits'
 import { ItemsEditor } from '../components/nutrition/ItemsEditor'
 import { SwipeRow } from '../components/SwipeRow'
 import { BottomSheet, Button, Empty, ErrorText, Input, Screen, Segmented, Spinner } from '../components/ui'
-import { createSaved, deleteSaved, itemsTotal, loadSaved, logSaved, updateSaved, type SavedMeal } from '../lib/meals'
+import { cachedSaved, createSaved, deleteSaved, itemsTotal, loadSaved, logSaved, updateSaved, type SavedMeal } from '../lib/meals'
 import { mealNow, MEALS, today, type Meal, type MealItem } from '../lib/nutrition'
 import { errMsg } from '../lib/pb'
 
@@ -34,7 +34,8 @@ export default function Meals() {
     try { await createSaved(m.name, m.kind, m.items ?? []); reload() } catch (e) { setErr(errMsg(e)) }
   }
   const reload = () => loadSaved().then(setList).catch((e) => { setErr(errMsg(e)); setList((l) => l ?? []) })
-  useEffect(() => { reload() }, [])
+  // The device's copy first (instant, offline too), then the server's.
+  useEffect(() => { cachedSaved().then((l) => setList((cur) => cur ?? (l.length ? l : null))); reload() }, [])
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 2500); return () => clearTimeout(t) }, [toast])
 
   const shown = list?.filter((m) => m.kind === kind) ?? []

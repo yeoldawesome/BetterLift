@@ -6,6 +6,8 @@ import { myAccent } from './theme'
 import { idbDel, idbGet, idbSet } from './idb'
 import { scheduleRestPush } from './push'
 import { bestPace, paceOf } from './best'
+import { enqueue } from './outbox'
+import { warmStats } from './statsData'
 import { DEFAULT_REST, liftRestSet, me, newId, pb, restFor, userRest, type Exercise, type PlanSet, type Routine, type RoutineExercise, type RoutineUpdate, type Unit, type User, type Visibility, type WSet } from './pb'
 
 /** hr/rpe/kcal: cardio effort (average heart rate, perceived effort 1–10, active calories from a watch). */
@@ -245,7 +247,8 @@ export async function saveRoutineDraft(routineId: string, xs: AEx[], unit: Unit,
  * workout started) for the exercise they became, so saving never fails on a dangling reference.
  */
 export async function repairActive(a: Active): Promise<Active> {
-  const lib = await loadExercises(true)
+  // Offline: check against the library saved on this device.
+  const lib = await loadExercises(true).catch(() => loadExercises())
   const byId = new Map(lib.map((e) => [e.id, e]))
   if (a.exercises.every((x) => byId.has(x.ex.id))) return a
   return {
@@ -279,12 +282,35 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
   if (!rows.length) throw new Error('Check off at least one set before finishing.')
 
   const exIds = [...new Set(rows.map((r) => r.ex.id))]
+  // No connection: PRs are judged against the history saved on this device (the Stats copy), and the workout is
+  // queued to upload later instead of failing.
+  let offline = typeof navigator !== 'undefined' && navigator.onLine === false
+  let local: Map<string, { e1: number; pace: number; any: boolean }> | null = null
+  const localBest = async (id: string) => {
+    if (!local) {
+      local = new Map()
+      for (const r of (await warmStats(uid)) ?? []) {
+        const b = local.get(r.set.exercise) ?? { e1: 0, pace: 0, any: false }
+        b.any = true
+        b.e1 = Math.max(b.e1, epley(r.set.weight_kg, r.set.reps))
+        const p = paceOf(r.set.distance_km, r.set.seconds)
+        if (p && (!b.pace || p < b.pace)) b.pace = p
+        local.set(r.set.exercise, b)
+      }
+    }
+    return local.get(id)
+  }
   const bestPrev = new Map<string, number>()
   await Promise.all(exIds.map(async (id) => {
-    try {
-      const r = await pb.collection('workout_sets').getFirstListItem<WSet>(pb.filter('user = {:u} && exercise = {:e}', { u: uid, e: id }), { sort: '-e1rm_kg', fields: 'e1rm_kg' })
-      bestPrev.set(id, r.e1rm_kg)
-    } catch { bestPrev.set(id, 0) }
+    if (!offline) {
+      try {
+        const r = await pb.collection('workout_sets').getFirstListItem<WSet>(pb.filter('user = {:u} && exercise = {:e}', { u: uid, e: id }), { sort: '-e1rm_kg', fields: 'e1rm_kg', requestKey: null })
+        return bestPrev.set(id, r.e1rm_kg)
+      } catch (e) { if ((e as { status?: number })?.status !== 0) return bestPrev.set(id, 0); offline = true }
+    }
+    // Offline with no saved history for this lift: don't call everything a PR.
+    const b = await localBest(id)
+    bestPrev.set(id, b ? b.e1 : Infinity)
   }))
   const prs = new Set<number>()
   for (const id of exIds) {
@@ -297,22 +323,29 @@ export async function finishWorkout(a: Active, unit: Unit, visibility: Visibilit
     let fast = -1
     rows.forEach((r, i) => { if (r.ex.id === id && r.type !== 'warmup' && r.type !== 'cooldown' && paceOf(r.dist, r.sec) && (fast < 0 || paceOf(r.dist, r.sec) < paceOf(rows[fast].dist, rows[fast].sec))) fast = i })
     if (fast < 0) return
-    const prev = await bestPace(id, uid).catch(() => -1)
+    const prev = offline ? ((await localBest(id))?.pace ?? -1) : await bestPace(id, uid).catch(async (e) => (e?.status === 0 ? ((await localBest(id))?.pace ?? -1) : -1))
     if (prev >= 0 && (!prev || paceOf(rows[fast].dist, rows[fast].sec) < prev - 0.5)) prs.add(fast)
   }))
 
-  const batch = pb.createBatch()
-  batch.collection('workouts').create({
-    id: a.id, user: uid, routine: a.routine, name: a.name.trim() || 'Workout', notes: a.notes, started_at: a.startedAt, visibility, bodyweight_kg: bodyweightKg,
+  const workout = {
+    user: uid, routine: a.routine, name: a.name.trim() || 'Workout', notes: a.notes, started_at: a.startedAt, visibility, bodyweight_kg: bodyweightKg,
     ended_at: new Date().toISOString(), duration_s: Math.round((Date.now() - new Date(a.startedAt).getTime()) / 1000),
     volume_kg: rows.reduce((t, r) => t + (r.ex.kind === 'weight' ? r.kg * r.reps : 0), 0), pr_count: prs.size, accent: myAccent(),
-  })
-  rows.forEach((r, i) => batch.collection('workout_sets').create({
-    workout: a.id, user: uid, exercise: r.ex.id, performed_at: a.startedAt, position: r.pos, set_index: r.idx,
+  }
+  const sets = rows.map((r, i) => ({
+    id: newId(), workout: a.id, user: uid, exercise: r.ex.id, performed_at: a.startedAt, position: r.pos, set_index: r.idx,
     weight_kg: r.kg, reps: r.reps, seconds: r.sec, distance_km: r.dist, completed: true, e1rm_kg: r.e1, is_pr: prs.has(i),
     set_type: r.type, note: r.note, superset: r.superset, avg_hr: r.hr, rpe: r.rpe, kcal: r.kcal,
   }))
-  await batch.send()
+  if (!offline) {
+    const batch = pb.createBatch()
+    batch.collection('workouts').create({ id: a.id, ...workout })
+    sets.forEach((x) => batch.collection('workout_sets').create(x))
+    try { await batch.send(); return a.id } catch (e) { if ((e as { status?: number })?.status !== 0) throw e }
+  }
+  // Offline (or the connection dropped while saving): queue it all; same ids, so a half-sent batch can't duplicate.
+  await enqueue({ kind: 'create', coll: 'workouts', id: a.id, body: workout })
+  for (const { id, ...x } of sets) await enqueue({ kind: 'create', coll: 'workout_sets', id, body: x })
   return a.id
 }
 

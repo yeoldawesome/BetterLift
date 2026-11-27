@@ -22,6 +22,7 @@ import { isCardio } from '../lib/energy'
 import { loadWeight } from '../lib/nutrition'
 import { errMsg, me, newId, pb, restFor, routineUpdate, useUnit, useUser, type Exercise, type Routine, type RoutineUpdate, type User, type Visibility, type Workout as W } from '../lib/pb'
 import { ask, tell } from '../components/Dialog'
+import { enqueue, pending as pendingOps } from '../lib/outbox'
 
 export default function Workout() {
   const { active } = useActive()
@@ -343,9 +344,10 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
       const bwKg = num(bw) > 0 ? fromUnit(num(bw), unit) : user.bodyweight_kg
       const id = await finishWorkout(post, unit, visibility, Math.round(bwKg * 100) / 100)
       // A bodyweight you typed here is a weigh-in: it shows on Physique, linked back to this workout.
+      // Queued like everything else, so it works offline too.
       if (bwTouched && num(bw) > 0) {
-        await pb.collection('body_metrics').create({ user: user.id, measured_at: new Date().toISOString(), weight_kg: Math.round(bwKg * 100) / 100, source: `workout:${id}` })
-          .then(() => loadWeight(true)).catch(() => {})
+        await enqueue({ kind: 'create', coll: 'body_metrics', id: newId(), body: { user: user.id, measured_at: new Date().toISOString(), weight_kg: Math.round(bwKg * 100) / 100, source: `workout:${id}` } })
+        loadWeight(true).catch(() => {})
       }
       const prefs: Partial<User> = {}
       // Only write a new bodyweight if it actually changed in the displayed unit (avoids lb↔kg rounding drift).
@@ -353,15 +355,26 @@ function FinishSheet({ user, onClose }: { user: User; onClose: () => void }) {
       if (visibility !== (user.post_visibility || 'public')) prefs.post_visibility = visibility
       if (a.routine && routineName && updateRoutine !== routineUpdate(user)) { prefs.routine_update = updateRoutine; prefs.update_routine = updateRoutine !== 'none' }
       if (!a.routine && saveRoutine !== user.save_as_routine) prefs.save_as_routine = saveRoutine
-      await Promise.all([
-        Object.keys(prefs).length ? pb.collection('users').update(user.id, prefs) : null,
-        a.routine && routineName && updateRoutine !== 'none' ? syncRoutine(post, a.routine, unit, updateRoutine) : null,
-        !a.routine && saveRoutine ? saveAsRoutine(post, post.name, unit) : null,
+      if (Object.keys(prefs).length) {
+        await enqueue({ kind: 'update', coll: 'users', id: user.id, body: prefs as Record<string, unknown> })
+        const rec = pb.authStore.record
+        if (rec) pb.authStore.save(pb.authStore.token, { ...rec, ...prefs })
+      }
+      // Routine updates need the server (they read the routine first); offline they're skipped, not fatal.
+      const net = (e: unknown) => { if ((e as { status?: number })?.status !== 0) throw e; return 'offline' as const }
+      const routineDone = await Promise.all([
+        a.routine && routineName && updateRoutine !== 'none' ? syncRoutine(post, a.routine, unit, updateRoutine).catch(net) : null,
+        !a.routine && saveRoutine ? saveAsRoutine(post, post.name, unit).catch(net) : null,
       ])
       clearBestCache()
       invalidateStats()
       discard()
-      nav(`/recap/${id}`, { replace: true })
+      const queued = (await pendingOps('workouts')).some((o) => o.id === id)
+      if (queued) {
+        // Saved on this phone; the recap needs the server, so go to the feed and say what happens next.
+        nav('/feed', { replace: true })
+        tell(`Workout saved on this phone. It'll upload automatically when you're back online.${routineDone.includes('offline') ? ' Your routine wasn\'t updated (that needs a connection).' : ''}`)
+      } else nav(`/recap/${id}`, { replace: true })
     } catch (e) { setErr(errMsg(e)); setBusy(false) }
   }
 
