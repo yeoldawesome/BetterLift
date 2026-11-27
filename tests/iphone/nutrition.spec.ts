@@ -187,9 +187,12 @@ test.describe('Nutrition', () => {
     await w.getByLabel('Time').fill('21:30')
     await w.getByRole('button', { name: 'Save weight' }).tap()
     await expect(w).toBeHidden()
-    const rows = await api(`/collections/body_metrics/records?sort=-created&perPage=1&filter=${encodeURIComponent(`user="${s.me.id}"`)}`)
-    const saved = new Date(rows.items[0].measured_at)
-    expect([saved.getHours(), saved.getMinutes()]).toEqual([21, 30])
+    // Saved on the phone first and uploaded in the background (offline-first), so wait for it to reach the server.
+    await expect.poll(async () => {
+      const rows = await api(`/collections/body_metrics/records?sort=-created&perPage=1&filter=${encodeURIComponent(`user="${s.me.id}" && weight_kg > 80.7 && weight_kg < 80.8`)}`)
+      const saved = rows.items[0] && new Date(rows.items[0].measured_at)
+      return saved ? [saved.getHours(), saved.getMinutes()] : null
+    }, { timeout: 10_000 }).toEqual([21, 30])
 
     await app.goto('/#/stats')
     await main(app).getByRole('button', { name: /Physique/ }).tap()

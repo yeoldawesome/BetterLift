@@ -1,5 +1,5 @@
 // Frontend-logic end-to-end test against a running PocketBase. Run: npm run test:e2e
-import { emptySet, finishWorkout, makeEx, routineExercises, saveAsRoutine, syncRoutine, type Active } from '../src/lib/active'
+import { emptySet, finishWorkout, makeEx, prevFor, routineExercises, saveAsRoutine, syncRoutine, type Active } from '../src/lib/active'
 import { findDuplicates, loadExercises, loadUsage, matchOfficial, mergeExercise, nameKey, saveLiftRest } from '../src/lib/exercises'
 import { intensityForExercise, intensityFromSets } from '../src/lib/muscles'
 import { inkFor, resolve } from '../src/lib/theme'
@@ -55,7 +55,10 @@ ok(bench.filter((s) => s.is_pr).length === 2, 'import PRs flagged chronologicall
 // Live workout finish: one heavier bench set should be a PR.
 const benchEx = lib.find((e) => e.name === 'Barbell Bench Press')!
 const x = await makeEx(benchEx, 2)
-ok(x.prev.length === 1 && Math.round(x.prev[0].w * 2.20462) === 200, `previous-set hint loads last session (${x.prev.length} set)`)
+// The card shows at once; last session's sets load in the background (the workout fills them in).
+ok(x.prevPending === true && x.prev.length === 0, 'new exercise card shows before its previous sets load')
+const lastSets = await prevFor(benchEx.id)
+ok(lastSets.length === 1 && Math.round(lastSets[0].weight_kg * 2.20462) === 200, `previous-set hint loads last session (${lastSets.length} set)`)
 x.sets = [{ ...emptySet(), w: '205', r: '3', done: true }, { ...emptySet(), w: '135', r: '10', done: false }]
 const a: Active = { id: newId(), name: 'Live push', routine: '', startedAt: new Date(Date.now() - 1800e3).toISOString(), notes: '', exercises: [x] }
 const wid = await finishWorkout(a, 'lb', 'private', 91.5)
@@ -65,8 +68,10 @@ const lw = await pb.collection('workouts').getOne<Workout>(wid)
 ok(lw.visibility === 'private' && lw.bodyweight_kg === 91.5, 'finish stores visibility and bodyweight')
 const rid = await saveAsRoutine(a, 'My Push', 'lb')
 let rex = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: `routine="${rid}"` })
-ok(rex.length === 1 && rex[0].reps === 3 && rex[0].target_sets === 1 && rex[0].rest_s === x.rest, 'save-as-routine stores sets, single reps, rest')
-x.rest = 150; x.sets = [{ ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '4', done: true }]
+// Rest you never set yourself is stored as 0 = "follow my Settings default".
+ok(rex.length === 1 && rex[0].reps === 3 && rex[0].target_sets === 1 && rex[0].rest_s === 0, 'save-as-routine stores sets, single reps, and rest that follows Settings')
+// Rest edited for this workout (Edit Rest) is set on purpose, so the routine keeps it.
+x.rest = 150; x.restSet = true; x.sets = [{ ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '5', done: true }, { ...emptySet(), w: '200', r: '4', done: true }]
 x.note = 'pause at chest'
 await syncRoutine(a, rid, 'lb', 'all')
 rex = await pb.collection('routine_exercises').getFullList<RoutineExercise>({ filter: `routine="${rid}"` })
