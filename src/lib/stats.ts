@@ -298,3 +298,33 @@ export function strengthIndex(snap: Pick<Snapshot, 'names' | 'summaries'>, now =
   const ago = (n: number) => values[Math.max(0, values.length - 1 - n)]
   return { labels, values: values.map((v) => Math.round(v * 10) / 10), lifts: lifts.length, total: last / 100 - 1, recent: last / ago(13) - 1, weeks }
 }
+
+/**
+ * Progressive overload over a run of workouts (oldest first). Each lift is scored per workout by its best est. 1RM
+ * (or most reps, for bodyweight moves) and compared with its first time in the window. `change` averages every lift
+ * done at least twice (first → latest); `perWorkout` is each workout's average against those starting points
+ * (1 = same as when you started), for a bar per workout.
+ */
+export function overload(workouts: { id: string; sets: { exercise: string; e1rm: number; reps: number; cardio: boolean }[] }[]) {
+  const first = new Map<string, number>(), last = new Map<string, number>(), seen = new Map<string, number>()
+  const perWorkout: (number | null)[] = []
+  for (const w of workouts) {
+    const best = new Map<string, number>()
+    for (const s of w.sets) {
+      if (s.cardio) continue
+      const score = s.e1rm > 0 ? s.e1rm : s.reps
+      if (score > 0) best.set(s.exercise, Math.max(best.get(s.exercise) ?? 0, score))
+    }
+    const ratios: number[] = []
+    for (const [ex, score] of best) {
+      if (!first.has(ex)) first.set(ex, score)
+      last.set(ex, score)
+      seen.set(ex, (seen.get(ex) ?? 0) + 1)
+      ratios.push(score / first.get(ex)!)
+    }
+    perWorkout.push(ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null)
+  }
+  const repeated = [...seen].filter(([, n]) => n >= 2).map(([ex]) => ex)
+  const change = repeated.length ? repeated.reduce((t, ex) => t + last.get(ex)! / first.get(ex)! - 1, 0) / repeated.length : 0
+  return { change, lifts: repeated.length, perWorkout }
+}

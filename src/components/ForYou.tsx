@@ -13,10 +13,13 @@ import { MAP_MUSCLES } from '../lib/muscles'
 import { errMsg, me, nutritionOn, pb, useUser, type Routine, type RoutineExercise, type User, type WSet, type Workout } from '../lib/pb'
 import { nextUp, savePlan, userPlan, type NextUp } from '../lib/plan'
 import { recovery, RECOVERY_WINDOW_H, recoverySummary } from '../lib/recovery'
+import { overload } from '../lib/stats'
 
 type Data = {
   routines: Routine[]; preview: Map<string, RoutineExercise[]>
   last: Workout[]; setCount: Map<string, number>
+  /** Per workout (by id): each set's lift and strength, for the progressive-overload card. */
+  liftSets: Map<string, { exercise: string; e1rm: number; reps: number; cardio: boolean }[]>
   recent: { at: Date; sets: WSet[] }[]
 }
 let mem: { user: string; data: Data } | null = null
@@ -42,14 +45,19 @@ export default function ForYou() {
       const recent = [...byW.values()].map((ss) => ({ at: new Date(ss[0].performed_at), sets: ss }))
       // Set counts for the calorie estimate (denser sessions burn more).
       const setCount = new Map<string, number>()
+      const liftSets: Data['liftSets'] = new Map()
       if (last.items.length) {
-        const rows = await pb.collection('workout_sets').getFullList<WSet>({ filter: last.items.map((w) => `workout="${w.id}"`).join(' || ') + ' && completed = true', fields: 'workout', batch: 2000 }).catch(() => [])
-        for (const r of rows) setCount.set(r.workout, (setCount.get(r.workout) ?? 0) + 1)
+        const rows = await pb.collection('workout_sets').getFullList<WSet>({ filter: last.items.map((w) => `workout="${w.id}"`).join(' || ') + ' && completed = true', fields: 'workout,exercise,e1rm_kg,reps,seconds,distance_km,set_type', batch: 2000 }).catch(() => [])
+        for (const r of rows) {
+          setCount.set(r.workout, (setCount.get(r.workout) ?? 0) + 1)
+          if (r.set_type === 'warmup' || r.set_type === 'cooldown') continue
+          liftSets.set(r.workout, [...(liftSets.get(r.workout) ?? []), { exercise: r.exercise, e1rm: r.e1rm_kg || 0, reps: r.reps || 0, cardio: r.distance_km > 0 || (r.seconds > 0 && !r.reps) }])
+        }
       }
-      const d = { routines, preview, last: last.items, setCount, recent }
+      const d = { routines, preview, last: last.items, setCount, liftSets, recent }
       mem = { user: me(), data: d }
       if (live) setData(d)
-    }).catch(() => live && setData((x) => x ?? { routines: [], preview: new Map(), last: [], setCount: new Map(), recent: [] }))
+    }).catch(() => live && setData((x) => x ?? { routines: [], preview: new Map(), last: [], setCount: new Map(), liftSets: new Map(), recent: [] }))
     return () => { live = false }
   }, [])
 
@@ -154,15 +162,17 @@ function LastWorkouts({ user, data }: { user: User; data: Data }) {
   )
   const chrono = [...ws].reverse()
   const vol = ws.reduce((t, w) => t + (w.volume_kg || 0), 0)
-  const max = Math.max(1, ...chrono.map((w) => w.volume_kg || 0))
   const secs = ws.reduce((t, w) => t + (w.duration_s || 0), 0)
   const prs = ws.reduce((t, w) => t + (w.pr_count || 0), 0)
   const person = { kg: user.bodyweight_kg || 75, cm: user.height_cm || 175, age: 30, sex: user.sex }
   const kcal = ws.reduce((t, w) => t + liftingSession(w.duration_s || 0, data.setCount.get(w.id) ?? 0, person).kcal, 0)
-  // Progressive overload: the newer half's average volume against the older half's.
-  const half = Math.floor(chrono.length / 2)
-  const avg = (a: Workout[]) => a.reduce((t, w) => t + (w.volume_kg || 0), 0) / Math.max(1, a.length)
-  const trend = half ? avg(chrono.slice(half)) / Math.max(1, avg(chrono.slice(0, half))) - 1 : 0
+  // Progressive overload: are your lifts getting stronger? (Volume swings with what you trained that day; est. 1RM doesn't.)
+  const ov = overload(chrono.map((w) => ({ id: w.id, sets: data.liftSets?.get(w.id) ?? [] })))
+  const dir = !ov.lifts ? 'none' : ov.change >= 0.01 ? 'up' : ov.change <= -0.01 ? 'down' : 'flat'
+  const scores = ov.perWorkout.filter((x): x is number => x !== null)
+  const lo = Math.min(1, ...scores), hi = Math.max(1, ...scores)
+  const barH = (x: number | null) => (x === null ? 10 : 18 + ((x - lo) / Math.max(0.0001, hi - lo)) * 82)
+  const pct = `${ov.change >= 0 ? '+' : '−'}${Math.abs(Math.round(ov.change * 1000) / 10)}%`
   const bws = chrono.map((w) => w.bodyweight_kg).filter((x) => x > 0)
   const bw = user.bodyweight_kg || bws[bws.length - 1] || 0
   const bwDelta = bws.length > 1 ? bws[bws.length - 1] - bws[0] : 0
@@ -173,21 +183,33 @@ function LastWorkouts({ user, data }: { user: User; data: Data }) {
   return (
     <Section title={`Last ${ws.length} Workout${ws.length === 1 ? '' : 's'}`}>
       <Link to="/stats" className="block">
-        <Card className="flex items-center gap-4" data-volume>
+        <Card className="flex items-center gap-4" data-volume data-overload={dir}>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-semibold text-muted">Volume</p>
-            <p className="num truncate text-2xl font-black">{fmtVol(vol, unit)} <span className="text-base font-bold">{unit}</span></p>
-            <p className={`flex items-center gap-1 text-sm font-semibold ${trend >= 0.02 ? 'text-accent' : 'text-muted'}`}>
-              {trend >= 0.02 ? 'Progressive overload' : trend <= -0.02 ? 'Volume down' : 'Holding steady'}
-              <span className="grid size-5 place-items-center rounded-full bg-accent text-accent-ink"><TrendIcon width={12} height={12} /></span>
-            </p>
+            <p className="text-sm font-semibold text-muted">Progressive overload</p>
+            {dir === 'none' ? (
+              <p className="mt-1 text-sm text-muted">Repeat a lift and your strength trend shows here.</p>
+            ) : <>
+              <p className={`flex items-center gap-2 text-2xl font-black ${dir === 'up' ? 'text-accent' : dir === 'down' ? 'text-danger' : ''}`}>
+                <span className={`grid size-7 shrink-0 place-items-center rounded-full ${dir === 'up' ? 'bg-accent text-accent-ink' : dir === 'down' ? 'bg-danger text-white' : 'bg-surface-2 text-muted'}`}>
+                  {dir === 'flat' ? <span className="h-0.5 w-3 rounded-full bg-current" /> : <TrendIcon width={15} height={15} className={dir === 'down' ? '-scale-y-100' : ''} />}
+                </span>
+                <span className="num">{pct}</span>
+              </p>
+              <p className="text-sm font-semibold text-muted">{dir === 'up' ? 'Getting stronger' : dir === 'down' ? 'Getting weaker' : 'Holding steady'} · {ov.lifts} lift{ov.lifts === 1 ? '' : 's'}</p>
+            </>}
+            <p className="num mt-0.5 text-xs text-faint">Volume {fmtVol(vol, unit)} {unit}</p>
           </div>
+          {/* A bar per workout: how strong it was against where each lift started (green above, red below). */}
           <div className="flex h-16 shrink-0 items-end gap-[3px]" aria-hidden>
-            {chrono.map((w) => (
-              <span key={w.id} className="relative h-full w-[7px] rounded-full bg-surface-2">
-                <span className="absolute inset-x-0 bottom-0 rounded-full bg-accent" style={{ height: `${Math.max(12, ((w.volume_kg || 0) / max) * 100)}%` }} />
-              </span>
-            ))}
+            {chrono.map((w, i) => {
+              const x = ov.perWorkout[i]
+              const tone = x === null ? 'bg-faint/40' : x > 1.005 ? 'bg-accent' : x < 0.995 ? 'bg-danger' : 'bg-muted'
+              return (
+                <span key={w.id} className="relative h-full w-[7px] rounded-full bg-surface-2">
+                  <span className={`absolute inset-x-0 bottom-0 rounded-full ${tone}`} style={{ height: `${barH(x)}%` }} />
+                </span>
+              )
+            })}
           </div>
         </Card>
       </Link>
