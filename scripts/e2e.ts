@@ -159,7 +159,10 @@ await pb.collection('exercise_overrides').delete(withRest.override!)
 // Same movement, different name → official exercise (import matching + merging existing duplicates)
 const libM = await loadExercises(true)
 ok(matchOfficial('Bench Press', libM)?.name === 'Barbell Bench Press' && matchOfficial('Military Press', libM)?.name === 'Barbell Overhead Press'
-  && matchOfficial('Incline Bench Press', libM)?.name === 'Incline Barbell Bench Press' && !matchOfficial('Smith Machine Bench Press', libM), 'import name matching picks the official lift (and leaves real variations alone)')
+  && matchOfficial('Incline Bench Press', libM)?.name === 'Incline Barbell Bench Press'
+  // A real variation is never lumped in with the barbell lift: it matches its own official entry, or nothing.
+  && matchOfficial('Smith Machine Bench Press', libM)?.name === 'Smith Machine Bench Press' && !matchOfficial('Pin Bench Press', libM),
+  'import name matching picks the official lift (and leaves real variations alone)')
 const dup = await pb.collection('exercises').create<Exercise>({ name: 'Bench Press', muscle: 'chest', equipment: 'barbell', kind: 'weight', owner: pb.authStore.record!.id })
 const dw = newId()
 const db = pb.createBatch()
