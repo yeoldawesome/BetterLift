@@ -20,19 +20,25 @@ const FRESH_MS = 60_000
 /** Something changed (a workout finished, edited or deleted): the next open refetches. */
 export const invalidateCalendar = () => mem.forEach((v) => { v.at = 0 })
 
-async function fetchPacked(u: string): Promise<Packed> {
+/** Workouts (and their exercises) from the server: everything, or just since `since` for a quick first look. */
+async function fetchPacked(u: string, since?: Date): Promise<Packed> {
+  const after = since ? pb.filter(' && started_at >= {:s}', { s: since }) : ''
+  const afterSets = since ? pb.filter(' && performed_at >= {:s}', { s: since }) : ''
   const [ws, sets] = await Promise.all([
-    pb.collection('workouts').getFullList<CalWorkout>({ filter: pb.filter('user = {:u}', { u }), sort: 'started_at', fields: 'id,name,started_at,duration_s,accent,pr_count', batch: 1000, requestKey: null }),
+    pb.collection('workouts').getFullList<CalWorkout>({ filter: pb.filter('user = {:u}', { u }) + after, sort: 'started_at', fields: 'id,name,started_at,duration_s,accent,pr_count', batch: 1000, requestKey: null }),
     // Just which exercise each set was (the exercise details come from the on-device library): far lighter than expanding.
-    pb.collection('workout_sets').getFullList<{ workout: string; exercise: string }>({ filter: pb.filter('user = {:u} && completed = true', { u }), fields: 'workout,exercise', batch: 5000, requestKey: null }),
+    pb.collection('workout_sets').getFullList<{ workout: string; exercise: string }>({ filter: pb.filter('user = {:u} && completed = true', { u }) + afterSets, fields: 'workout,exercise', batch: 5000, requestKey: null }),
   ])
   const by = new Map<string, string[]>()
   for (const s of sets) by.set(s.workout, [...(by.get(s.workout) ?? []), s.exercise])
   const packed: Packed = { v: 1, ws, wx: [...by] }
-  mem.set(u, { at: Date.now(), packed })
-  idbSet(key(u), packed)
+  // A partial (recent-only) copy is shown but never saved as the full history.
+  if (!since) { mem.set(u, { at: Date.now(), packed }); idbSet(key(u), packed) }
   return packed
 }
+
+/** The first day of the month `n` months back (n = 2: this month and the two before it). */
+export const monthsBack = (n: number) => { const d = new Date(); return new Date(d.getFullYear(), d.getMonth() - n, 1) }
 
 function refresh(u: string) {
   const running = inflight.get(u)
@@ -75,7 +81,12 @@ export function useCalendarData(): CalData | null {
     const u = me()
     let live = true
     let shown = false
-    cached(u).then(async (p) => { if (p && live && !shown) { const d = await unpack(p); if (live && !shown) setData(d) } })
+    cached(u).then(async (p) => {
+      if (p) { if (live && !shown) { const d = await unpack(p); if (live && !shown) setData(d) } return }
+      // Nothing saved yet (first open): the last 3 months first, so it shows quickly; the full history follows.
+      const recent = await fetchPacked(u, monthsBack(2)).catch(() => null)
+      if (recent && live && !shown) { const d = await unpack(recent); if (live && !shown) setData(d) }
+    })
     const m = mem.get(u)
     const fresh = m && Date.now() - m.at < FRESH_MS
     ;(fresh ? Promise.resolve(m!.packed) : refresh(u))

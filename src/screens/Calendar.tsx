@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { BodyMap } from '../components/BodyMap'
 import { ChevronIcon, TrophyIcon } from '../components/icons'
@@ -61,12 +61,50 @@ export default function Calendar() {
     target.current?.scrollIntoView({ block: params.get('d') ? 'center' : 'start' })
   }, [days]) // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Only the most recent months render at first (each training day draws a body graph, so all of them at once is
+  // slow); older months are added a few at a time as you scroll up, with the page held still while they appear.
+  const [shown, setShown] = useState(3)
+  const wantedIdx = months.findIndex((m) => monthKey(m) === wanted)
+  const need = wantedIdx >= 0 ? months.length - wantedIdx + 1 : 3
+  const count = Math.min(months.length, Math.max(shown, need))
+  const more = count < months.length
+  const top = useRef<HTMLDivElement>(null)
+  const hold = useRef<{ el: HTMLElement; fromBottom: number } | null>(null)
+  useEffect(() => {
+    const el = top.current, scroller = document.querySelector('main')
+    if (!el || !scroller || !more) return
+    const io = new IntersectionObserver(([e]) => {
+      if (!e.isIntersecting) return
+      hold.current = { el: scroller, fromBottom: scroller.scrollHeight - scroller.scrollTop }
+      setShown((n) => Math.max(n, count) + 3)
+    }, { root: scroller, rootMargin: '600px 0px 0px 0px' })
+    io.observe(el)
+    return () => io.disconnect()
+  }, [more, count])
+  // Keep what you were looking at in place when older months appear above it.
+  useLayoutEffect(() => {
+    const h = hold.current
+    if (!h) return
+    hold.current = null
+    h.el.scrollTop = h.el.scrollHeight - h.fromBottom
+  }, [count])
+  // The browser's own scroll anchoring would shift it a second time (iOS Safari doesn't have it; Chrome does).
+  useEffect(() => {
+    const m = document.querySelector('main')
+    if (!m) return
+    const prev = m.style.overflowAnchor
+    m.style.overflowAnchor = 'none'
+    return () => { m.style.overflowAnchor = prev }
+  }, [])
+
   if (!days) return <Screen title="Calendar" back><Spinner /></Screen>
   if (!months.length) return <Screen title="Calendar" back><Empty title="No workouts yet" body="Every day you train shows up here with a mini body graph." /></Screen>
 
   return (
     <Screen title="Calendar" back>
-      {months.map((m) => {
+      <div ref={top} aria-hidden />
+      {more && <p className="py-2 text-center text-xs text-faint">Scroll up for earlier months</p>}
+      {months.slice(-count).map((m) => {
         const mk = monthKey(m)
         const lead = m.getDay(), count = new Date(m.getFullYear(), m.getMonth() + 1, 0).getDate()
         const cells = [...Array<Date | null>(lead).fill(null), ...Array.from({ length: count }, (_, i) => new Date(m.getFullYear(), m.getMonth(), i + 1))]
