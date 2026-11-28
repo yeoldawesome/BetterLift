@@ -22,11 +22,14 @@ export default async function setup() {
   const tag = Math.random().toString(36).slice(2, 8)
   const password = 'iphone-test-123'
   const created: string[] = []
+  // Test users are made by the admin: sign-ups from one address are limited (20 an hour), which repeated test runs
+  // would use up. They're created email-verified and past the notifications prompt, so tests open straight into the app.
+  const su = await call('/collections/_superusers/auth-with-password', { method: 'POST', json: { identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD } })
   // The API hides email addresses, so keep the one we generated.
   const mk = async (who: string) => {
     const email = `iphone_${who}_${tag}@test.local`
-    const u = await call('/collections/users/records', { method: 'POST', json: {
-      email, password, passwordConfirm: password, username: `iphone_${who}_${tag}`,
+    const u = await call('/collections/users/records', { method: 'POST', token: su.token, json: {
+      email, password, passwordConfirm: password, username: `iphone_${who}_${tag}`, verified: true, push_asked: true,
       name: who === 'me' ? 'iPhone Tester' : 'Test Friend', nutrition_on: who === 'me', nutrition_seen: who === 'me', bodyweight_kg: 80, height_cm: 180, sex: 'male', unit: 'lb',
     } })
     created.push(u.id)
@@ -35,10 +38,6 @@ export default async function setup() {
   const login = (email: string) => call('/collections/users/auth-with-password', { method: 'POST', json: { identity: email, password } })
   try {
   const me = await mk('me'), friend = await mk('friend')
-  // New accounts must verify their email before using the app; mark the test users verified (as the admin), and
-  // answered the notifications prompt, so tests open straight into the app.
-  const su = await call('/collections/_superusers/auth-with-password', { method: 'POST', json: { identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD } })
-  for (const u of [me, friend]) await call(`/collections/users/records/${u.id}`, { method: 'PATCH', token: su.token, json: { verified: true, push_asked: true } })
   const meAuth = await login(me.email), frAuth = await login(friend.email)
 
   // Friend request + accept, the same way the app does it.

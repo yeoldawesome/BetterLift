@@ -4,18 +4,16 @@ import { expect, seed, test } from './fixtures'
 // Login is rate-limited (10 attempts/minute per IP), so these run on one device size only.
 test.beforeEach(({}, info) => test.skip(info.project.name !== 'iPhone 15', 'auth flows: one device is enough (login is rate-limited)'))
 
+// Made by the admin (sign-ups are rate-limited) and already email-verified, like the shared test users.
 const newUser = async () => {
   const s = seed()
   const u = `auth_${Math.random().toString(36).slice(2, 8)}`
+  const su = await (await fetch(`${s.api}/api/collections/_superusers/auth-with-password`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD }) })).json()
   const r = await fetch(`${s.api}/api/collections/users/records`, {
-    method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ email: `${u}@test.local`, username: u, password: 'Granite-Squats-1', passwordConfirm: 'Granite-Squats-1', bodyweight_kg: 80, height_cm: 180, unit: 'lb' }),
+    method: 'POST', headers: { 'content-type': 'application/json', Authorization: su.token },
+    body: JSON.stringify({ email: `${u}@test.local`, username: u, password: 'Granite-Squats-1', passwordConfirm: 'Granite-Squats-1', bodyweight_kg: 80, height_cm: 180, unit: 'lb', verified: true, push_asked: true }),
   })
   expect(r.ok).toBeTruthy()
-  // New accounts verify their email before using the app: mark this one verified, as the admin.
-  const id = (await r.json()).id
-  const su = await (await fetch(`${s.api}/api/collections/_superusers/auth-with-password`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD }) })).json()
-  await fetch(`${s.api}/api/collections/users/records/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', Authorization: su.token }, body: JSON.stringify({ verified: true, push_asked: true }) })
   return u
 }
 
