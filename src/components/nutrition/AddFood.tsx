@@ -5,7 +5,7 @@ import { estimateMeal, itemFromLookup, lookupPhrase, mealIn, parseMacros, parseW
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, lookupFood, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
 import { addLogs, dayLabel, deleteLog, kcalFrom, logWeighIn, updateLog, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
-import { cachedSaved, createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
+import { cachedSaved, createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, portionText, savedDraft, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
 import { RESTAURANTS, type Restaurant } from '../../lib/restaurants'
 import { labelMacros, readLabel } from '../../lib/labelOcr'
@@ -37,6 +37,8 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
   const [toast, setToast] = useState('')
   const [scanKey, setScanKey] = useState(0)
   const [saved, setSaved] = useState<SavedMeal[]>([])
+  /** The saved food/meal whose portion is being picked (tap a chip → choose 1.3×, ½× …, then Add). */
+  const [portion, setPortion] = useState<{ sm: SavedMeal; k: number } | null>(null)
 
   useEffect(() => {
     if (collect) return
@@ -80,15 +82,23 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
             <p className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">My meals</p>
             <div className="bleed-x flex gap-2 overflow-x-auto pb-1 [scrollbar-width:none]">
               {saved.map((sm) => (
-                <button key={sm.id} onClick={async () => {
-                  try { onAdded?.(await logSaved(sm, meal, day)); setToast(`Added ${sm.name} · ${fmtK(itemsTotal(sm.items ?? []).kcal)} kcal`) } catch (e) { setToast(errMsg(e)) }
-                }} className="flex shrink-0 items-center gap-2 rounded-full border border-line bg-surface py-1.5 pl-2 pr-3 text-sm font-semibold active:scale-[0.98]">
+                <button key={sm.id} onClick={() => setPortion((p) => (p?.sm.id === sm.id ? null : { sm, k: 1 }))} aria-pressed={portion?.sm.id === sm.id}
+                  className={`flex shrink-0 items-center gap-2 rounded-full border py-1.5 pl-2 pr-3 text-sm font-semibold active:scale-[0.98] ${portion?.sm.id === sm.id ? 'border-accent bg-accent/10' : 'border-line bg-surface'}`}>
                   <span className="grid size-6 place-items-center rounded-full bg-accent/15 text-accent"><PlusIcon width={14} height={14} /></span>
                   <span className="max-w-[10rem] truncate">{sm.name}</span>
                   <span className="num text-xs text-muted">{fmtK(itemsTotal(sm.items ?? []).kcal)}</span>
                 </button>
               ))}
             </div>
+            {portion && <PortionPicker key={portion.sm.id} sm={portion.sm} k={portion.k} meal={meal} onK={(k) => setPortion({ ...portion, k })} onCancel={() => setPortion(null)}
+              onAdd={async () => {
+                const { sm, k } = portion
+                try {
+                  onAdded?.(await logSaved(sm, meal, day, k))
+                  setToast(`Added ${k === 1 ? '' : `${portionText(k)} `}${sm.name} · ${fmtK(savedDraft(sm, meal, k).macros.kcal)} kcal`)
+                  setPortion(null)
+                } catch (e) { setToast(errMsg(e)) }
+              }} />}
           </div>
         )}
         {!picked && (
@@ -276,6 +286,33 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
           <p><span className="font-semibold text-ink">Weighed in?</span> “I weigh 182” logs your weight.</p>
         </div>
       )}
+    </div>
+  )
+}
+
+/** How much of a saved food/meal to log: any portion (1.3×, 0.75× …), with quick picks and the calories it comes to. */
+function PortionPicker({ sm, k, meal, onK, onAdd, onCancel }: { sm: SavedMeal; k: number; meal: Meal; onK: (k: number) => void; onAdd: () => Promise<void>; onCancel: () => void }) {
+  const [busy, setBusy] = useState(false)
+  const m = savedDraft(sm, meal, k).macros
+  return (
+    <div className="mt-2 space-y-2.5 rounded-2xl border border-accent/40 bg-surface p-3" data-portion>
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          <p className="truncate font-bold">{sm.name}</p>
+          <p className="text-xs text-muted">Portion</p>
+        </div>
+        <Stepper value={k} onChange={onK} step={0.1} min={0.1} max={20} />
+      </div>
+      <div className="grid grid-cols-5 gap-1.5">
+        {[0.5, 0.75, 1, 1.5, 2].map((v) => (
+          <button key={v} type="button" onClick={() => onK(v)} className={`num rounded-lg py-1.5 text-sm font-bold ${k === v ? 'bg-accent text-accent-ink' : 'bg-surface-2 text-muted'}`}>{portionText(v)}</button>
+        ))}
+      </div>
+      <MacroLine m={m} />
+      <div className="flex gap-2">
+        <button type="button" onClick={onCancel} className="rounded-xl px-4 font-bold text-muted">Cancel</button>
+        <div className="min-w-0 flex-1"><Button disabled={busy || k <= 0} onClick={async () => { setBusy(true); try { await onAdd() } finally { setBusy(false) } }}>Add {fmtK(m.kcal)} kcal</Button></div>
+      </div>
     </div>
   )
 }

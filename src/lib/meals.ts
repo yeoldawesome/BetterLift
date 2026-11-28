@@ -66,18 +66,27 @@ export async function deleteSaved(id: string) {
   enqueue({ kind: 'delete', coll: COLL, id })
 }
 
-/** Draft for logging a saved meal: one entry that carries its own copy of the items. */
-export function savedDraft(s: SavedMeal, meal: Meal): Draft {
-  const items = s.items ?? []
+/** Draft for logging a saved meal: one entry that carries its own copy of the items. `k` is the portion (1.3 = 1.3×). */
+export function savedDraft(s: SavedMeal, meal: Meal, k = 1): Draft {
+  const items = (s.items ?? []).map((i) => (k === 1 ? i : portionItem(i, k)))
   if (s.kind === 'food' && items.length === 1) {
     const i = items[0]
     return { name: s.name, detail: i.detail, meal, servings: i.servings, base: i.base, macros: i.macros, source: 'saved', savedMeal: s.id }
   }
-  return { name: s.name, detail: items.map((i) => i.name).join(', '), meal, servings: 1, base: null, macros: itemsTotal(items), source: 'saved', items, savedMeal: s.id }
+  const names = items.map((i) => i.name).join(', ')
+  return { name: s.name, detail: k === 1 ? names : `${portionText(k)} · ${names}`, meal, servings: 1, base: null, macros: itemsTotal(items), source: 'saved', items, savedMeal: s.id }
 }
 
-export async function logSaved(s: SavedMeal, meal: Meal, day: string) {
-  const logs = await addLogs([savedDraft(s, meal)], day)
+/** "1.3×" / "½×" */
+export const portionText = (k: number) => `${k === 0.5 ? '½' : Math.round(k * 100) / 100}×`
+
+const portionItem = (i: MealItem, k: number): MealItem => {
+  const servings = i.servings * k
+  return { ...i, servings, macros: scale(i.macros, k), detail: i.base ? servingText(servings, i.base) : `${portionText(k)}${i.detail ? ` ${i.detail}` : ''}` }
+}
+
+export async function logSaved(s: SavedMeal, meal: Meal, day: string, k = 1) {
+  const logs = await addLogs([savedDraft(s, meal, k)], day)
   keep((await local()).map((m) => (m.id === s.id ? { ...m, uses: m.uses + 1 } : m)))
   enqueue({ kind: 'update', coll: COLL, id: s.id, body: { 'uses+': 1 } })
   return logs
