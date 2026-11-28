@@ -35,6 +35,10 @@ export default async function setup() {
   const login = (email: string) => call('/collections/users/auth-with-password', { method: 'POST', json: { identity: email, password } })
   try {
   const me = await mk('me'), friend = await mk('friend')
+  // New accounts must verify their email before using the app; mark the test users verified (as the admin), and
+  // answered the notifications prompt, so tests open straight into the app.
+  const su = await call('/collections/_superusers/auth-with-password', { method: 'POST', json: { identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD } })
+  for (const u of [me, friend]) await call(`/collections/users/records/${u.id}`, { method: 'PATCH', token: su.token, json: { verified: true, push_asked: true } })
   const meAuth = await login(me.email), frAuth = await login(friend.email)
 
   // Friend request + accept, the same way the app does it.
