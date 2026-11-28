@@ -299,32 +299,51 @@ export function strengthIndex(snap: Pick<Snapshot, 'names' | 'summaries'>, now =
   return { labels, values: values.map((v) => Math.round(v * 10) / 10), lifts: lifts.length, total: last / 100 - 1, recent: last / ago(13) - 1, weeks }
 }
 
+const median = (xs: number[]) => { const a = [...xs].sort((x, y) => x - y), m = a.length >> 1; return a.length % 2 ? a[m] : (a[m - 1] + a[m]) / 2 }
+
 /**
- * Progressive overload over a run of workouts (oldest first). Each lift is scored per workout by its best est. 1RM
- * (or most reps, for bodyweight moves) and compared with its first time in the window. `change` averages every lift
- * done at least twice (first → latest); `perWorkout` is each workout's average against those starting points
- * (1 = same as when you started), for a bar per workout.
+ * Progressive overload over a run of workouts (oldest first), built so one off day doesn't tank it.
+ * Each lift is scored per workout by its best est. 1RM (or most reps, for bodyweight moves). Per lift:
+ *  - the trend is the median of the slopes between every pair of sessions (Theil–Sen), so a single bad (or great)
+ *    day barely moves it, as a % of that lift's typical score over the whole run;
+ *  - capped at ±20%, and a lift with only 2 sessions counts a third as much as one done 4+ times.
+ * Across lifts: a weighted median with 3+ lifts (one lift's slump can't drag the rest), else a weighted average that
+ * leans toward 0 when there's little data.
+ * `perWorkout`: each workout's lifts against their typical score in this window (1 = typical), for a bar per workout.
  */
 export function overload(workouts: { id: string; sets: { exercise: string; e1rm: number; reps: number; cardio: boolean }[] }[]) {
-  const first = new Map<string, number>(), last = new Map<string, number>(), seen = new Map<string, number>()
-  const perWorkout: (number | null)[] = []
-  for (const w of workouts) {
+  const series = new Map<string, { i: number; score: number }[]>()
+  const bests: Map<string, number>[] = workouts.map((w, i) => {
     const best = new Map<string, number>()
     for (const s of w.sets) {
       if (s.cardio) continue
       const score = s.e1rm > 0 ? s.e1rm : s.reps
       if (score > 0) best.set(s.exercise, Math.max(best.get(s.exercise) ?? 0, score))
     }
-    const ratios: number[] = []
-    for (const [ex, score] of best) {
-      if (!first.has(ex)) first.set(ex, score)
-      last.set(ex, score)
-      seen.set(ex, (seen.get(ex) ?? 0) + 1)
-      ratios.push(score / first.get(ex)!)
-    }
-    perWorkout.push(ratios.length ? ratios.reduce((a, b) => a + b, 0) / ratios.length : null)
+    for (const [ex, score] of best) series.set(ex, [...(series.get(ex) ?? []), { i, score }])
+    return best
+  })
+  const typical = new Map([...series].map(([ex, pts]) => [ex, median(pts.map((p) => p.score))]))
+  const lifts: { change: number; weight: number }[] = []
+  for (const [ex, pts] of series) {
+    if (pts.length < 2) continue
+    const slopes: number[] = []
+    for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++) slopes.push((pts[b].score - pts[a].score) / (pts[b].i - pts[a].i))
+    // Change across the run: slope × the span of workouts it covers, relative to the lift's typical score.
+    const raw = (median(slopes) * (pts[pts.length - 1].i - pts[0].i)) / typical.get(ex)!
+    lifts.push({ change: Math.max(-0.2, Math.min(0.2, raw)), weight: Math.min(1, (pts.length - 1) / 3) })
   }
-  const repeated = [...seen].filter(([, n]) => n >= 2).map(([ex]) => ex)
-  const change = repeated.length ? repeated.reduce((t, ex) => t + last.get(ex)! / first.get(ex)! - 1, 0) / repeated.length : 0
-  return { change, lifts: repeated.length, perWorkout }
+  let change = 0
+  const total = lifts.reduce((t, l) => t + l.weight, 0)
+  if (lifts.length >= 3) {
+    const sorted = [...lifts].sort((a, b) => a.change - b.change)
+    let acc = 0
+    for (const l of sorted) { acc += l.weight; if (acc >= total / 2) { change = l.change; break } }
+  // Little to go on (e.g. one lift done twice): pulled toward 0, so it takes a few sessions to call a trend.
+  } else if (total) change = lifts.reduce((t, l) => t + l.change * l.weight, 0) / Math.max(total, 1)
+  const perWorkout = bests.map((best) => {
+    const r = [...best].filter(([ex]) => (series.get(ex)?.length ?? 0) >= 2).map(([ex, score]) => score / typical.get(ex)!)
+    return r.length ? r.reduce((a, b) => a + b, 0) / r.length : null
+  })
+  return { change, lifts: lifts.length, perWorkout }
 }
