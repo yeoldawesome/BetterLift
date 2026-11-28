@@ -3,7 +3,7 @@ import { BarcodeIcon, BackIcon, BoltIcon, CheckIcon, CloseIcon, PlusIcon, Search
 import { Button, ErrorText, Input, Sheet, Spinner, Toggle } from '../ui'
 import { estimateMeal, itemFromLookup, lookupPhrase, mealIn, parseMacros, parseWeight } from '../../lib/foodParse'
 import { foodFromLog, LOCAL_FOODS, lookupBarcode, lookupFood, macrosFor, searchLocal, searchOff, type Food } from '../../lib/foods'
-import { addLogs, dayLabel, kcalFrom, logWeighIn, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
+import { addLogs, dayLabel, deleteLog, kcalFrom, logWeighIn, updateLog, recentFoods, type Draft, type FoodLog, type Macros, type Meal, type Source } from '../../lib/nutrition'
 import { errMsg, useUser } from '../../lib/pb'
 import { cachedSaved, createSaved, itemFromDraft, itemsTotal, loadSaved, logSaved, type SavedMeal } from '../../lib/meals'
 import { fmtW, fromUnit } from '../../lib/format'
@@ -56,6 +56,20 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
     setToast(`Added ${drafts.length === 1 ? drafts[0].name : `${drafts.length} items`} · ${fmtK(drafts.reduce((t, d) => t + d.macros.kcal, 0))} kcal`)
   }
   const go = (t: Tab) => { setPicked(null); setTab(t) }
+  /** Search's + : log one serving (or hand it back when building a meal). Returns the entry so more taps can count it up. */
+  const addOne = async (d: Draft): Promise<FoodLog | null> => {
+    setToast(`Added ${d.name} · ${fmtK(d.macros.kcal)} kcal`)
+    if (collect) { collect([d]); return null }
+    const [l] = await addLogs([d], day)
+    onAdded?.([l])
+    return l
+  }
+  /** Search's counter: the same entry becomes n servings; 0 removes it. */
+  const setCount = async (l: FoodLog, d: Draft, n: number) => {
+    if (n <= 0) { await deleteLog(l.id); setToast(`Removed ${l.name}`); return }
+    await updateLog(l.id, d, day)
+    setToast(`${d.name} ×${n} · ${fmtK(d.macros.kcal)} kcal`)
+  }
 
   return (
     <Sheet title={title} subtitle={collect ? undefined : dayLabel(day)} onClose={onClose}>
@@ -96,7 +110,7 @@ export function AddFood({ day, meal: meal0, tab: tab0 = 'describe', onClose, onA
             onSearch={(s) => { setQ(s); go('search') }} onQuick={(p) => { setQuick(p); go('quick') }} />
         ) : tab === 'search' ? (
           <Search q={q} setQ={setQ} rest={rest} setRest={setRest} recent={recent} meal={meal} onPick={(food) => setPicked({ food, source: food.source === 'recent' ? 'recent' : 'search' })}
-            onAdd={(d) => save([d], false)} />
+            onAddOne={addOne} onSetCount={collect ? undefined : setCount} />
         ) : tab === 'scan' ? (
           <Scan key={scanKey} onFound={(food) => setPicked({ food, source: 'barcode' })} onManual={(barcode) => { setQuick({ barcode, source: 'barcode' }); go('quick') }}
             onLabel={(p) => { setQuick(p); go('quick') }} />
@@ -268,27 +282,47 @@ function Describe({ day, meal, recent, collecting, onMeal, onSave, onWeighed, on
 
 // ---------- Search: built-in foods, your recents, and FatSecret (Open Food Facts as fallback) ----------
 
-function FoodRow({ food, onPick, onAdd }: { food: Food; onPick: () => void; onAdd: () => Promise<void> }) {
+/**
+ * A search result. + logs one serving with a quick check-mark confirmation, then turns into a counter (− n +):
+ * more taps change how many servings that same entry is, and going down to 0 removes it.
+ */
+function FoodRow({ food, onPick, count = 0, onPlus, onMinus }: { food: Food; onPick: () => void; count?: number; onPlus: () => Promise<void>; onMinus?: () => Promise<void> }) {
   const s = food.servings[0]
   const [busy, setBusy] = useState(false)
+  const [flash, setFlash] = useState(false)
+  useEffect(() => { if (!flash) return; const t = setTimeout(() => setFlash(false), 700); return () => clearTimeout(t) }, [flash])
+  const run = async (fn: () => Promise<void>, ok = false) => { setBusy(true); try { await fn(); if (ok) setFlash(true) } finally { setBusy(false) } }
   return (
-    <div className="flex items-center gap-2 border-b border-line py-2 last:border-0">
+    <div className={`flex items-center gap-2 border-b border-line py-2 transition-colors last:border-0 ${flash ? 'bg-accent/10' : ''}`} data-food-row={food.name}>
       <button onClick={onPick} className="min-w-0 flex-1 text-left">
         <p className="truncate font-bold">{food.name}</p>
         <p className="truncate text-xs text-muted">{[food.detail, s.label].filter(Boolean).join(' · ')}</p>
       </button>
-      <span className="num shrink-0 text-sm font-bold">{fmtK(s.kcal)}<span className="text-xs font-semibold text-muted"> kcal</span></span>
-      <button disabled={busy} onClick={async () => { setBusy(true); try { await onAdd() } finally { setBusy(false) } }}
-        className="grid size-9 shrink-0 place-items-center rounded-lg bg-accent/15 text-accent disabled:opacity-40" aria-label={`Add ${food.name}`}>
-        <PlusIcon width={18} height={18} />
-      </button>
+      <span className="num shrink-0 text-sm font-bold">{fmtK(s.kcal * Math.max(1, count))}<span className="text-xs font-semibold text-muted"> kcal</span></span>
+      {count > 0 && onMinus ? (
+        <div className="flex h-9 shrink-0 items-center rounded-lg bg-accent text-accent-ink" data-counter>
+          <button disabled={busy} onClick={() => run(onMinus)} className="grid h-9 w-8 place-items-center text-lg font-black disabled:opacity-60" aria-label={`One less ${food.name}`}>−</button>
+          <span className="num min-w-5 text-center text-sm font-black" aria-live="polite">{flash ? <CheckIcon width={16} height={16} className="mx-auto" /> : count}</span>
+          <button disabled={busy} onClick={() => run(onPlus, true)} className="grid h-9 w-8 place-items-center disabled:opacity-60" aria-label={`One more ${food.name}`}><PlusIcon width={16} height={16} /></button>
+        </div>
+      ) : (
+        <button disabled={busy} onClick={() => run(onPlus, true)}
+          className={`grid size-9 shrink-0 place-items-center rounded-lg transition-colors disabled:opacity-40 ${flash ? 'bg-accent text-accent-ink' : 'bg-accent/15 text-accent'}`} aria-label={`Add ${food.name}`}>
+          {flash ? <CheckIcon width={18} height={18} /> : <PlusIcon width={18} height={18} />}
+        </button>
+      )}
     </div>
   )
 }
 
-function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAdd }: {
-  q: string; setQ: (q: string) => void; rest: Restaurant | null; setRest: (r: Restaurant | null) => void; recent: Food[]; meal: Meal; onPick: (f: Food) => void; onAdd: (d: Draft) => Promise<void>
+function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAddOne, onSetCount }: {
+  q: string; setQ: (q: string) => void; rest: Restaurant | null; setRest: (r: Restaurant | null) => void; recent: Food[]; meal: Meal; onPick: (f: Food) => void
+  onAddOne: (d: Draft) => Promise<FoodLog | null>
+  /** Change how many servings an entry this search just added is (0 = remove). Absent when building a meal. */
+  onSetCount?: (log: FoodLog, d: Draft, n: number) => Promise<void>
 }) {
+  // What + has logged from this search so far: food → its entry and how many servings.
+  const [added, setAdded] = useState<Map<string, { log: FoodLog; n: number }>>(new Map())
   const [off, setOff] = useState<Food[] | null>(null)
   const [loading, setLoading] = useState(false)
   const [err, setErr] = useState('')
@@ -312,14 +346,30 @@ function Search({ q, setQ, rest, setRest, recent, meal, onPick, onAdd }: {
     return () => { clearTimeout(t); ctl.abort(); setLoading(false) }
   }, [q])
 
-  const quickAdd = (food: Food) => {
+  const draftOf = (food: Food, n: number): Draft => {
     const s = food.servings[0]
-    return onAdd({ name: food.name, detail: food.detail ? `${food.detail} · ${s.label}` : undefined, meal, servings: 1, base: s, macros: macrosFor(s, 1), source: food.source === 'recent' ? 'recent' : 'search', barcode: food.barcode })
+    return { name: food.name, detail: food.detail ? `${food.detail} · ${s.label}` : undefined, meal, servings: n, base: s, macros: macrosFor(s, n), source: food.source === 'recent' ? 'recent' : 'search', barcode: food.barcode }
+  }
+  const plus = async (food: Food) => {
+    const cur = added.get(food.key)
+    if (cur && onSetCount) {
+      await onSetCount(cur.log, draftOf(food, cur.n + 1), cur.n + 1)
+      setAdded((m) => new Map(m).set(food.key, { ...cur, n: cur.n + 1 }))
+      return
+    }
+    const log = await onAddOne(draftOf(food, 1))
+    if (log && onSetCount) setAdded((m) => new Map(m).set(food.key, { log, n: 1 }))
+  }
+  const minus = async (food: Food) => {
+    const cur = added.get(food.key)
+    if (!cur || !onSetCount) return
+    await onSetCount(cur.log, draftOf(food, cur.n - 1), cur.n - 1)
+    setAdded((m) => { const next = new Map(m); if (cur.n <= 1) next.delete(food.key); else next.set(food.key, { ...cur, n: cur.n - 1 }); return next })
   }
   const section = (title: string, list: Food[], extra?: ReactNode) => (
     <div>
       <p className="mb-1 flex items-center justify-between text-xs font-bold uppercase tracking-wider text-muted">{title}{extra}</p>
-      <div className="rounded-2xl border border-line bg-surface px-3">{list.map((f) => <FoodRow key={f.key} food={f} onPick={() => onPick(f)} onAdd={() => quickAdd(f)} />)}</div>
+      <div className="rounded-2xl border border-line bg-surface px-3">{list.map((f) => <FoodRow key={f.key} food={f} onPick={() => onPick(f)} count={added.get(f.key)?.n ?? 0} onPlus={() => plus(f)} onMinus={() => minus(f)} />)}</div>
     </div>
   )
 

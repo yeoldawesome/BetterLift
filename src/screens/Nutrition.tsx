@@ -249,7 +249,8 @@ export default function Nutrition() {
           </div>
         </div>
       )}
-      {adding && <AddFood day={day} meal={adding.meal} tab={adding.tab} onClose={() => setAdding(null)} onAdded={onAdded} />}
+      {/* Closing re-reads the day: Search's counter may have changed or removed entries it added. */}
+      {adding && <AddFood day={day} meal={adding.meal} tab={adding.tab} onClose={() => { setAdding(null); reload() }} onAdded={onAdded} />}
       {editing && <LogEditor log={editing.log} item={editing.item} onClose={() => setEditing(null)} onChanged={reload} />}
       {weighing && <WeighInSheet day={day} unit={unit} lastKg={weight?.weighIns[weight.weighIns.length - 1]?.kg ?? user.bodyweight_kg} onClose={() => setWeighing(false)} />}
     </Screen>
