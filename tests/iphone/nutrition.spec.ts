@@ -440,7 +440,7 @@ test.describe('Nutrition', () => {
       await app.mouse.move(x0, y)
       await app.mouse.down()
       // At finger speed: an instant jump reads as a flick, which deletes even on a short drag.
-      for (let dx = 20; dx <= dist; dx += 20) { await app.mouse.move(x0 + dx, y + 2); await app.waitForTimeout(40) }
+      for (let dx = 20; dx <= dist; dx += 20) { await app.mouse.move(x0 + dx, y + 2); await app.waitForTimeout(90) }
       await app.mouse.up()
     }
     await swipe(1, 240)
