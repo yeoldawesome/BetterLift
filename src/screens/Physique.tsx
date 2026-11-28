@@ -1,10 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { LineChart } from '../components/LineChart'
 import { useNavigate } from 'react-router-dom'
 import { BottomSheet, Button, ErrorText, Spinner } from '../components/ui'
 import { ask } from '../components/Dialog'
 import { ScaleIcon } from '../components/icons'
-import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, workoutOf, type BodyKey, type BodyMetric } from '../lib/body'
+import { BODY_FIELDS, importBody, loadBody, parseBodyCsv, useBody, workoutOf, type BodyKey, type BodyMetric } from '../lib/body'
 import { fromUnit, num, toUnit } from '../lib/format'
 import { loadWeight } from '../lib/nutrition'
 import { errMsg, me, pb, useUnit, type Unit, type User } from '../lib/pb'
@@ -27,7 +27,8 @@ const timeOf = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { ho
 /** Body composition from smart-scale imports: latest readings, change, and a chart per metric. */
 export function PhysiqueView({ user }: { user: User }) {
   const unit = useUnit()
-  const [rows, setRows] = useState<BodyMetric[] | null>(null)
+  // From the device at once, refreshed behind it (and preloaded after launch / when Stats opens).
+  const [rows, setRows] = useBody(user.id)
   const [key, setKey] = useState<BodyKey>('weight_kg')
   const [days, setDays] = useState(90)
   const [tod, setTodState] = useState<Tod>(() => { try { const v = localStorage.getItem(TOD_KEY); return v === 'morning' || v === 'night' ? v : 'all' } catch { return 'all' } })
@@ -39,7 +40,6 @@ export function PhysiqueView({ user }: { user: User }) {
   const file = useRef<HTMLInputElement>(null)
 
   const self = user.id === me() // a friend's physique is view-only
-  useEffect(() => { loadBody(user.id).then(setRows).catch(() => setRows([])) }, [user.id])
 
   const show = (k: BodyKey, v: number) => {
     const f = BODY_FIELDS.find((x) => x.k === k)!

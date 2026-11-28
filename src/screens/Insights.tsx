@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { MultiChart, type Series } from '../components/MultiChart'
 import { Spinner } from '../components/ui'
 import { CalendarIcon, DnaIcon, ForecastIcon, MuscleIcon, RocketIcon, ScaleIcon, StatsIcon, TargetIcon, TimerIcon, TrendIcon, TrophyIcon } from '../components/icons'
-import { loadBody, type BodyMetric } from '../lib/body'
+import { cachedBody, loadBody, type BodyMetric } from '../lib/body'
 import { label } from '../lib/exercises'
 import { fromUnit, toUnit } from '../lib/format'
 import {
@@ -148,7 +148,9 @@ export function InsightsView({ user }: { user: User }) {
   const period = PERIODS.find(([d]) => d === days)![2]
 
   useEffect(() => {
-    loadBody(user.id).then(setBody).catch(() => setBody([]))
+    // The device's copy first (instant), then the server's.
+    cachedBody(user.id).then((r) => { if (r) setBody((b) => b ?? r) })
+    loadBody(user.id).then(setBody).catch(() => setBody((b) => b ?? []))
   }, [user.id])
 
   const setGoal = (name: string, kg: number | null) => setGoals((g) => {

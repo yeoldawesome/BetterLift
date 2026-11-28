@@ -14,6 +14,7 @@ import Feed from './screens/Feed'
 import ProfileEdit from './screens/ProfileEdit'
 import { TAB_DEFS, userTabs } from './lib/tabs'
 import { prefetchCalendar } from './lib/calendarData'
+import { prefetchBody } from './lib/body'
 import Workout from './screens/Workout'
 
 // Only the usual first screens ship in the main download; the rest load when opened (and are cached offline).
@@ -76,7 +77,7 @@ export default function App() {
   const verified = !!user?.verified || !user?.email
   useEffect(() => {
     if (!user?.id || !verified) return
-    const t = setTimeout(prefetchCalendar, 2500)
+    const t = setTimeout(() => { prefetchCalendar(); prefetchBody() }, 2500)
     return () => clearTimeout(t)
   }, [user?.id, verified])
 

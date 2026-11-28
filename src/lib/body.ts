@@ -1,4 +1,7 @@
 import { KG_LB } from './format'
+import { useEffect, useState } from 'react'
+import { idbGet, idbSet } from './idb'
+import { pending } from './outbox'
 import { me, pb } from './pb'
 
 export type BodyMetric = {
@@ -72,9 +75,85 @@ export function parseBodyCsv(text: string): Omit<BodyMetric, 'id'>[] {
   return out
 }
 
-/** Body readings for a user (yourself by default). A friend's come back empty unless they share Physique. */
-export const loadBody = (userId = me()) =>
-  pb.collection('body_metrics').getFullList<BodyMetric>({ filter: pb.filter('user = {:u}', { u: userId }), sort: 'measured_at' })
+// ---------- Readings: saved on the device, refreshed in the background, recent first ----------
+
+const mem = new Map<string, { at: number; rows: BodyMetric[] }>()
+const inflight = new Map<string, Promise<BodyMetric[]>>()
+const FRESH_MS = 60_000
+const bkey = (u: string) => `body:${u}`
+const EMPTY = { bmi: 0, body_fat_pct: 0, fat_mass_kg: 0, muscle_pct: 0, muscle_kg: 0, skeletal_pct: 0, skeletal_kg: 0, bone_kg: 0, protein_pct: 0, water_pct: 0, fat_free_kg: 0, subcut_fat_pct: 0, visceral_fat: 0, bmr: 0, metabolic_age: 0 }
+
+/** Your own weigh-ins that haven't uploaded yet (logged offline) still show. */
+async function withPending(userId: string, rows: BodyMetric[]) {
+  if (userId !== me()) return rows
+  const have = new Set(rows.map((r) => r.id))
+  const waiting = (await pending('body_metrics')).flatMap((o) => (o.kind === 'create' && !have.has(o.id)
+    ? [{ ...EMPTY, ...(o.body as Partial<BodyMetric>), id: o.id } as BodyMetric] : []))
+  return waiting.length ? [...rows, ...waiting].sort((a, b) => a.measured_at.localeCompare(b.measured_at)) : rows
+}
+
+/** Body readings on this device for a user (instant; may be out of date), or null if none saved yet. */
+export async function cachedBody(userId = me()): Promise<BodyMetric[] | null> {
+  const m = mem.get(userId)
+  if (m) return m.rows
+  const saved = await idbGet<BodyMetric[]>(bkey(userId))
+  if (!saved) return null
+  if (!mem.has(userId)) mem.set(userId, { at: 0, rows: saved }) // at 0 = stale: still refresh
+  return withPending(userId, saved)
+}
+
+/** Body readings for a user (yourself by default) from the server, saved on the device. Offline: the device's copy.
+ *  A friend's come back empty unless they share Physique. `sinceDays` fetches just the recent part (not saved). */
+export async function loadBody(userId = me(), sinceDays = 0): Promise<BodyMetric[]> {
+  const since = sinceDays ? pb.filter(' && measured_at >= {:s}', { s: new Date(Date.now() - sinceDays * 864e5) }) : ''
+  let rows: BodyMetric[]
+  try {
+    rows = await pb.collection('body_metrics').getFullList<BodyMetric>({ filter: pb.filter('user = {:u}', { u: userId }) + since, sort: 'measured_at', batch: 1000, requestKey: null })
+  } catch (e) {
+    if ((e as { status?: number })?.status === 0) return (await cachedBody(userId)) ?? []
+    throw e
+  }
+  if (!sinceDays) { mem.set(userId, { at: Date.now(), rows }); idbSet(bkey(userId), rows) }
+  return withPending(userId, rows)
+}
+
+function refresh(userId: string) {
+  const running = inflight.get(userId)
+  if (running) return running
+  const p = loadBody(userId).finally(() => inflight.delete(userId))
+  inflight.set(userId, p)
+  return p
+}
+
+/** Warm up a user's readings in the background (the app does this shortly after launch and when Stats opens). */
+export function prefetchBody(userId = me()) {
+  if (!userId) return
+  const m = mem.get(userId)
+  if (!m || Date.now() - m.at > FRESH_MS) refresh(userId).catch(() => {})
+}
+
+/**
+ * Readings for the Physique page: the device's copy at once; with none saved yet, the last 120 days first (quick),
+ * then the full history. Returns [rows (null while there's nothing yet), setRows].
+ */
+export function useBody(userId: string) {
+  const [rows, setRows] = useState<BodyMetric[] | null>(null)
+  useEffect(() => {
+    let live = true, full = false
+    setRows(null)
+    cachedBody(userId).then(async (saved) => {
+      if (saved) { if (live && !full) setRows(saved); return }
+      const recent = await loadBody(userId, 120).catch(() => null)
+      if (recent && live && !full) setRows(recent)
+    })
+    const m = mem.get(userId)
+    ;(m && Date.now() - m.at < FRESH_MS ? withPending(userId, m.rows) : refresh(userId))
+      .then((r) => { full = true; if (live) setRows(r) })
+      .catch(() => { if (live) setRows((r) => r ?? []) })
+    return () => { live = false }
+  }, [userId])
+  return [rows, setRows] as const
+}
 
 /** Inserts readings not already stored (matched to the minute). Returns how many were added. */
 export async function importBody(rows: Omit<BodyMetric, 'id'>[], have: BodyMetric[]): Promise<number> {

@@ -7,6 +7,7 @@ import { ExerciseInfo } from '../components/ExerciseInfo'
 import { searchExercises } from '../lib/search'
 import { LineChart } from '../components/LineChart'
 import { PhysiqueView } from './Physique'
+import { prefetchBody } from '../lib/body'
 import { InsightsView } from './Insights'
 import { RadarChart } from '../components/RadarChart'
 import { BodyMap } from '../components/BodyMap'
@@ -403,6 +404,8 @@ function MoreStats({ snap, unit, bw, height }: { snap: Snapshot; unit: Unit; bw:
 
 export default function Stats() {
   const user = useUser()!
+  // Physique's readings load in the background while you're on the other tabs, so switching to it is instant.
+  useEffect(() => { prefetchBody(user.id) }, [user.id])
   const [tab, setTab] = useState<StatsTab>(() => { try { const t = localStorage.getItem('bl.statsTab'); return TABS.some(([v]) => v === t) ? (t as StatsTab) : 'lifting' } catch { return 'lifting' } })
   const pick = (t: StatsTab) => { setTab(t); try { localStorage.setItem('bl.statsTab', t) } catch { /* private mode */ } }
   return (
