@@ -35,11 +35,14 @@ export const cachedSaved = async () => sortList(await local())
 /** Saved meals from the server (with changes not uploaded yet laid over). Offline: the device's copy. */
 export async function loadSaved(): Promise<SavedMeal[]> {
   let server: SavedMeal[]
+  // Pending before the request too: something that finished uploading meanwhile must still be applied.
+  const before = await pending(COLL)
   try { server = await pb.collection(COLL).getFullList<SavedMeal>({ filter: pb.filter('user = {:u}', { u: me() }), sort: '-uses,name', requestKey: null }) }
   catch (e) { if ((e as { status?: number })?.status === 0) return cachedSaved(); throw e }
   const byId = new Map(server.map((m) => [m.id, m]))
   const mine = new Map((await local()).map((m) => [m.id, m]))
-  for (const op of await pending(COLL)) {
+  const after = await pending(COLL)
+  for (const op of [...before, ...after.filter((o) => !before.some((b) => b.seq === o.seq))]) {
     if (op.kind === 'delete') byId.delete(op.id)
     else if (op.kind === 'create') { const m = mine.get(op.id); if (m) byId.set(op.id, m) }
     else { const m = byId.get(op.id) ?? mine.get(op.id); if (m) byId.set(op.id, { ...m, ...op.body, uses: m.uses } as SavedMeal) }

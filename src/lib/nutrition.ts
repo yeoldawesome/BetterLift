@@ -90,9 +90,14 @@ let saveT: ReturnType<typeof setTimeout> | undefined
 const saveStore = () => { clearTimeout(saveT); saveT = setTimeout(() => { if (store) idbSet(storeKey(storeFor), [...store.values()]) }, 200) }
 const byDay = (a: FoodLog, b: FoodLog) => a.day.localeCompare(b.day) || (a.created ?? '').localeCompare(b.created ?? '')
 
-/** Lay changes that haven't uploaded yet over what the server sent. */
-async function overlay(server: FoodLog[]) {
-  const ops = await pendingOps('food_logs')
+/**
+ * Lay changes that haven't uploaded yet over what the server sent. `before` = what was pending when the request
+ * started: a change that finished uploading while the request was in flight is in neither the response nor the queue
+ * any more, so it's applied from that snapshot (otherwise a just-deleted food would pop back).
+ */
+async function overlay(server: FoodLog[], before: Awaited<ReturnType<typeof pendingOps>> = []) {
+  const after = await pendingOps('food_logs')
+  const ops = [...before, ...after.filter((o) => !before.some((b) => b.seq === o.seq))]
   const out = new Map(server.map((l) => [l.id, l]))
   const st = await logStore()
   for (const op of ops) {
@@ -112,13 +117,14 @@ export async function cachedLogs(from: string, to: string): Promise<FoodLog[]> {
 /** Logs for a range of days from the server (plus anything not uploaded yet). Offline: the device's copy. */
 export async function loadLogs(from: string, to: string): Promise<FoodLog[]> {
   let server: FoodLog[]
+  const before = await pendingOps('food_logs')
   try {
     server = await pb.collection('food_logs').getFullList<FoodLog>({ filter: pb.filter('user = {:u} && day >= {:a} && day <= {:b}', { u: me(), a: from, b: to }), sort: 'day,created', batch: 1000, requestKey: null })
   } catch (e) {
     if ((e as { status?: number })?.status === 0) return cachedLogs(from, to)
     throw e
   }
-  const merged = await overlay(server)
+  const merged = await overlay(server, before)
   const st = await logStore()
   for (const [id, l] of st) if (l.day >= from && l.day <= to) st.delete(id)
   for (const l of merged) st.set(l.id, l)

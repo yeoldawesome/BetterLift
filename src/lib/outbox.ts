@@ -15,7 +15,7 @@ export type Op =
   | { kind: 'update'; coll: string; id: string; body: Record<string, unknown> }
   | { kind: 'delete'; coll: string; id: string }
 
-type Queued = Op & { seq: number; at: number }
+export type Queued = Op & { seq: number; at: number }
 
 let queue: Queued[] = []
 let loadedFor = ''

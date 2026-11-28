@@ -1,3 +1,4 @@
+import '../../scripts/env.mjs'
 import { expect, seed, test } from './fixtures'
 
 // Login is rate-limited (10 attempts/minute per IP), so these run on one device size only.
@@ -11,6 +12,10 @@ const newUser = async () => {
     body: JSON.stringify({ email: `${u}@test.local`, username: u, password: 'Granite-Squats-1', passwordConfirm: 'Granite-Squats-1', bodyweight_kg: 80, height_cm: 180, unit: 'lb' }),
   })
   expect(r.ok).toBeTruthy()
+  // New accounts verify their email before using the app: mark this one verified, as the admin.
+  const id = (await r.json()).id
+  const su = await (await fetch(`${s.api}/api/collections/_superusers/auth-with-password`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ identity: process.env.PB_ADMIN_EMAIL, password: process.env.PB_ADMIN_PASSWORD }) })).json()
+  await fetch(`${s.api}/api/collections/users/records/${id}`, { method: 'PATCH', headers: { 'content-type': 'application/json', Authorization: su.token }, body: JSON.stringify({ verified: true, push_asked: true }) })
   return u
 }
 

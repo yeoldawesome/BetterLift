@@ -102,12 +102,13 @@ test.describe('Real taps on an iPhone', () => {
     await expect(app.getByRole('heading', { name: liftName() })).toBeVisible()
     await main(app).evaluate((m) => { m.scrollTop = m.scrollHeight })
     await tab(app, 'Profile')
-    await expect(app.getByText('iPhone Tester')).toBeInViewport()
+    await expect(app.getByText('iPhone Tester').first()).toBeInViewport()
     expect(await main(app).evaluate((m) => m.scrollTop)).toBe(0)
   })
 
   test('streak card opens a live countdown', async ({ app }) => {
-    await app.goto('/#/profile')
+    // The streak card lives on the Workout tab's start screen.
+    await app.goto('/#/workout')
     await app.getByText(/day streak/).tap()
     await expect(app.getByText('Time left to keep it')).toBeVisible()
     const first = await app.locator('text=/\\d+d \\d+h \\d+m|\\d+h \\d+m \\d+s/').first().textContent()
