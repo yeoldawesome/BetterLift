@@ -80,7 +80,7 @@ export function savedDraft(s: SavedMeal, meal: Meal, k = 1): Draft {
 /** "1.3×" / "½×" */
 export const portionText = (k: number) => `${k === 0.5 ? '½' : Math.round(k * 100) / 100}×`
 
-const portionItem = (i: MealItem, k: number): MealItem => {
+export const portionItem = (i: MealItem, k: number): MealItem => {
   const servings = i.servings * k
   return { ...i, servings, macros: scale(i.macros, k), detail: i.base ? servingText(servings, i.base) : `${portionText(k)}${i.detail ? ` ${i.detail}` : ''}` }
 }

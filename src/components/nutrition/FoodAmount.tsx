@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { kcalFrom, scale, servingText, type Macros, type Serving } from '../../lib/nutrition'
 import { unitOptions, type AmountUnit } from '../../lib/foodParse'
+import { portionText } from '../../lib/meals'
 import { NumField, Stepper } from './bits'
 
 const num = (s: string) => { const n = parseFloat(s.replace(',', '.')); return Number.isFinite(n) ? n : 0 }
@@ -41,10 +42,20 @@ export function useFoodAmount(init: FoodAmountInit) {
   const [unit, setUnit] = useState<AmountUnit | undefined>(() => unitFromDetail(init.detail, units))
   const cur = base ? unit ?? units[0] : undefined
   const amount = cur ? roundFor(cur.u, servings / cur.per) : servings
-  const typed = (set: (v: string) => void) => (v: string) => { set(v); setBase(null) }
   const macros: Macros = { kcal: kcal.trim() ? Math.round(num(kcal)) : Math.round(kcalFrom(num(p), num(c), num(f))), p: num(p), c: num(c), f: num(f) }
+  // No known serving (custom / quick-add / label entries): a portion multiplier on the numbers as they were logged.
+  // `per` is one portion's macros; typing a number makes the typed values the new amount for the current portion.
+  const [portion, setPortion] = useState(init.base ? 1 : init.servings || 1)
+  const [per, setPer] = useState<Macros | null>(null)
+  const changePortion = (v: number) => {
+    const one = per ?? scale(macros, 1 / portion)
+    setPer(one); setPortion(v)
+    const m = scale(one, v); setP(str(m.p)); setC(str(m.c)); setF(str(m.f)); setKcal(str(m.kcal))
+  }
+  const typed = (set: (v: string) => void) => (v: string) => { set(v); setPer(null); if (base) { setBase(null); setPortion(1) } }
   const amountText = cur && cur.u !== 'serving' ? `${amount} ${cur.u === 'cup' && amount <= 1 ? 'cup' : cur.name}` : servingText(servings, base)
-  const detail = base ? (init.detail.includes(' · ') ? `${init.detail.split(' · ')[0]} · ${amountText}` : amountText) : init.detail && !init.base ? init.detail : ''
+  const plain = init.detail && !init.base ? init.detail.replace(/^(?:½|[\d.]+)×(?: · | )?/, '') : ''
+  const detail = base ? (init.detail.includes(' · ') ? `${init.detail.split(' · ')[0]} · ${amountText}` : amountText) : [portion !== 1 && portionText(portion), plain].filter(Boolean).join(' · ')
 
   const view = (
     <>
@@ -68,6 +79,12 @@ export function useFoodAmount(init: FoodAmountInit) {
           )}
         </div>
       )}
+      {!base && (
+        <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-2 pl-3">
+          <span className="text-sm text-muted">Portion</span>
+          <Stepper value={portion} onChange={changePortion} step={0.25} min={0.1} max={20} />
+        </div>
+      )}
       <div className="grid grid-cols-4 gap-2">
         <NumField label="kcal" value={kcal} onChange={typed(setKcal)} placeholder={`${Math.round(kcalFrom(num(p), num(c), num(f)))}`} />
         <NumField label="P" value={p} onChange={typed(setP)} dot="#0ea5e9" />
@@ -76,5 +93,5 @@ export function useFoodAmount(init: FoodAmountInit) {
       </div>
     </>
   )
-  return { servings: base ? servings : 1, base, macros, detail, view }
+  return { servings: base ? servings : portion, base, macros, detail, view }
 }

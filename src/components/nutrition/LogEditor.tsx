@@ -3,10 +3,10 @@ import { BottomSheet, Button, ErrorText, Input } from '../ui'
 import { ask } from '../Dialog'
 import { addLogs, dayLabel, deleteLog, isDay, logMacros, today, updateLog, type Draft, type FoodLog, type Meal } from '../../lib/nutrition'
 import { errMsg } from '../../lib/pb'
-import { fmtK, MealChips } from './bits'
+import { fmtK, MealChips, Stepper } from './bits'
 import { useFoodAmount } from './FoodAmount'
 import { ItemsEditor } from './ItemsEditor'
-import { createSaved, itemFromDraft, itemsTotal } from '../../lib/meals'
+import { createSaved, itemFromDraft, itemsTotal, portionItem, portionText } from '../../lib/meals'
 import type { MealItem } from '../../lib/nutrition'
 
 /** Edit one logged food: amount (or raw numbers), meal, day; delete; or log it again today. */
@@ -23,10 +23,13 @@ export function LogEditor({ log, item, onClose, onChanged }: {
   const [err, setErr] = useState('')
   // A logged meal is edited item by item; this copy belongs to this day only (the saved meal stays as it is).
   const [items, setItems] = useState<MealItem[] | null>(log.items?.length ? log.items : null)
+  // The whole meal's portion (1.5× = every item × 1.5), read back from the "1.5× · …" detail it was saved with.
+  const [portion, setPortion] = useState(() => { const m = log.detail?.match(/^(½|[\d.]+)×/); return m ? (m[1] === '½' ? 0.5 : parseFloat(m[1]) || 1) : 1 })
+  const changePortion = (v: number) => { if (items) setItems(items.map((i) => portionItem(i, v / portion))); setPortion(v) }
 
   const macros = items ? itemsTotal(items) : amt.macros
   const draft = (): Draft => items ? ({
-    name, meal, servings: 1, base: null, macros, source: log.source, detail: items.map((i) => i.name).join(', '), items, savedMeal: log.saved_meal,
+    name, meal, servings: 1, base: null, macros, source: log.source, detail: [portion !== 1 && portionText(portion), items.map((i) => i.name).join(', ')].filter(Boolean).join(' · '), items, savedMeal: log.saved_meal,
   }) : ({
     name, meal, servings: amt.servings, base: amt.base, macros, source: log.source, detail: amt.detail, barcode: log.barcode,
   })
@@ -40,6 +43,10 @@ export function LogEditor({ log, item, onClose, onChanged }: {
       <div className="space-y-3">
         <Input value={name} onChange={(e) => setName(e.target.value)} maxLength={120} aria-label="Name" />
         {items && <>
+          <div className="flex items-center justify-between gap-3 rounded-xl bg-surface p-2 pl-3">
+            <span className="text-sm text-muted">Portion <span className="text-faint">· whole meal</span></span>
+            <Stepper value={portion} onChange={changePortion} step={0.25} min={0.1} max={20} />
+          </div>
           <ItemsEditor items={items} onChange={setItems} open={item} />
           {log.saved_meal && <p className="px-1 text-xs text-faint">Changes here only affect this day. Edit the saved meal in Meals to change it for next time.</p>}
         </>}

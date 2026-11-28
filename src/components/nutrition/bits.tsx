@@ -78,7 +78,7 @@ export function NumField({ label, value, onChange, placeholder, suffix, dot }: {
       </span>
       <span className="relative block">
         <input inputMode="decimal" value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value.replace(/[^\d.,]/g, ''))}
-          className="num h-12 w-full rounded-xl border border-line bg-surface-2 px-3 pr-10 text-lg font-bold text-ink outline-none placeholder:text-faint focus:border-accent" />
+          className={`num h-12 w-full rounded-xl border border-line bg-surface-2 text-lg ${suffix ? 'px-3 pr-10' : 'px-2.5'} font-bold text-ink outline-none placeholder:text-faint focus:border-accent`} />
         {suffix && <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-sm font-semibold text-faint">{suffix}</span>}
       </span>
     </label>
