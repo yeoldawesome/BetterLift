@@ -324,14 +324,15 @@ export function overload(workouts: { id: string; sets: { exercise: string; e1rm:
     return best
   })
   const typical = new Map([...series].map(([ex, pts]) => [ex, median(pts.map((p) => p.score))]))
-  const lifts: { change: number; weight: number }[] = []
+  const lifts: { exercise: string; change: number; weight: number; sessions: number; first: number; last: number; reps: boolean }[] = []
   for (const [ex, pts] of series) {
     if (pts.length < 2) continue
     const slopes: number[] = []
     for (let a = 0; a < pts.length; a++) for (let b = a + 1; b < pts.length; b++) slopes.push((pts[b].score - pts[a].score) / (pts[b].i - pts[a].i))
     // Change across the run: slope × the span of workouts it covers, relative to the lift's typical score.
     const raw = (median(slopes) * (pts[pts.length - 1].i - pts[0].i)) / typical.get(ex)!
-    lifts.push({ change: Math.max(-0.2, Math.min(0.2, raw)), weight: Math.min(1, (pts.length - 1) / 3) })
+    const reps = !workouts.some((w) => w.sets.some((s) => s.exercise === ex && s.e1rm > 0))
+    lifts.push({ exercise: ex, change: Math.max(-0.2, Math.min(0.2, raw)), weight: Math.min(1, (pts.length - 1) / 3), sessions: pts.length, first: pts[0].score, last: pts[pts.length - 1].score, reps })
   }
   let change = 0
   const total = lifts.reduce((t, l) => t + l.weight, 0)
@@ -345,5 +346,9 @@ export function overload(workouts: { id: string; sets: { exercise: string; e1rm:
     const r = [...best].filter(([ex]) => (series.get(ex)?.length ?? 0) >= 2).map(([ex, score]) => score / typical.get(ex)!)
     return r.length ? r.reduce((a, b) => a + b, 0) / r.length : null
   })
-  return { change, lifts: lifts.length, perWorkout }
+  return {
+    change, lifts: lifts.length, perWorkout,
+    /** Each lift done 2+ times: its trend, sessions, and first/latest score (est. 1RM in kg, or reps when `reps`). */
+    detail: [...lifts].sort((a, b) => b.change - a.change),
+  }
 }

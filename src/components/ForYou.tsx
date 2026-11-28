@@ -6,6 +6,7 @@ import { BedIcon, ChevronIcon, PlusIcon, RepeatIcon, TrendIcon } from './icons'
 import { BottomSheet, Button, Card, Spinner } from './ui'
 import { LineChart } from './LineChart'
 import { routineExercises, useActive } from '../lib/active'
+import { loadExercises } from '../lib/exercises'
 import { liftingSession } from '../lib/energy'
 import { fmtVol, fmtW, fromUnit, toUnit } from '../lib/format'
 import { loadWeight, logWeighIn } from '../lib/nutrition'
@@ -155,7 +156,7 @@ function PlanStrip({ user, routines, current }: { user: User; routines: Routine[
 
 function LastWorkouts({ user, data }: { user: User; data: Data }) {
   const unit = user.unit || 'kg'
-  const [sheet, setSheet] = useState<'records' | 'weight' | null>(null)
+  const [sheet, setSheet] = useState<'records' | 'weight' | 'overload' | null>(null)
   const ws = data.last
   if (!ws.length) return (
     <Section title="Last 14 Workouts"><Card><p className="text-sm text-muted">Finish a workout and your totals show up here.</p></Card></Section>
@@ -182,7 +183,7 @@ function LastWorkouts({ user, data }: { user: User; data: Data }) {
 
   return (
     <Section title={`Last ${ws.length} Workout${ws.length === 1 ? '' : 's'}`}>
-      <Link to="/stats" className="block">
+      <button onClick={() => setSheet('overload')} className="block w-full text-left" aria-label="Progressive overload details">
         <Card className="flex items-center gap-4" data-volume data-overload={dir}>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-muted">Progressive overload</p>
@@ -212,7 +213,7 @@ function LastWorkouts({ user, data }: { user: User; data: Data }) {
             })}
           </div>
         </Card>
-      </Link>
+      </button>
       <div className={`grid gap-3 ${showKcal ? 'grid-cols-3' : 'grid-cols-2'}`}>
         <Card className="!p-3"><p className="text-sm font-semibold text-muted">Duration</p><p className="num whitespace-nowrap text-[22px] font-black">{h >= 10 ? `${Math.round(secs / 3600)}h` : h ? `${h}h ${m}m` : `${m}m`}</p></Card>
         <button onClick={() => setSheet('records')} className="text-left" data-records>
@@ -232,6 +233,7 @@ function LastWorkouts({ user, data }: { user: User; data: Data }) {
       </button>
       {sheet === 'records' && <RecordsSheet workouts={ws} unit={unit} onClose={() => setSheet(null)} />}
       {sheet === 'weight' && <WeightSheet workouts={ws} unit={unit} onClose={() => setSheet(null)} />}
+      {sheet === 'overload' && <OverloadSheet workouts={chrono} ov={ov} unit={unit} onClose={() => setSheet(null)} />}
     </Section>
   )
 }
@@ -271,6 +273,71 @@ function RecordsSheet({ workouts, unit, onClose }: { workouts: Workout[]; unit: 
           ))}
         </div>
       )}
+    </BottomSheet>
+  )
+}
+
+/**
+ * Progressive overload, in detail: each lift (improving, steady or slipping, start → now) and each of the workouts
+ * (how strong it was against your usual, with off days marked so you can see they don't sink the trend).
+ */
+function OverloadSheet({ workouts, ov, unit, onClose }: { workouts: Workout[]; ov: ReturnType<typeof overload>; unit: 'kg' | 'lb'; onClose: () => void }) {
+  const [names, setNames] = useState<Map<string, string>>(new Map())
+  useEffect(() => { loadExercises().then((l) => setNames(new Map(l.map((e) => [e.id, e.name])))).catch(() => {}) }, [])
+  const pctOf = (x: number) => `${x >= 0 ? '+' : '−'}${Math.abs(Math.round(x * 1000) / 10)}%`
+  const tone = (x: number) => (x >= 0.01 ? 'text-accent' : x <= -0.01 ? 'text-danger' : 'text-muted')
+  const score = (v: number, reps: boolean) => (reps ? `${Math.round(v)} reps` : `${fmtW(v, unit)} ${unit}`)
+  const dir = !ov.lifts ? 'none' : ov.change >= 0.01 ? 'up' : ov.change <= -0.01 ? 'down' : 'flat'
+  const newest = [...workouts].map((w, i) => ({ w, x: ov.perWorkout[i] })).reverse()
+  return (
+    <BottomSheet title="Progressive overload" onClose={onClose}>
+      <div className="space-y-4" data-overload-sheet>
+        <div className="rounded-2xl bg-surface-2 p-3">
+          {dir === 'none' ? <p className="text-sm text-muted">No lift was done twice in these workouts yet, so there's no trend to show.</p> : <>
+            <p className={`num text-2xl font-black ${tone(ov.change)}`}>{pctOf(ov.change)} <span className="text-base font-bold">{dir === 'up' ? 'getting stronger' : dir === 'down' ? 'getting weaker' : 'holding steady'}</span></p>
+            <p className="mt-1 text-xs text-muted">Across {ov.lifts} lift{ov.lifts === 1 ? '' : 's'} you did more than once in your last {workouts.length} workouts. Each lift's trend uses every session, so one off day barely moves it.</p>
+          </>}
+        </div>
+
+        {ov.detail.length > 0 && (
+          <section>
+            <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">By lift</h3>
+            <div className="divide-y divide-line rounded-2xl border border-line bg-surface">
+              {ov.detail.map((l) => (
+                <div key={l.exercise} className="flex items-center gap-3 px-3 py-2.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-bold">{names.get(l.exercise) ?? 'Exercise'}</span>
+                    <span className="num block text-xs text-muted">{score(l.first, l.reps)} → {score(l.last, l.reps)}{l.reps ? '' : ' est. 1RM'} · {l.sessions} sessions{l.sessions === 2 ? ' (counts less)' : ''}</span>
+                  </span>
+                  <span className={`num shrink-0 text-sm font-black ${tone(l.change)}`}>{Math.abs(l.change) < 0.01 ? 'steady' : pctOf(l.change)}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+
+        <section>
+          <h3 className="mb-1.5 text-xs font-bold uppercase tracking-wider text-muted">Each workout, against your usual</h3>
+          <div className="divide-y divide-line rounded-2xl border border-line bg-surface">
+            {newest.map(({ w, x }) => {
+              const d = x === null ? null : x - 1
+              const tag = d === null ? '' : d <= -0.05 ? 'Off day' : d >= 0.05 ? 'Strong day' : ''
+              return (
+                <Link key={w.id} to={`/w/${w.id}`} onClick={onClose} className="flex items-center gap-3 px-3 py-2.5 active:bg-surface-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold">{w.name || 'Workout'}</span>
+                    <span className="block text-xs text-muted">{new Date(w.started_at).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}{tag && <span className={`ml-1.5 rounded-full px-1.5 py-px text-[10px] font-bold ${d! < 0 ? 'bg-danger/15 text-danger' : 'bg-accent/15 text-accent'}`}>{tag}</span>}</span>
+                  </span>
+                  <span className={`num shrink-0 text-sm font-bold ${d === null ? 'text-faint' : tone(d)}`}>{d === null ? 'no repeat lifts' : Math.abs(d) < 0.01 ? 'usual' : pctOf(d)}</span>
+                  <ChevronIcon width={14} height={14} className="shrink-0 text-faint" />
+                </Link>
+              )
+            })}
+          </div>
+          <p className="mt-1.5 text-[11px] text-faint">Each workout's lifts against your typical level for them across these workouts. Tap one to open it.</p>
+        </section>
+        <Link to="/stats" onClick={onClose} className="block text-center text-sm font-semibold text-accent">See every lift in Stats</Link>
+      </div>
     </BottomSheet>
   )
 }
