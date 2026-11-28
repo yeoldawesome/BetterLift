@@ -213,13 +213,15 @@ test.describe('Nutrition', () => {
       await api('/collections/food_logs/records', { method: 'POST', body: JSON.stringify({ user: s.me.id, day: new Date().toLocaleDateString('en-CA'), meal: 'snack', name, servings: 1, kcal, source: 'quick' }) })
     await app.goto('/#/nutrition')
     await expect(main(app).locator('[data-swipe-row]').filter({ hasText: 'Bagel' })).toBeVisible()
-    const ev = { pointerId: 9, pointerType: 'touch', isPrimary: true, bubbles: true }
+    // SwipeRow listens to touch events (and the mouse, for desktop); pointer events aren't used (see SwipeRow).
     const swipe = async (name: string) => {
       const row = main(app).locator('[data-swipe-row]').filter({ hasText: name })
+      await row.scrollIntoViewIfNeeded()
       const b = (await row.boundingBox())!
-      await row.dispatchEvent('pointerdown', { ...ev, clientX: b.x + 20, clientY: b.y + 15 })
-      for (let dx = 20; dx <= 260; dx += 20) await row.dispatchEvent('pointermove', { ...ev, clientX: b.x + 20 + dx, clientY: b.y + 16 })
-      await row.dispatchEvent('pointerup', { ...ev, clientX: b.x + 280, clientY: b.y + 16 })
+      await app.mouse.move(b.x + 20, b.y + 15)
+      await app.mouse.down()
+      for (let dx = 20; dx <= 260; dx += 20) await app.mouse.move(b.x + 20 + dx, b.y + 16)
+      await app.mouse.up()
     }
     await swipe('Bagel')
     await expect(main(app).locator('[data-swipe-row]').filter({ hasText: 'Bagel' })).toHaveCount(0)
@@ -422,18 +424,24 @@ test.describe('Nutrition', () => {
     await app.getByText('Barbell Bench Press', { exact: true }).first().tap()
     await app.getByRole('button', { name: /^Add 1 exercise/ }).tap()
     const reps = app.locator('main input[inputmode="numeric"]')
+    // A new exercise starts with one set; add two more.
+    await expect(reps).toHaveCount(1)
+    await app.getByRole('button', { name: /Add set/i }).tap()
+    await app.getByRole('button', { name: /Add set/i }).tap()
     await expect(reps).toHaveCount(3)
     await reps.nth(0).fill('5'); await reps.nth(1).fill('6'); await reps.nth(2).fill('7')
 
-    // Drag the second set's row to the right.
-    const ev = { pointerId: 7, pointerType: 'touch', isPrimary: true, bubbles: true }
+    // Drag the second set's row to the right (SwipeRow listens to touch and mouse, not pointer events).
     const swipe = async (i: number, dist: number) => {
       const row = app.locator('[data-swipe-row]').nth(i)
+      await row.scrollIntoViewIfNeeded()
       const b = (await row.boundingBox())!
       const x0 = b.x + 30, y = b.y + 20
-      await row.dispatchEvent('pointerdown', { ...ev, clientX: x0, clientY: y })
-      for (let dx = 20; dx <= dist; dx += 20) await row.dispatchEvent('pointermove', { ...ev, clientX: x0 + dx, clientY: y + 2 })
-      await row.dispatchEvent('pointerup', { ...ev, clientX: x0 + dist, clientY: y + 2 })
+      await app.mouse.move(x0, y)
+      await app.mouse.down()
+      // At finger speed: an instant jump reads as a flick, which deletes even on a short drag.
+      for (let dx = 20; dx <= dist; dx += 20) { await app.mouse.move(x0 + dx, y + 2); await app.waitForTimeout(40) }
+      await app.mouse.up()
     }
     await swipe(1, 240)
     await expect(reps).toHaveCount(2)
