@@ -11,12 +11,21 @@ test.describe('Real taps on an iPhone', () => {
   const liftName = () => `iPhone lift ${test.info().project.name}`
 
   test('log in with the form', async ({ page }) => {
+    // Logins are limited to 10 a minute, and the auth tests just before this use some up: wait it out if needed.
+    test.setTimeout(120_000)
     const s = seed()
     await page.goto('/')
     await page.getByPlaceholder('Email').fill(s.me.email)
     await page.getByPlaceholder(/^Password/).fill(s.me.password)
-    await page.getByRole('button', { name: 'Log in' }).last().tap()
-    await expect(page.locator('nav').getByRole('link', { name: 'Feed', exact: true })).toBeVisible()
+    const feed = page.locator('nav').getByRole('link', { name: 'Feed', exact: true })
+    for (let tries = 0; tries < 3; tries++) {
+      await page.getByRole('button', { name: 'Log in' }).last().tap()
+      const limited = page.getByText('Too many attempts')
+      await expect(feed.or(limited)).toBeVisible()
+      if (await feed.isVisible()) break
+      await page.waitForTimeout(31_000)
+    }
+    await expect(feed).toBeVisible()
   })
 
   test('log a workout start to finish', async ({ app }) => {

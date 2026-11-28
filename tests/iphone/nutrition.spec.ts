@@ -161,7 +161,9 @@ test.describe('Nutrition', () => {
   test("lifting burn comes from each workout's time and sets", async ({ app }) => {
     const s = seed()
     const bench = (await api(`/collections/exercises/records?filter=${encodeURIComponent("owner='' && name='Barbell Bench Press'")}`)).items[0]
-    const start = new Date(Date.now() - 60 * 60e3).toISOString()
+    // An hour ago, but never before midnight: run just after 00:00 and "an hour ago" would land on yesterday.
+    const midnight = new Date(); midnight.setHours(0, 1, 0, 0)
+    const start = new Date(Math.max(Date.now() - 60 * 60e3, midnight.getTime())).toISOString()
     const w = await api('/collections/workouts/records', { method: 'POST', body: JSON.stringify({ user: s.me.id, name: 'Push day', started_at: start, ended_at: start, duration_s: 40 * 60, visibility: 'private' }) })
     for (let i = 0; i < 10; i++) {
       await api('/collections/workout_sets/records', { method: 'POST', body: JSON.stringify({ workout: w.id, user: s.me.id, exercise: bench.id, performed_at: start, position: 0, set_index: i, weight_kg: 80, reps: 8, completed: true }) })
