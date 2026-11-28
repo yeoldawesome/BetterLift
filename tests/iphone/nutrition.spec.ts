@@ -80,7 +80,7 @@ test.describe('Nutrition', () => {
 
     // 4) Search, one-tap add; Scan offers manual entry without a camera.
     await main(app).getByRole('button', { name: 'Search' }).tap()
-    await log.getByPlaceholder('Search foods & brands').fill('banana')
+    await log.getByPlaceholder('Search foods, brands & restaurants').fill('banana')
     await log.getByRole('button', { name: 'Add Banana' }).first().tap()
     await expect(log.getByText(/Added Banana · 105 kcal/)).toBeVisible()
     await log.getByRole('button', { name: 'Scan' }).tap()

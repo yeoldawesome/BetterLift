@@ -41,6 +41,8 @@ test.describe('Real taps on an iPhone', () => {
     await expect(app).toHaveURL(/#\/recap\//)
 
     await tab(app, 'Feed')
+    // The Feed tab opens on "For You"; posts are under its "Feed" section.
+    await main(app).getByRole('button', { name: 'Feed', exact: true }).tap()
     await expect(app.getByRole('heading', { name: liftName() })).toBeVisible()
   })
 

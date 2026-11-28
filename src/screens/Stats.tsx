@@ -333,8 +333,9 @@ function MusclesCard({ rows, sex }: { rows: StatRow[]; sex?: string }) {
       {!sets ? <p className="py-8 text-center text-sm text-muted">No sets logged in this period.</p> : (
         <>
           <div className="grid items-center gap-2 sm:grid-cols-2">
-            <div className="flex justify-center"><BodyMap sex={sex} intensity={intensity} className="h-52" labels /></div>
-            <RadarChart className="h-64" labels={groups.map((m) => label(m))} values={groups.map((m) => Math.round(all[m] * 10) / 10)} />
+            {/* min-w-0 + max-w-full: on the narrowest phones (320 pt) these shrink instead of pushing the page sideways. */}
+            <div className="flex min-w-0 justify-center"><BodyMap sex={sex} intensity={intensity} className="h-52 max-w-full" labels /></div>
+            <RadarChart className="h-64 min-w-0" labels={groups.map((m) => label(m))} values={groups.map((m) => Math.round(all[m] * 10) / 10)} />
           </div>
           <div className="flex flex-wrap gap-1.5">
             {ranked.slice(0, 4).map((m, i) => (
@@ -552,9 +553,9 @@ export function StatsView({ user, embedded }: { user: User; embedded?: boolean }
           <span className="flex items-center gap-1"><Trend dir="down" size={10} />{counts('down')}</span>
           <span className="flex items-center gap-1"><Trend dir="neutral" size={10} />{counts('neutral')}</span>
         </div>
-        <label className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
+        <label className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-wider text-muted">
           Sort
-          <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-lg border border-line bg-surface-2 px-2 text-sm normal-case tracking-normal text-ink">
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 min-w-0 max-w-[10rem] rounded-lg border border-line bg-surface-2 px-2 text-sm normal-case tracking-normal text-ink">
             {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
           </select>
         </label>
